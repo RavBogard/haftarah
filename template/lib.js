@@ -121,5 +121,15 @@
     return { size: 54, lines: 2 };
   }
 
-  return { TETRA, divineName, stripMarks, splitPoetry, nowrapKeys, letterFor, isDeadRef, normalizeRefs, assignKeys, SIGLA, REGISTER_ORDER, REGISTER_NAMES, voicesFor, fitIncipitSize };
+  // "- key: McCarter 1980 | citation | use" → Map(key → { citation, use })
+  function parseBibliography(md) {
+    const map = new Map();
+    for (const line of String(md == null ? "" : md).split(/\r?\n/)) {
+      const m = line.match(/^-\s*key:\s*([^|]+?)\s*\|\s*([^|]+?)\s*(?:\|\s*(.*?))?\s*$/);
+      if (m) map.set(m[1], { citation: m[2], use: m[3] || "" });
+    }
+    return map;
+  }
+
+  return { TETRA, divineName, stripMarks, splitPoetry, nowrapKeys, letterFor, isDeadRef, normalizeRefs, assignKeys, SIGLA, REGISTER_ORDER, REGISTER_NAMES, voicesFor, fitIncipitSize, parseBibliography };
 });

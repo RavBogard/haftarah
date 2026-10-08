@@ -16,6 +16,9 @@ import { join, resolve, relative, dirname, basename } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
+import { createRequire } from "node:module";
+
+const HaftarahLib = createRequire(import.meta.url)("../template/lib.js");
 
 const here = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(here, "..");
@@ -70,6 +73,25 @@ export function chromeFlags(profile) {
   return common;
 }
 
+export function gate(data, biblio) {
+  const problems = [];
+  const open = st => st && st !== "approved" && st !== "rejected";
+  const where = e => `${e.chapter ? e.chapter + ":" : ""}${e.verse} ${e.source}`;
+  for (const e of data.commentary || []) if (open(e.status)) problems.push(`commentary entry proposed: ${where(e)}`);
+  for (const g of data.glosses || []) if (open(g.status)) problems.push(`gloss proposed: ${g.verse} ${g.lemma}`);
+  for (const t of data.glossary || []) if (open(t.status)) problems.push(`glossary term proposed: ${t.term}`);
+  if (data.openingNote && open(data.openingNote.status)) problems.push("opening note proposed");
+  if (data.nextWeek && open(data.nextWeek.status)) problems.push("next-week line proposed: approve it or set nextWeek to null");
+  if (!data.haftarah?.incipit?.en) problems.push("incipit.en is empty");
+  for (const e of (data.commentary || []).filter(e => e.status === "approved")) {
+    if (e.register !== "critical") { if (!e.sourceRef) problems.push(`no Sefaria ref: ${where(e)}`); continue; }
+    if (!(e.works || []).length) problems.push(`critical entry names no work: ${where(e)}`);
+    else if (!biblio) problems.push(`bibliography/${data.haftarah.book}.md is missing (needed by ${where(e)})`);
+    else for (const k of e.works) if (!biblio.has(k)) problems.push(`work not in bibliography/${data.haftarah.book}.md: ${k} (${where(e)})`);
+  }
+  return problems;
+}
+
 function run(cmd, args) {
   return new Promise((res, rej) => {
     const child = spawn(cmd, args, { stdio: ["ignore", "pipe", "pipe"] });
@@ -93,14 +115,15 @@ async function main() {
 
   const counts = { approved: 0, proposed: 0, rejected: 0 };
   for (const e of data.commentary || []) counts[e.status === "approved" ? "approved" : e.status === "rejected" ? "rejected" : "proposed"]++;
-  const ctxApproved = data.context?.status === "approved";
-
-  if (!DRAFT) {
-    const problems = [];
-    if (counts.proposed) problems.push(`${counts.proposed} commentary entr${counts.proposed === 1 ? "y is" : "ies are"} still proposed and will not print`);
-    if (data.context?.paragraphs?.length && !ctxApproved) problems.push("the historical-context box is not approved and will not print");
-    if (!data.haftarah.incipit?.en) problems.push("incipit.en is empty (the English rendering under the Hebrew incipit)");
-    if (problems.length) console.warn("Final build warnings:\n  - " + problems.join("\n  - "));
+  // The hard gate: nothing proposed prints, every quoted entry has a Sefaria ref, every critical
+  // entry names only works on the closed bibliography. A draft prints the same list as a warning.
+  let biblio = null;
+  try { biblio = HaftarahLib.parseBibliography(await readFile(join(ROOT, "bibliography", `${data.haftarah.book}.md`), "utf8")); } catch {}
+  const problems = gate(data, biblio);
+  if (problems.length) {
+    const list = problems.map(x => "  - " + x).join("\n");
+    if (DRAFT) console.warn("Draft; these would block the final:\n" + list);
+    else { console.error("Blocking the final sheet:\n" + list); process.exit(1); }
   }
 
   const logo = await findLogo();
