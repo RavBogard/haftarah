@@ -247,6 +247,7 @@ html, body {
 .en, .he { text-wrap: pretty; }   /* no single-word last lines */
 .en.poetry .ln { display: block; padding-left: 1.1em; text-indent: -1.1em; }
 .en .nb { white-space: nowrap; }
+.en.poetry .ln:has(> .indentAll) { padding-left: 2.2em; }   /* JPS's own indented lines sit one step further in */
 .en .fn {
   font-size: 0.72em;
   line-height: 0;
@@ -378,7 +379,13 @@ html, body {
   outline: 3pt solid #f3eced;
 }
 .entry.proposed .tail::before { content: "proposed — "; color: var(--rubric); font-style: normal; font-weight: 600; }
-.entry.continued .v::after { content: " (cont.)"; font-weight: 400; font-style: italic; }
+.entry .v .where { font-weight: 400; font-style: italic; color: var(--ink-2); font-size: var(--size-gloss); }
+
+/* A verse split across two pages: each cell is clipped at its own line boundary. */
+.verse-row.split-head .en, .verse-row.split-head .he { height: var(--clip); overflow: hidden; }
+.verse-row.split-tail .en, .verse-row.split-tail .he { overflow: hidden; }
+.verse-row.split-tail .en .inner, .verse-row.split-tail .he .inner { margin-top: calc(-1 * var(--clip)); }
+.verse-row.split-tail .gut .cont { color: var(--ink-2); font-weight: 400; }
 
 /* ---- End matter ----------------------------------------------------------- */
 

@@ -126,3 +126,8 @@ test("fitIncipitSize shrinks to the box and falls back to two lines at 54pt", ()
   assert.deepEqual(lib.fitIncipitSize(600, 336), { size: 54, lines: 2 });
   assert.deepEqual(lib.fitIncipitSize(250, 336), { size: 64, lines: 1 });
 });
+
+test("nowrapKeys leaves a key that follows a tag alone", () => {
+  const html = '<span class="indentAll"><sup class="fn">i</sup>G<small>OD</small> desires his vindication,';
+  assert.equal(lib.nowrapKeys(html), html);
+});

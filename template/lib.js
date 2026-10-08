@@ -35,7 +35,7 @@
   // A footnote key, and any dash or punctuation after it, never separates from its word.
   function nowrapKeys(html) {
     return String(html == null ? "" : html).replace(
-      /(\S+)(<sup class="fn">[a-z]+<\/sup>)([—–\-,;:.!?”’)]*)/g,
+      /([^\s<>]+)(<sup class="fn">[a-z]+<\/sup>)([—–\-,;:.!?”’)]*)/g,
       '<span class="nb">$1$2$3</span>'
     );
   }

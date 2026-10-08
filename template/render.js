@@ -246,10 +246,11 @@
     return { row, notes };
   }
 
-  function buildEntry(e, continued) {
+  function buildEntry(e, { offpage = null } = {}) {
     const reg = SIGLA[e.register] ? e.register : "traditional";
-    const entry = el("p", "entry" + (e.status !== "approved" ? " proposed" : "") + (continued ? " continued" : ""));
+    const entry = el("p", "entry" + (e.status !== "approved" ? " proposed" : ""));
     const vr = e.verseEnd ? `${e.verse}–${e.verseEnd}` : String(e.verse);
+    const where = offpage ? `<span class="where"> · p. ${offpage}</span>` : "";
     const lemma = e.lemma ? `<span class="lem${e.lemmaLang === "he" ? " he-lemma" : ""}">${esc(e.lemma)}</span><span class="brk">]</span>` : "";
     const tailBits = [];
     if (e.sourceRef) tailBits.push(esc(dash(e.sourceRef)));
@@ -257,13 +258,68 @@
     else if (e.translation) tailBits.push(esc(e.translation));
     if (e.register === "critical" && e.kind !== "quotation") tailBits.push("summary drafted for this sheet");
     if (e.cites) tailBits.push(e.cites);
+    const drafted = e.register === "critical" || e.register === "reference";
     entry.innerHTML =
       `<span class="sig" title="${REGISTER_NAMES[reg]}">${SIGLA[reg]}</span>` +
-      `<span class="v">${vr}</span>${lemma} ` +
-      `<span class="src${e.register === "critical" || e.register === "reference" ? " drafted" : ""}">${esc(e.source)}</span>` +
+      `<span class="v">${vr}${where}</span>${lemma} ` +
+      `<span class="src${drafted ? " drafted" : ""}">${esc(e.source)}</span>` +
       `<span class="body">${divineName(e.text)}</span>` +
       (tailBits.length ? ` <span class="tail">${tailBits.join("; ")}.</span>` : "");
     return entry;
+  }
+
+  // Line boxes of a cell's inner block, as [top, bottom] pairs relative to the cell.
+  function lineBoxes(cell) {
+    const inner = cell.querySelector(".inner") || cell;
+    const range = document.createRange();
+    range.selectNodeContents(inner);
+    const top0 = cell.getBoundingClientRect().top;
+    const rects = [...range.getClientRects()].filter(r => r.height > 0).map(r => [r.top - top0, r.bottom - top0]).sort((a, b) => a[0] - b[0]);
+    const lines = [];
+    for (const [t, b] of rects) {
+      const mid = (t + b) / 2;
+      const hit = lines.find(l => mid >= l[0] - 1 && mid <= l[1] + 1);
+      if (hit) { hit[0] = Math.min(hit[0], t); hit[1] = Math.max(hit[1], b); }
+      else lines.push([t, b]);
+    }
+    return lines.sort((a, b) => a[0] - b[0]);
+  }
+
+  // Split a row so that its head fits in `budget` px. Each cell is clipped at a line boundary of its
+  // own. Returns null when fewer than two lines of either language would stay on the head, or when
+  // nothing would move to the tail.
+  function splitRow(r, budget) {
+    const g = el("div", "text-grid");
+    g.append(r.node);
+    stage.append(g);
+    const en = r.node.querySelector(".en"), he = r.node.querySelector(".he");
+    const enL = lineBoxes(en), heL = lineBoxes(he);
+    const cut = lines => { let k = 0; while (k < lines.length && lines[k][1] <= budget) k++; return k; };
+    const kEn = cut(enL), kHe = cut(heL);
+    g.remove();
+    if (kEn < 2 || kHe < 2 || (kEn >= enL.length && kHe >= heL.length)) return null;
+    const hEn = kEn < enL.length ? enL[kEn][0] : enL[enL.length - 1][1];
+    const hHe = kHe < heL.length ? heL[kHe][0] : heL[heL.length - 1][1];
+
+    const head = r.node;                     // keep the original (its notes point at it)
+    head.classList.add("split-head");
+    en.style.setProperty("--clip", hEn + "px");
+    he.style.setProperty("--clip", hHe + "px");
+
+    const tailNode = r.node.cloneNode(true);
+    tailNode.classList.remove("split-head", "first");
+    tailNode.classList.add("split-tail");
+    tailNode.querySelector(".gut").innerHTML = `<span class="ch">${r.v.chapter}:${r.v.verse}</span><span class="cont">${r.v.verse}</span>`;
+    tailNode.setLocator = () => {};
+    const g2 = el("div", "text-grid");
+    g2.append(tailNode);
+    stage.append(g2);
+    const tailH = tailNode.getBoundingClientRect().height;
+    g2.remove();
+
+    const headRow = Object.assign({}, r, { node: head, h: Math.max(hEn, hHe), splitHead: true });
+    const tailRow = { v: r.v, node: tailNode, notes: [], noteH: [], h: tailH, mt: 0, splitTail: true };
+    return { head: headRow, tail: tailRow };
   }
 
   function measureRows(rows) {
@@ -285,6 +341,7 @@
     return hs;
   }
   const NOTE_GAP = 4; // px between stacked sidenotes
+  const RULE_GAP = 16; // px between the last row (or last sidenote) and the apparatus rule
   function stackNotes(rowTops, rowsOnPage) {
     const placed = [];
     let prevBottom = -Infinity;
@@ -329,41 +386,68 @@
       .filter(visible)
       .map(e => ({ e, node: buildEntry(e) }))
       .sort((a, b) => (a.e.chapter || 0) - (b.e.chapter || 0) || a.e.verse - b.e.verse || (a.e.order || 0) - (b.e.order || 0));
-    const entriesFor = v => entries.filter(x => x.e.verse === v.verse && (x.e.chapter == null || x.e.chapter === v.chapter));
+    entries.forEach(x => { x.ch = x.e.chapter != null ? x.e.chapter : (verses.find(v => v.verse === x.e.verse) || {}).chapter; });
+    const entriesFor = v => entries.filter(x => x.e.verse === v.verse && x.ch === v.chapter);
 
     const probe = newPage("text");
     const bodyH = probe.body.getBoundingClientRect().height;
     probe.page.remove(); pageCount--;
 
-    const RULE_GAP = 16; // px between the last row (or last sidenote) and the apparatus rule
     const appHeight = list => (list.length ? measureApparatus(list) + RULE_GAP : 0);
 
-    let i = 0;
-    let carry = [];
-    let lastPage = null;
-    while (i < rows.length || carry.length) {
+    const versePage = {};
+    const keyOf = v => `${v.chapter}:${v.verse}`;
+    const PX_IN = 96, GAP_MAX = 0.5 * PX_IN, MOVE_MAX = 1.2 * PX_IN;
+    let i = 0, carry = [], lastPage = null, pendingTail = null;
+    // Margin notes that did not fit beside their verse travel to the top of the next page's margin.
+    let carryNotes = [], carryNoteH = [];
+    const withNotes = (r, notes, noteH) => Object.assign({}, r, { notes, noteH });
+
+    while (i < rows.length || carry.length || pendingTail) {
       const p = newPage("text");
       lastPage = p;
-      const pageRows = [];
-      const rowTops = [];
-      let pageEntries = carry.slice();
-      carry = [];
-      let textH = 0;
-      let spilling = false;
+      const pageRows = [], rowTops = [];
+      let pageEntries = carry.slice(); carry = [];
+      let textH = 0, spilling = false, deferring = false;
+      let notesIn = carryNotes, noteHIn = carryNoteH; carryNotes = []; carryNoteH = [];
+
+      if (pendingTail) {
+        const t = notesIn.length ? withNotes(pendingTail, notesIn, noteHIn) : pendingTail;
+        notesIn = []; noteHIn = [];
+        pageRows.push(t); rowTops.push(0); textH = t.h; pendingTail = null;
+      }
 
       while (pageEntries.length > 1 && appHeight(pageEntries) > bodyH) carry.unshift(pageEntries.pop());
       if (carry.length) spilling = true;
 
       while (i < rows.length && !spilling) {
-        const r = rows[i];
+        let r = rows[i];
+        // The first row on a page inherits the notes carried over from the page before.
+        if (!pageRows.length && notesIn.length) { r = withNotes(r, notesIn.concat(r.notes), noteHIn.concat(r.noteH)); notesIn = []; noteHIn = []; }
+        else if (deferring && r.notes.length) { carryNotes.push(...r.notes); carryNoteH.push(...r.noteH); r = withNotes(r, [], []); }
         const top = pageRows.length ? textH : 0;
         const rowH = pageRows.length ? r.h : r.h - r.mt;
         const tryText = textH + rowH;
-        const appH = appHeight(pageEntries);
-        const notes = stackNotes(rowTops.concat(top), pageRows.concat(r));
-        const fits = tryText + appH <= bodyH && notes.bottom + appH <= bodyH;
+        let appH = appHeight(pageEntries);
+        let notes = stackNotes(rowTops.concat(top), pageRows.concat(r));
+        let fits = tryText + appH <= bodyH && notes.bottom + appH <= bodyH;
+        // Rule 2: never leave one verse alone because its apparatus is fat.
+        while (!fits && pageRows.length === 1 && pageEntries.length) {
+          carry.unshift(pageEntries.pop());
+          appH = appHeight(pageEntries);
+          fits = tryText + appH <= bodyH && notes.bottom + appH <= bodyH;
+        }
+        // Rule 5: the text fits but its margin notes do not: place the verse, carry the notes forward.
+        if (!fits && tryText + appH <= bodyH && r.notes.length) {
+          carryNotes.push(...r.notes); carryNoteH.push(...r.noteH);
+          r = withNotes(r, [], []);
+          notes = stackNotes(rowTops.concat(top), pageRows.concat(r));
+          fits = tryText + appH <= bodyH && notes.bottom + appH <= bodyH;
+          deferring = true;
+        }
         if (!fits && pageRows.length) break;
         pageRows.push(r); rowTops.push(top); textH = tryText; i++;
+        versePage[keyOf(r.v)] = pageCount;
         for (const x of entriesFor(r.v)) {
           if (spilling) { carry.push(x); continue; }
           const tryEntries = pageEntries.concat(x);
@@ -374,19 +458,70 @@
         }
       }
 
-      // Render, then verify against the real geometry; measurements predict, the page decides.
-      let placed = renderTextPage(p, pageRows, pageEntries, bodyH);
+      // Taking a row back off the page also takes back any notes it deferred.
+      const unplace = () => {
+        const r = pageRows.pop(); rowTops.pop(); i--; delete versePage[keyOf(r.v)];
+        const orig = rows[i];
+        if (r !== orig && r.notes.length < orig.notes.length) {
+          const n = orig.notes.length - r.notes.length;
+          carryNotes.splice(-n, n); carryNoteH.splice(-n, n);
+        }
+        return r;
+      };
+
+      // Rule 3: a short last row that lost all its entries goes with them.
+      if (pageRows.length > 1) {
+        const last = pageRows[pageRows.length - 1];
+        const own = entriesFor(last.v);
+        if (own.length && own.every(x => carry.includes(x)) && last.h < MOVE_MAX && !last.splitTail) {
+          unplace();
+          carry = own.concat(carry.filter(x => !own.includes(x)));
+          textH -= last.h;
+        }
+      }
+
+      let placed = renderTextPage(p, pageRows, pageEntries, bodyH, versePage);
       while (placed.overflow > 0 && (pageRows.length > 1 || pageEntries.length > 1)) {
         if (pageRows.length > 1) {
-          const r = pageRows.pop(); i--;
+          const r = unplace();
           const own = entriesFor(r.v);
-          const moving = pageEntries.filter(x => own.includes(x));
           pageEntries = pageEntries.filter(x => !own.includes(x));
-          carry = moving.concat(carry);
+          carry = own.filter(x => !carry.includes(x)).concat(carry);
         } else {
           carry.unshift(pageEntries.pop());
         }
-        placed = renderTextPage(p, pageRows, pageEntries, bodyH);
+        placed = renderTextPage(p, pageRows, pageEntries, bodyH, versePage);
+      }
+
+      // Rule 4: a gap over half an inch and a row waiting: split the row at a line boundary.
+      if (i < rows.length && placed.gap > GAP_MAX) {
+        const own = entriesFor(rows[i].v);
+        let budget = placed.gap - RULE_GAP - rows[i].mt - 4;
+        // The bottom-pinned apparatus can re-balance a few pixels when the page re-renders, so a
+        // head that misses by a little is cut one line shorter and tried again.
+        for (let attempt = 0; attempt < 3 && budget > 0; attempt++) {
+          const split = splitRow(rows[i], budget);
+          if (!split) break;
+          let head = split.head;
+          if (deferring || carryNotes.length) { split.tail.notes = head.notes; split.tail.noteH = head.noteH; head = withNotes(head, [], []); }
+          pageRows.push(head); rowTops.push(textH);
+          versePage[keyOf(rows[i].v)] = pageCount;
+          const added = own.filter(x => !carry.includes(x));
+          carry = carry.concat(added);
+          placed = renderTextPage(p, pageRows, pageEntries, bodyH, versePage);
+          if (placed.overflow > 0 && head.notes.length) {   // the head's notes are what overflow: send them with the tail
+            split.tail.notes = head.notes; split.tail.noteH = head.noteH;
+            pageRows[pageRows.length - 1] = head = withNotes(head, [], []);
+            placed = renderTextPage(p, pageRows, pageEntries, bodyH, versePage);
+          }
+          if (placed.overflow <= 0) { pendingTail = split.tail; i++; break; }
+          // undo and try a shorter head
+          pageRows.pop(); rowTops.pop(); delete versePage[keyOf(rows[i].v)];
+          carry = carry.filter(x => !added.includes(x));
+          unsplitRow(rows[i]);
+          budget -= placed.overflow + 2;
+          placed = renderTextPage(p, pageRows, pageEntries, bodyH, versePage);
+        }
       }
       p.leftover = placed.leftover;
       p.grid = placed.grid;
@@ -394,7 +529,13 @@
     return lastPage;
   }
 
-  function renderTextPage(p, pageRows, pageEntries, bodyH) {
+  function unsplitRow(r) {
+    r.node.classList.remove("split-head");
+    r.node.querySelector(".en").style.removeProperty("--clip");
+    r.node.querySelector(".he").style.removeProperty("--clip");
+  }
+
+  function renderTextPage(p, pageRows, pageEntries, bodyH, versePage) {
     p.body.innerHTML = "";
     const grid = el("div", "text-grid");
     pageRows.forEach((r, k) => { r.node.classList.toggle("first", k === 0); if (r.node.setLocator) r.node.setLocator(k === 0); grid.append(r.node); });
@@ -410,26 +551,37 @@
       p.body.append(col);
     }
 
-    const versesHere = new Set(pageRows.map(r => r.v.verse));
-    let appTop = bodyH;
+    const here = new Set(pageRows.map(r => `${r.v.chapter}:${r.v.verse}`));
+    let appTop = bodyH, offpage = 0;
     if (pageEntries.length) {
       const app = el("div", "apparatus");
-      pageEntries.forEach(x => app.append(versesHere.has(x.e.verse) ? x.node : buildEntry(x.e, true)));
+      pageEntries.forEach(x => {
+        const k = `${x.ch}:${x.e.verse}`;
+        if (here.has(k)) app.append(x.node);
+        else { offpage++; app.append(buildEntry(x.e, { offpage: versePage[k] || null })); }
+      });
       p.body.append(app);
       appTop = app.getBoundingClientRect().top - bodyRect.top;
     }
     const gridBottom = pageRows.length ? grid.getBoundingClientRect().bottom - bodyRect.top : 0;
     const contentBottom = Math.max(gridBottom, stacked.bottom);
-    const RULE_GAP = 16;
     const overflow = contentBottom + (pageEntries.length ? RULE_GAP : 0) - appTop;
+    const gap = pageEntries.length ? appTop - contentBottom : bodyH - contentBottom;
 
     const first = pageRows[0]?.v, last = pageRows[pageRows.length - 1]?.v;
     const range = first ? (first === last ? `${first.chapter}:${first.verse}` : first.chapter === last.chapter ? `${first.chapter}:${first.verse}–${last.verse}` : `${first.chapter}:${first.verse}–${last.chapter}:${last.verse}`) : "";
     setHead(p, shabbatName(), range ? `${data.haftarah.book} ${range}` : "Commentary, continued");
     setFoot(p, { legend: microLegend() });
-    const leftover = -overflow;
-    p.page.dataset.leftover = String(Math.round(leftover));
-    return { overflow, leftover, grid };
+
+    p.page.dataset.rows = String(pageRows.length);
+    p.page.dataset.gap = String(Math.round(pageEntries.length ? gap : -1));
+    p.page.dataset.fill = String(Math.round(100 * (contentBottom + (pageEntries.length ? bodyH - appTop : 0)) / bodyH));
+    const hasHead = pageRows.some(r => r.splitHead), hasTail = pageRows.some(r => r.splitTail);
+    p.page.dataset.split = hasHead && hasTail ? "both" : hasHead ? "head" : hasTail ? "tail" : "";
+    p.page.dataset.cont = "0";
+    p.page.dataset.offpage = String(offpage);
+    p.page.dataset.leftover = String(Math.round(-overflow));
+    return { overflow, leftover: -overflow, grid, gap };
   }
 
   // ---- end matter -----------------------------------------------------------
@@ -479,6 +631,9 @@
         fit.forEach(b => wrap.append(b));
         lastTextPage.grid.after(wrap);
         blocks.splice(0, fit.length);
+        const bh = lastTextPage.body.getBoundingClientRect().height;
+        const prev = Number(lastTextPage.page.dataset.fill || 0);
+        lastTextPage.page.dataset.fill = String(Math.min(100, Math.round(prev + 100 * wrap.getBoundingClientRect().height / bh)));
       }
     }
     for (const b of blocks) {
