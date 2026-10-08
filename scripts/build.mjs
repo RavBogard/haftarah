@@ -21,12 +21,17 @@ const here = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(here, "..");
 
 function flag(name) { return process.argv.includes(`--${name}`); }
-const dirArg = process.argv.slice(2).find(a => !a.startsWith("--"));
-if (!dirArg) { console.error("usage: node scripts/build.mjs weeks/<slug> [--draft] [--png] [--no-pdf]"); process.exit(1); }
-const weekDir = resolve(dirArg);
-const DRAFT = flag("draft");
-const WANT_PDF = !flag("no-pdf");
-const WANT_PNG = flag("png");
+// Set by main(); kept at module level so the helpers below can see them. Importing this module
+// (check.mjs and the tests do) must not parse arguments or exit.
+let weekDir, DRAFT, WANT_PDF, WANT_PNG;
+function parseArgs() {
+  const dirArg = process.argv.slice(2).find(a => !a.startsWith("--"));
+  if (!dirArg) { console.error("usage: node scripts/build.mjs weeks/<slug> [--draft] [--png] [--no-pdf]"); process.exit(1); }
+  weekDir = resolve(dirArg);
+  DRAFT = flag("draft");
+  WANT_PDF = !flag("no-pdf");
+  WANT_PNG = flag("png");
+}
 
 function toPosix(p) { return p.split("\\").join("/"); }
 
@@ -38,7 +43,7 @@ async function findLogo() {
   return null;
 }
 
-function findBrowser() {
+export function findBrowser() {
   if (process.env.HAFTARAH_BROWSER && existsSync(process.env.HAFTARAH_BROWSER)) return process.env.HAFTARAH_BROWSER;
   const candidates = [
     "C:/Program Files/Google/Chrome/Application/chrome.exe",
@@ -51,6 +56,18 @@ function findBrowser() {
     "/usr/bin/google-chrome", "/opt/pw-browsers/chromium-1194/chrome-linux/chrome", "/usr/bin/chromium", "/usr/bin/chromium-browser", "/usr/bin/microsoft-edge",
   ];
   return candidates.find(p => p && existsSync(p)) || null;
+}
+
+// The flags every headless run uses, so build and check render identically.
+export function chromeFlags(profile) {
+  const common = [
+    "--headless=new", "--disable-gpu", "--no-first-run", "--no-default-browser-check",
+    "--allow-file-access-from-files", "--hide-scrollbars", `--user-data-dir=${profile}`,
+    "--virtual-time-budget=12000", "--run-all-compositor-stages-before-draw",
+  ];
+  // Cloud sandboxes run as root, where Chrome refuses to start without this flag.
+  if (process.platform === "linux" && process.getuid?.() === 0) common.push("--no-sandbox");
+  return common;
 }
 
 function run(cmd, args) {
@@ -70,6 +87,7 @@ function countPdfPages(buf) {
 }
 
 async function main() {
+  parseArgs();
   const sheetPath = join(weekDir, "sheet.json");
   const data = JSON.parse(await readFile(sheetPath, "utf8"));
 
@@ -113,16 +131,11 @@ async function main() {
     console.warn("No Chrome or Edge found. Open the HTML in a browser and print to PDF (letter, no margins, background graphics on), or set HAFTARAH_BROWSER.");
     return;
   }
+  console.log(`Browser: ${browser}`);
   const profile = join(tmpdir(), `haftarah-chrome-${process.pid}`);
   await mkdir(profile, { recursive: true });
   const url = pathToFileURL(htmlPath).href;
-  const common = [
-    "--headless=new", "--disable-gpu", "--no-first-run", "--no-default-browser-check",
-    "--allow-file-access-from-files", "--hide-scrollbars", `--user-data-dir=${profile}`,
-    "--virtual-time-budget=12000", "--run-all-compositor-stages-before-draw",
-  ];
-  // Cloud sandboxes run as root, where Chrome refuses to start without this flag.
-  if (process.platform === "linux" && process.getuid?.() === 0) common.push("--no-sandbox");
+  const common = chromeFlags(profile);
 
   try {
     if (WANT_PDF) {
@@ -155,4 +168,6 @@ async function main() {
   }
 }
 
-main().catch(err => { console.error(err.message || err); process.exit(1); });
+if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
+  main().catch(err => { console.error(err.message || err); process.exit(1); });
+}

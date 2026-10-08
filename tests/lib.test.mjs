@@ -131,3 +131,19 @@ test("nowrapKeys leaves a key that follows a tag alone", () => {
   const html = '<span class="indentAll"><sup class="fn">i</sup>G<small>OD</small> desires his vindication,';
   assert.equal(lib.nowrapKeys(html), html);
 });
+
+import { analyse } from "../scripts/check.mjs";
+
+test("analyse flags a lone verse, a wide gap, an empty section and a broken key series", () => {
+  const dom = `<html data-pages="3" data-yy="0" data-keys="a,c" data-empty-sections="1">
+<section class="page front recto" data-kind="front"></section>
+<section class="page text verso" data-kind="text" data-rows="1" data-gap="120" data-fill="40" data-split="" data-cont="0" data-offpage="0"></section>
+<section class="page text recto" data-kind="text" data-rows="3" data-gap="10" data-fill="90" data-split="" data-cont="1" data-offpage="0"></section>
+</html>`;
+  const { problems } = analyse(dom);
+  assert.ok(problems.some(p => /single verse/.test(p)));
+  assert.ok(problems.some(p => /120px gap/.test(p)));
+  assert.ok(problems.some(p => /no items/.test(p)));
+  assert.ok(problems.some(p => /key series is ac not ab/.test(p)));
+  assert.ok(problems.some(p => /labelled \(cont\.\)/.test(p)));
+});

@@ -1,0 +1,29 @@
+{
+  "schema": 2,
+  "slug": "fixture-min",
+  "status": "approved",
+  "series": { "name": "Torah from Scratch", "year": "5787", "number": 0 },
+  "shabbat": { "civil": "2026-10-10", "civilDisplay": "October 10, 2026", "hebrew": "כ״ט בְּתִשְׁרֵי תשפ״ז", "hebrewEn": "29 Tishrei 5787", "parashah": { "en": "Bereshit", "he": "בְּרֵאשִׁית", "ref": "Genesis 1:1-6:8" }, "special": null },
+  "haftarah": {
+    "ref": "I Samuel 20:18-20", "heRef": null, "book": "I Samuel",
+    "incipit": { "he": "מָחָ֣ר חֹ֑דֶשׁ", "en": "Tomorrow is the new moon" },
+    "title": { "he": "מחר חדש", "en": "Machar Chodesh" },
+    "defaultHaftarah": null,
+    "versions": { "he": "Miqra according to the Masorah", "en": "JPS 1917 (fixture)" },
+    "fetched": "2026-10-08T00:00:00.000Z"
+  },
+  "openingNote": { "calendar": "A fixture week for the tests.", "setting": ["Nothing here is for printing."], "status": "approved" },
+  "verses": [
+    { "ref": "I Samuel 20:18", "chapter": 20, "verse": 18, "he": "וַיֹּאמֶר־ל֥וֹ יְהוֹנָתָ֖ן מָחָ֣ר חֹ֑דֶשׁ וְנִפְקַ֕דְתָּ כִּ֥י יִפָּקֵ֖ד מוֹשָׁבֶֽךָ׃", "en": "And Jonathan said unto him: ‘To-morrow is the new moon; and thou wilt be missed, thy seat will be empty.<sup class=\"fn\">a</sup>", "notes": [{ "marker": "a", "lemma": "empty", "text": "See 20.25 and note." }], "break": null },
+    { "ref": "I Samuel 20:19", "chapter": 20, "verse": 19, "he": "וְשִׁלַּשְׁתָּ֙ תֵּרֵ֣ד מְאֹ֔ד וּבָאתָ֙ אֶל־הַמָּק֔וֹם אֲשֶׁר־נִסְתַּ֥רְתָּ שָּׁ֖ם בְּי֣וֹם הַֽמַּעֲשֶׂ֑ה וְיָ֣שַׁבְתָּ֔ אֵ֖צֶל הָאֶ֥בֶן הָאָֽזֶל׃", "en": "And in the third day thou shalt hide thyself well, and come to the place where thou didst hide thyself in the day of work, and shalt remain by the stone Ezel.", "notes": [], "break": null },
+    { "ref": "I Samuel 20:20", "chapter": 20, "verse": 20, "he": "וַ֨אֲנִ֜י שְׁלֹ֤שֶׁת הַחִצִּים֙ צִדָּ֣ה אוֹרֶ֔ה לְשַֽׁלַּֽח־לִ֖י לְמַטָּרָֽה׃", "en": "And I will shoot three arrows to the side-ward,<br>as though I shot at a mark.<sup class=\"fn\">b</sup>", "notes": [{ "marker": "b", "lemma": "mark", "text": "Lit. “target.”" }], "break": null }
+  ],
+  "glosses": [{ "verse": 18, "lemma": "וְנִפְקַ֕דְתָּ", "en": "thou wilt be missed", "text": "<i>nifkadta</i>: the empty seat is the plot.", "status": "approved" }],
+  "commentary": [
+    { "verse": 18, "register": "traditional", "source": "Rashi", "lemma": "thou wilt be missed", "text": "A fixture entry.", "sourceRef": "Rashi on I Samuel 20:18", "translation": "claude", "status": "approved", "order": 1 },
+    { "verse": 19, "register": "critical", "source": "A fixture summary", "lemma": "the stone Ezel", "text": "A fixture summary.", "works": ["McCarter 1980"], "cites": "McCarter, <i>I Samuel</i>", "status": "approved", "order": 1 }
+  ],
+  "glossary": [{ "term": "Ezel", "he": "הָאָֽזֶל", "text": "A stone.", "status": "approved" }],
+  "nextWeek": { "shabbat": "Noach", "special": null, "ref": "Isaiah 54:1-55:5", "civilDisplay": "October 17, 2026", "status": "approved" },
+  "credits": { "issuedBy": "Central Reform Congregation", "editor": "Rabbi Daniel Bogard", "signoff": "A fixture." }
+}
