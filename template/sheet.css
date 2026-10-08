@@ -227,7 +227,6 @@ html, body {
   align-items: center;
 }
 .legend svg { width: 7pt; height: 7pt; vertical-align: -0.5pt; margin-right: 4pt; color: var(--rubric); }
-.legend .circ { color: var(--rubric); margin-right: 4pt; font-variant-numeric: lining-nums; }
 
 /* The setting moves to its own page only when the note is too long for the cover. */
 .context {
@@ -332,13 +331,14 @@ html, body {
 .he b, .he small { font-weight: normal; font-size: inherit; }
 .he .pisqa { display: inline-block; width: 1.6em; }
 .he .mam-kq-k { font-size: 0.72em; color: var(--ink-2); }
-.he .circ {
-  color: var(--rubric);
+.he .fn {
   font-family: var(--serif);
-  font-size: 0.55em;
-  vertical-align: 0.9em;
+  font-size: 0.6em;
   line-height: 0;
+  vertical-align: 0.95em;
+  color: var(--rubric);
   margin: 0 0.1em;
+  font-style: italic;
   font-variant-numeric: lining-nums;
 }
 
@@ -356,14 +356,16 @@ html, body {
   font-size: var(--size-gloss);
   line-height: 1.32;
   color: var(--ink);
-  text-indent: -7pt;
-  padding-left: 7pt;
+  text-indent: -9pt;
+  padding-left: 9pt;
 }
 .margin-col.measuring .note { position: static; }
-.note .k { color: var(--rubric); font-style: italic; margin-right: 2pt; }
-.note .k.circ { font-style: normal; }
-.note .lemma { color: var(--ink); }
-.note .he-lemma { font-family: var(--hebrew); font-size: 1.12em; color: var(--ink); direction: rtl; unicode-bidi: isolate; }
+.note .k { color: var(--rubric); font-style: italic; margin-right: 3pt; }
+.note .vn { color: var(--ink-2); font-size: 0.9em; margin-right: 3pt; font-variant-numeric: lining-nums; }
+.note .lemma { font-style: italic; }
+.note .brk { margin: 0 3pt 0 1pt; color: var(--ink-2); }
+.note .he-lemma { font-family: var(--hebrew); font-size: 1.12em; direction: rtl; unicode-bidi: isolate; }
+.note .tail { color: var(--ink-2); font-size: 0.85em; letter-spacing: 0.04em; }
 .note.proposed { background: #f3eced; outline: 2pt solid #f3eced; }
 
 /* ---- Apparatus ------------------------------------------------------------- */

@@ -63,9 +63,9 @@
   const TAGLINE = "A Jewish Presence in the City of St. Louis";
 
   // Insert a keying circle after the Hebrew lemma inside the verse HTML.
-  function keyHebrew(html, lemma) {
+  function keyHebrew(html, lemma, key) {
     if (!lemma) return html;
-    const mark = '<span class="circ">°</span>';
+    const mark = `<sup class="fn he">${key}</sup>`;
     if (html.includes(lemma)) return html.replace(lemma, lemma + mark);
     // fall back to matching with vowels and accents removed
     const plainLemma = stripMarks(lemma);
@@ -153,9 +153,6 @@
     const regs = usedRegisters();
     const legend = el("div", "legend");
     regs.forEach(k => legend.append(el("span", null, `${SIGLA[k]}${REGISTER_NAMES[k]}`)));
-    if ((data.glosses || []).some(g => g.status ? visible(g) : true)) {
-      legend.append(el("span", "glossnote", `<span class="circ">°</span>margin note on a Hebrew word`));
-    }
 
     const prov = el("div", "provenance");
     prov.innerHTML =
@@ -191,18 +188,19 @@
     const gut = el("div", "gut");
     gut.innerHTML = (v.showChapter ? `<span class="ch">${v.chapter}</span>` : "") + v.verse;
     let heHtml = divineName(v.he.replace(/&thinsp;|\u2009/g, " "));
-    const glosses = (data.glosses || []).filter(g => g.verse === v.verse && (g.chapter == null || g.chapter === v.chapter) && (g.status ? visible(g) : true));
-    for (const g of glosses) heHtml = keyHebrew(heHtml, g.lemma);
+    for (const k of (v.keys || [])) if (k.kind === "gloss") heHtml = keyHebrew(heHtml, k.he, k.key);
     const he = el("div", "he");
     const heInner = el("div", "inner", heHtml);
     he.append(heInner);
     row.append(en, gut, he);
     const notes = [];
-    for (const n of (v.notes || [])) {
-      notes.push(el("p", "note", `<span class="k">${esc(n.marker)}</span>${n.lemma ? `<span class="lemma">${esc(n.lemma)}</span> ` : ""}${n.text}`));
-    }
-    for (const g of glosses) {
-      notes.push(el("p", "note" + (g.status && g.status !== "approved" ? " proposed" : ""), `<span class="k circ">°</span>${g.lemma ? `<span class="he-lemma">${divineName(esc(g.lemma))}</span> ` : ""}${divineName(g.text)}`));
+    for (const k of (v.keys || [])) {
+      const cls = "note " + k.kind + (k.status && k.status !== "approved" ? " proposed" : "");
+      const vn = k.kind === "gloss" ? `<span class="vn">${k.verse}</span>` : "";
+      const lemma = k.lemma ? `<span class="lemma">${esc(k.lemma)}</span><span class="brk">]</span> ` : "";
+      const heLemma = k.kind === "gloss" && k.he ? `<span class="he-lemma">${divineName(esc(k.he))}</span> ` : "";
+      const tail = k.kind === "jps" ? ` <span class="tail">JPS</span>` : "";
+      notes.push(el("p", cls, `<span class="k">${k.key}</span>${vn}${lemma}${heLemma}${divineName(k.text)}${tail}`));
     }
     return { row, notes };
   }
@@ -277,6 +275,9 @@
       lastCh = v.chapter;
       v.prevBreak = i > 0 ? verses[i - 1].break : null;
     });
+    const keyed = L.assignKeys(verses, data.glosses || [], visible);
+    keyed.verses.forEach((kv, idx) => { verses[idx].en = kv.en; verses[idx].keys = kv.keys; });
+    document.documentElement.dataset.keys = keyed.sequence.join(",");
     const rows = verses.map((v, i) => { const b = buildVerseRow(v, i === 0); return { v, node: b.row, notes: b.notes }; });
     const heights = measureRows(rows.map(r => r.node));
     rows.forEach((r, i) => {
