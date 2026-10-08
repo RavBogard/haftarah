@@ -156,101 +156,51 @@ html, body {
   margin-top: 14pt;
 }
 
-/* ---- Cover --------------------------------------------------------------- */
+/* ---- Front page ---------------------------------------------------------- */
 
-.cover .page-body { display: flex; flex-direction: column; }
+.front .page-body { display: flex; flex-direction: column; }
 
-/* Hero: the mural and the incipit stand on the same baseline, the reading line. */
+/* The mural's top sits 1.35in from the trim whatever the incipit does. */
 .hero {
   display: grid;
   grid-template-columns: 2.4in 1fr;
   column-gap: 0.4in;
-  align-items: end;
-  margin-top: 0.55in;
+  align-items: center;
+  margin-top: calc(1.35in - var(--m-top) - var(--head-h) - 14pt);
 }
 .hero.no-mark { grid-template-columns: 1fr; }
 .hero .mark { width: 2.4in; height: 2.4in; display: block; object-fit: contain; }
-.incipit-block {
-  text-align: right;
-  direction: rtl;
-  align-self: end;
-}
-.incipit {
-  font-family: var(--hebrew);
-  font-size: 60pt;
-  line-height: 1.2;
-  color: var(--ink);
-  margin: 0;
-  letter-spacing: 0;
-  text-wrap: balance;
-}
-.incipit-en {
-  direction: ltr;
-  text-align: right;
-  font-size: var(--size-text);
-  font-style: italic;
-  line-height: 1.3;
-  margin: 10pt 0 0;
-  color: var(--ink);
-  font-weight: 400;
-}
-.reading-line {
-  direction: ltr;
-  text-align: right;
-  margin-top: 16pt;
-  color: var(--rubric);
-  font-size: var(--size-text);
-  line-height: 1.5;
-  font-variant-numeric: lining-nums;
-}
-.reading-line .ref { font-weight: 600; }
+.incipit-block { text-align: right; direction: rtl; }
+.incipit { font-family: var(--hebrew); font-size: var(--size-incipit); line-height: 1.2; color: var(--ink); margin: 0; text-wrap: balance; }
+.incipit-en { direction: ltr; text-align: right; font-size: var(--size-text); font-style: italic; line-height: 1.3; margin: 10pt 0 0; }
+.reading-line { direction: ltr; text-align: right; margin-top: 14pt; font-size: var(--size-text); line-height: 1.5; font-variant-numeric: lining-nums; }
+.reading-line .ref { color: var(--rubric); font-weight: 600; }
+.reading-line .shabbat { color: var(--ink); }
 .reading-line .dates { color: var(--ink-2); }
 .reading-line .he-date { font-family: var(--hebrew); font-size: calc(var(--size-text) * 1.18); }
 
-/* Opening note: calendar reason, hairline, setting. */
-.opening-note {
-  margin-top: 22pt;
-  font-size: var(--size-text);
-  line-height: var(--lh-en);
-  max-width: 5.4in;
-}
+.opening-note { margin-top: 16pt; font-size: var(--size-text); line-height: var(--lh-en); max-width: 5.4in; }
 .opening-note p { margin: 0 0 6pt; }
 .opening-note p:last-child { margin-bottom: 0; }
 .opening-note p.rule { border-top: var(--rule-w) solid var(--rule); padding-top: 7pt; margin-top: 12pt; }
 .opening-note.proposed { background: #f3eced; outline: 4pt solid #f3eced; }
 
-.legend {
-  margin-top: 14pt;
-  font-size: var(--size-gloss);
-  color: var(--ink-2);
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4pt 14pt;
-  align-items: center;
-}
+.legend { margin-top: 8pt; font-size: var(--size-gloss); color: var(--ink-2); display: flex; flex-wrap: wrap; gap: 4pt 14pt; align-items: center; }
 .legend svg { width: 7pt; height: 7pt; vertical-align: -0.5pt; margin-right: 4pt; color: var(--rubric); }
+.legend .k { color: var(--rubric); font-style: italic; margin-right: 4pt; }
+.legend .unused { color: #a6a6a6; }
+.legend .unused svg { color: #a6a6a6; }
 
-/* The setting moves to its own page only when the note is too long for the cover. */
-.context {
-  border-top: var(--rule-w) solid var(--rule);
-  padding-top: 8pt;
-  columns: 2;
-  column-gap: 0.28in;
-  font-size: var(--size-apparatus);
-  line-height: var(--lh-app);
-}
-.context h2 { column-span: all; font-size: var(--size-text); font-weight: 600; margin: 0 0 6pt; color: var(--ink); }
-.context p { margin: 0 0 5pt; text-align: left; hyphens: auto; }
+.voices { margin-top: 8pt; }
+.endmatter .voices { margin-top: 0; }
+.endmatter .voices h2 { font-size: var(--size-text); }
+.voices h2 { font-size: var(--size-gloss); font-weight: 600; margin: 0 0 3pt; color: var(--ink); letter-spacing: 0.02em; }
+.voices-list { margin: 0; font-size: var(--size-gloss); line-height: 1.4; color: var(--ink-2); }
+.voices-list .voice { white-space: nowrap; }
+.voices-list .name { color: var(--rubric); font-weight: 500; }
+.voices-list .sep { color: var(--rubric); margin: 0 2pt; }
 
-.provenance {
-  margin-top: auto;
-  padding-top: 12pt;
-  margin-bottom: 0.34in;      /* clears the two-line cover footer */
-  font-size: var(--size-gloss);
-  line-height: 1.4;
-  color: var(--ink-2);
-  max-width: 6.2in;
-}
+.provenance { margin-top: auto; padding-top: 8pt; margin-bottom: 0.12in; font-size: var(--size-gloss); line-height: 1.4; color: var(--ink-2); }
 .provenance .signature { color: var(--ink); font-style: italic; white-space: nowrap; }
 
 /* Footer: folio away from the staple; micro-legend on text pages, wordmark and tagline on the front page. */
@@ -258,6 +208,7 @@ html, body {
 .frame-foot .micro-legend { display: inline-flex; gap: 10pt; }
 .frame-foot .micro-legend svg { width: 6pt; height: 6pt; vertical-align: -0.3pt; margin-right: 3pt; color: var(--rubric); }
 .frame-foot .wm-block { display: flex; flex-direction: column; line-height: 1.35; }
+.page.recto .frame-foot .wm-block { text-align: right; }
 .frame-foot .wm { color: var(--ink); font-size: var(--size-text); letter-spacing: 0.01em; }
 .frame-foot .tagline { color: var(--ink-2); }
 
@@ -413,6 +364,7 @@ html, body {
 .entry .brk { margin: 0 3pt 0 1pt; color: var(--ink-2); }
 .entry .src { color: var(--rubric); font-weight: 500; }
 .entry .src::after { content: " "; }
+.entry .src.drafted { font-style: italic; font-weight: 500; }
 .entry .body b { font-weight: 600; }
 .entry .body i { font-style: italic; }
 .entry .body span[dir="rtl"], .entry .body .heb { font-family: var(--hebrew); font-size: 1.1em; }

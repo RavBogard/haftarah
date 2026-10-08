@@ -128,62 +128,89 @@
 
   // ---- cover ----------------------------------------------------------------
 
-  function buildCover() {
-    const p = newPage("cover");
+  function buildFrontPage() {
+    const p = newPage("front");
     setHead(p, series.name, `Haftarah · ${seriesLabel}`);
     setFoot(p, { wordmark: true });
 
-    // Hero: the mural beside the incipit, both sitting on the reading line.
+    // Hero: the mural sits at a fixed height; the incipit block centres on it.
     const hero = el("div", "hero" + (opts.logo ? "" : " no-mark"));
-    if (opts.logo) {
-      const img = el("img", "mark");
-      img.src = opts.logo;
-      img.alt = "";
-      hero.append(img);
-    }
+    if (opts.logo) { const img = el("img", "mark"); img.src = opts.logo; img.alt = ""; hero.append(img); }
     const inc = el("div", "incipit-block");
-    inc.append(el("h1", "incipit", divineName(data.haftarah.incipit?.he || "")));
+    const h1 = el("h1", "incipit", divineName(data.haftarah.incipit?.he || ""));
+    inc.append(h1);
     if (data.haftarah.incipit?.en) inc.append(el("p", "incipit-en", esc(data.haftarah.incipit.en)));
     const rl = el("div", "reading-line");
     rl.innerHTML =
       `<div class="ref">${esc(dash(data.haftarah.ref))}</div>` +
-      `<div>${esc(shabbatName())}</div>` +
+      `<div class="shabbat">${esc(shabbatName())}</div>` +
       `<div class="dates">${esc(data.shabbat.civilDisplay)}&nbsp;&nbsp;<span class="he-date">${esc(data.shabbat.hebrew || "")}</span></div>`;
     inc.append(rl);
     hero.append(inc);
+    p.body.append(hero);
 
-    // Opening note: the calendar reason, a hairline, the setting.
+    // Fit the incipit: measure at 60pt on one line, then size to a 3.5in box.
+    h1.style.whiteSpace = "nowrap";
+    h1.style.fontSize = "60pt";
+    h1.style.width = "max-content";
+    const fit = L.fitIncipitSize(h1.getBoundingClientRect().width, 3.5 * 96);
+    h1.style.width = "";
+    h1.style.fontSize = fit.size + "pt";
+    h1.style.whiteSpace = fit.lines === 2 ? "normal" : "nowrap";
+    if (fit.lines === 2) h1.style.lineHeight = "1.3";
+    p.page.dataset.incipit = `${fit.size}pt/${fit.lines}`;
+
+    // Opening note: calendar paragraph(s), hairline, setting paragraph(s).
     const note = el("div", "opening-note" + (openingNote.status && openingNote.status !== "approved" ? " proposed" : ""));
-    const cal = paras(openingNote.calendar);
-    const set = paras(openingNote.setting);
+    const cal = paras(openingNote.calendar), set = paras(openingNote.setting);
     cal.forEach(t => note.append(el("p", "cal", t)));
     set.forEach((t, i) => note.append(el("p", i === 0 && cal.length ? "setting rule" : "setting", t)));
+    p.body.append(note);
 
-    // Legend: only the sigla this week uses.
-    const regs = usedRegisters();
+    // Legend: always the same four, in the same order; unused ones greyed; then the keys.
+    const used = new Set(usedRegisters());
     const legend = el("div", "legend");
-    regs.forEach(k => legend.append(el("span", null, `${SIGLA[k]}${REGISTER_NAMES[k]}`)));
+    L.REGISTER_ORDER.forEach(k => legend.append(el("span", used.has(k) ? "" : "unused", `${SIGLA[k]}${REGISTER_NAMES[k]}`)));
+    const hasKeys = (document.documentElement.dataset.keys || "").length > 0;
+    legend.append(el("span", hasKeys ? "" : "unused", `<span class="k">a–z</span>translators’ notes (JPS) and word notes, in the margin`));
+    if (data.verses.some(v => /\[[^\]]*\]\s*\([^)]*\)|\([^)]*\)\s*\[[^\]]*\]/.test(v.he))) {
+      legend.append(el("span", "", `<span class="k">[ ] ( )</span>read / written: where tradition reads a word differently from its spelling`));
+    }
+    p.body.append(legend);
+
+    // Voices on this sheet.
+    const voices = L.voicesFor(data.commentary || [], opts.voices || {}, visible);
+    let vb = null;
+    if (voices.length) {
+      vb = el("div", "voices");
+      vb.append(el("h2", null, "Voices on this sheet"));
+      // One running paragraph: "Rashi R. Shlomo Yitzchaki, Troyes, 1040–1105 · Radak …"
+      const list = el("p", "voices-list", voices.map(v => `<span class="voice"><span class="name">${esc(v.name)}</span>${v.line ? ` ${esc(v.line)}` : ""}</span>`).join('<span class="sep"> · </span>'));
+      vb.append(list);
+      p.body.append(vb);
+      document.documentElement.dataset.voicesMissing = voices.filter(v => !v.line).map(v => v.name).join("|");
+    }
 
     const prov = el("div", "provenance");
     prov.innerHTML =
       `<span class="editions">Hebrew: ${esc(data.haftarah.versions.he)}. English: ${esc(data.haftarah.versions.en)}.</span> ` +
       `<span class="signoff">${signoff}</span>` +
       (data.credits?.editor && data.credits?.signoff ? ` <span class="signature">— ${esc(data.credits.editor)}</span>` : "");
-
-    p.body.append(hero, note);
-    if (regs.length || legend.childElementCount) p.body.append(legend);
     p.body.append(prov);
 
-    // If the note is too long for one page, the setting paragraphs move to their own page.
-    if (p.body.scrollHeight > p.body.clientHeight + 1 && set.length) {
-      const q = newPage("context-page");
-      setHead(q, shabbatName(), dash(data.haftarah.ref));
-      const ctx = el("div", "context standalone");
-      ctx.append(el("h2", null, `${esc(data.haftarah.book)}: the book and its world`));
-      note.querySelectorAll("p.setting").forEach(n => ctx.append(n));
-      q.body.append(ctx);
-    }
+    // A long opening note wins over the voices: they move to the end matter rather than overflow.
+    // Measure with the provenance pulled up (its auto margin otherwise fills the page).
+    const fill = () => {
+      prov.style.marginTop = "0";
+      const f = (prov.getBoundingClientRect().bottom - p.body.getBoundingClientRect().top + parseFloat(getComputedStyle(prov).marginBottom)) / p.body.clientHeight;
+      prov.style.marginTop = "";
+      return f;
+    };
+    if (fill() > 1.005 && vb) { vb.remove(); vb.classList.add("block"); voicesForEnd = vb; p.page.dataset.voices = "end"; }
+    p.page.dataset.fill = String(Math.round(100 * fill()));
+    p.page.dataset.overflow = String(fill() > 1.005);
   }
+  let voicesForEnd = null;
 
   // ---- text pages -----------------------------------------------------------
 
@@ -233,7 +260,7 @@
     entry.innerHTML =
       `<span class="sig" title="${REGISTER_NAMES[reg]}">${SIGLA[reg]}</span>` +
       `<span class="v">${vr}</span>${lemma} ` +
-      `<span class="src">${esc(e.source)}</span>` +
+      `<span class="src${e.register === "critical" || e.register === "reference" ? " drafted" : ""}">${esc(e.source)}</span>` +
       `<span class="body">${divineName(e.text)}</span>` +
       (tailBits.length ? ` <span class="tail">${tailBits.join("; ")}.</span>` : "");
     return entry;
@@ -290,9 +317,6 @@
       lastCh = v.chapter;
       v.prevBreak = i > 0 ? verses[i - 1].break : null;
     });
-    const keyed = L.assignKeys(verses, data.glosses || [], visible);
-    keyed.verses.forEach((kv, idx) => { verses[idx].en = kv.en; verses[idx].keys = kv.keys; });
-    document.documentElement.dataset.keys = keyed.sequence.join(",");
     const rows = verses.map((v, i) => { const b = buildVerseRow(v, i === 0); return { v, node: b.row, notes: b.notes }; });
     const heights = measureRows(rows.map(r => r.node));
     rows.forEach((r, i) => {
@@ -423,6 +447,7 @@
       b.append(g); blocks.push(b);
     }
     // Discussion questions are never printed (decision of 2026-10-07).
+    if (voicesForEnd) blocks.push(voicesForEnd);
     const col = el("div", "block colophon");
     const lines = [
       `Hebrew text: ${esc(data.haftarah.versions.he)}; English: ${esc(data.haftarah.versions.en)}; both via Sefaria. Commentary as credited in each entry.`,
@@ -476,7 +501,11 @@
   function run() {
     root.innerHTML = "";
     pageCount = 0;
-    buildCover();
+    // Keys are assigned once, before anything renders, so the front-page legend knows if any exist.
+    const keyed = L.assignKeys(data.verses, data.glosses || [], visible);
+    keyed.verses.forEach((kv, idx) => { data.verses[idx].en = kv.en; data.verses[idx].keys = kv.keys; });
+    document.documentElement.dataset.keys = keyed.sequence.join(",");
+    buildFrontPage();
     const last = buildTextPages();
     buildEndMatter(last);
     document.title = `${shabbatName()} — ${dash(data.haftarah.ref)}${DRAFT ? " (draft)" : ""}`;

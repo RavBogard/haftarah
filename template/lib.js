@@ -98,5 +98,28 @@
   const REGISTER_ORDER = ["traditional", "modern", "critical", "reference"];
   const REGISTER_NAMES = { traditional: "classical commentators", modern: "modern commentators", critical: "what historians say", reference: "reference" };
 
-  return { TETRA, divineName, stripMarks, splitPoetry, nowrapKeys, letterFor, isDeadRef, normalizeRefs, assignKeys, SIGLA, REGISTER_ORDER, REGISTER_NAMES };
+  // One line per named source used this week, in order of first use. Drafted titles (critical
+  // and reference entries) are not voices. Unknown sources return line: null so the build can warn.
+  function voicesFor(commentary, voices, isVisible) {
+    const seen = new Map();
+    for (const e of commentary || []) {
+      if (!isVisible(e)) continue;
+      if (e.register === "critical" || e.register === "reference") continue;
+      const name = String(e.source || "").trim();
+      if (!name || seen.has(name)) continue;
+      const key = Object.keys(voices || {}).find(k => name.toLowerCase().startsWith(k.toLowerCase()));
+      seen.set(name, { name, line: key ? voices[key] : null });
+    }
+    return [...seen.values()];
+  }
+
+  // The incipit fits a 3.5in box: 64pt at most, 48pt at least on one line; otherwise two lines at 54pt.
+  function fitIncipitSize(widthAt60pt, boxWidth) {
+    const size = Math.floor(60 * boxWidth / widthAt60pt);
+    if (size >= 64) return { size: 64, lines: 1 };
+    if (size >= 48) return { size, lines: 1 };
+    return { size: 54, lines: 2 };
+  }
+
+  return { TETRA, divineName, stripMarks, splitPoetry, nowrapKeys, letterFor, isDeadRef, normalizeRefs, assignKeys, SIGLA, REGISTER_ORDER, REGISTER_NAMES, voicesFor, fitIncipitSize };
 });

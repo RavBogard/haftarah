@@ -103,3 +103,26 @@ test("sigla are one filled family and registers have plain names", () => {
   assert.equal(lib.REGISTER_NAMES.critical, "what historians say");
   assert.equal(lib.REGISTER_NAMES.traditional, "classical commentators");
 });
+
+test("voicesFor introduces each named source once, in order of first use, skipping drafted titles", () => {
+  const voices = { "Rashi": "Rashi (R. Shlomo Yitzchaki), Troyes, 1040–1105", "Talmud": "The Babylonian Talmud, c. 200–500 CE" };
+  const commentary = [
+    { register: "traditional", source: "Talmud, Megillah 31a", status: "approved" },
+    { register: "traditional", source: "Rashi", status: "approved" },
+    { register: "traditional", source: "Rashi", status: "approved" },
+    { register: "critical", source: "A damaged verse", status: "approved" },
+    { register: "traditional", source: "Radak", status: "approved" },
+    { register: "traditional", source: "Malbim", status: "proposed" },
+  ];
+  const r = lib.voicesFor(commentary, voices, e => e.status === "approved");
+  assert.deepEqual(r.map(v => v.name), ["Talmud, Megillah 31a", "Rashi", "Radak"]);
+  assert.equal(r[1].line, voices.Rashi);
+  assert.equal(r[2].line, null);
+});
+
+test("fitIncipitSize shrinks to the box and falls back to two lines at 54pt", () => {
+  assert.deepEqual(lib.fitIncipitSize(330, 336), { size: 61, lines: 1 });
+  assert.deepEqual(lib.fitIncipitSize(400, 336), { size: 50, lines: 1 });
+  assert.deepEqual(lib.fitIncipitSize(600, 336), { size: 54, lines: 2 });
+  assert.deepEqual(lib.fitIncipitSize(250, 336), { size: 64, lines: 1 });
+});

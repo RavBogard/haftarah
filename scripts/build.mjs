@@ -86,6 +86,7 @@ async function main() {
   }
 
   const logo = await findLogo();
+  const voices = JSON.parse(await readFile(join(ROOT, "template", "voices.json"), "utf8"));
   const tpl = await readFile(join(ROOT, "template", "sheet.html"), "utf8");
   const title = `${data.shabbat?.parashah?.en || ""} haftarah${DRAFT ? " (draft)" : ""}`;
   const note = DRAFT
@@ -97,7 +98,7 @@ async function main() {
     .replace("{{RENDER}}", toPosix(relative(weekDir, join(ROOT, "template", "render.js"))))
     .replace("{{LIB}}", toPosix(relative(weekDir, join(ROOT, "template", "lib.js"))))
     .replace("{{DATA}}", JSON.stringify(data).replace(/<\/script/gi, "<\\/script"))
-    .replace("{{OPTIONS}}", JSON.stringify({ draft: DRAFT, logo }))
+    .replace("{{OPTIONS}}", JSON.stringify({ draft: DRAFT, logo, voices }))
     .replace("{{NOTE}}", note);
 
   const htmlName = DRAFT ? "sheet-draft.html" : "sheet.html";
