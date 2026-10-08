@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/** migrate.mjs — schema 1 → 2.   node scripts/migrate.mjs weeks/<slug> --number 3 */
+/** migrate.mjs — schema 1 → 2.   node scripts/migrate.mjs weeks/<slug> */
 import { readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -7,10 +7,10 @@ import { fileURLToPath } from "node:url";
 const SIGNOFF = "I chose and approved every entry on this sheet; summaries marked as such were drafted with Claude and read before printing. Tell me what I got wrong.";
 
 // Idempotent: a file already on schema 2 comes back unchanged except for fields it still lacks.
-export function migrate(d, number) {
+export function migrate(d) {
   const out = { ...d };
   out.schema = 2;
-  out.series = d.series || { name: "Torah from Scratch", year: String((d.shabbat?.hebrewEn || "").split(/\s+/).pop() || ""), number };
+  out.series = d.series || { name: "Torah from Scratch", year: String((d.shabbat?.hebrewEn || "").split(/\s+/).pop() || "") };
   if (!d.openingNote) {
     const cal = [];
     if (d.haftarah?.defaultHaftarah) cal.push(`Read in place of the usual haftarah for ${d.shabbat.parashah.en}, ${d.haftarah.defaultHaftarah.replace(/(\d)-(\d)/g, "$1–$2")}.`);
@@ -32,12 +32,10 @@ export function migrate(d, number) {
 
 async function main() {
   const dirArg = process.argv.slice(2).find(a => !a.startsWith("--"));
-  const numIdx = process.argv.indexOf("--number");
-  const number = numIdx > -1 ? Number(process.argv[numIdx + 1]) : null;
-  if (!dirArg || number == null || Number.isNaN(number)) { console.error("usage: node scripts/migrate.mjs weeks/<slug> --number N"); process.exit(1); }
+  if (!dirArg) { console.error("usage: node scripts/migrate.mjs weeks/<slug>"); process.exit(1); }
   const p = join(resolve(dirArg), "sheet.json");
   const d = JSON.parse(await readFile(p, "utf8"));
-  const out = migrate(d, number);
+  const out = migrate(d);
   await writeFile(p, JSON.stringify(out, null, 2) + "\n", "utf8");
   const todo = [];
   for (const g of out.glosses) if (!g.en) todo.push(`gloss ${g.verse} ${g.lemma}: add "en" (the English words it belongs to)`);

@@ -34,10 +34,11 @@
 
   // ---- series and opening note (schema 2, with schema-1 fallbacks) -------------
   const series = Object.assign(
-    { name: "Torah from Scratch", year: (data.shabbat?.hebrewEn || "").split(/\s+/).pop() || "", number: null },
+    { name: "Torah from Scratch", year: (data.shabbat?.hebrewEn || "").split(/\s+/).pop() || "" },
     data.series || {}
   );
-  const seriesLabel = `${series.year}${series.number != null ? ` · No. ${series.number}` : ""}`;
+  // Sheets are not numbered: each is known by its Hebrew date, year included ("6 Cheshvan 5787").
+  const seriesLabel = data.shabbat?.hebrewEn || series.year;
   const openingNote = (() => {
     if (data.openingNote) return data.openingNote;
     const cal = [];

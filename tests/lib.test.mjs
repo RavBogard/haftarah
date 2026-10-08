@@ -159,9 +159,9 @@ test("migrate builds the opening note from the v1 fields and drops what v2 remov
     commentary: [{ verse: 1, register: "critical", source: "S" }, { verse: 2, register: "traditional", source: "Rashi" }],
     credits: { editor: "R" },
   };
-  const v2 = migrate(v1, 3);
+  const v2 = migrate(v1);
   assert.equal(v2.schema, 2);
-  assert.deepEqual(v2.series, { name: "Torah from Scratch", year: "5787", number: 3 });
+  assert.deepEqual(v2.series, { name: "Torah from Scratch", year: "5787" });
   assert.equal(v2.openingNote.calendar, "Read in place of the usual haftarah for Bereshit, Isaiah 42:5–43:10. Why. Link.");
   assert.deepEqual(v2.openingNote.setting, ["Setting one.", "Setting two."]);
   assert.equal(v2.openingNote.status, "approved");
@@ -207,7 +207,7 @@ test("assignKeys keeps an in-range cross-reference, normalised, and drops one ou
 test("migrate stamps a status on legacy glossary terms and glosses so the gate sees them", () => {
   const v1 = { schema: 1, shabbat: { hebrewEn: "29 Tishrei 5787", parashah: { en: "Bereshit" } }, haftarah: { ref: "I Samuel 20:18-42" },
     glossary: [{ term: "Abner" }, { term: "Jesse", status: "approved" }], glosses: [{ verse: 1, lemma: "א" }, { verse: 2, lemma: "ב", status: "approved" }] };
-  const v2 = migrate(v1, 3);
+  const v2 = migrate(v1);
   assert.equal(v2.glossary[0].status, "proposed");
   assert.equal(v2.glossary[1].status, "approved");
   assert.equal(v2.glosses[0].status, "proposed");

@@ -34,7 +34,7 @@ Tell Daniel in one line: the Shabbat date, the parashah, the calendar's haftarah
 
 Before going further, look in the Drive working folder for an earlier year's record of the same reading. If one exists, load its `sheet.json`, show Daniel last time's entries, and ask what to keep.
 
-Set `series.number` to one more than the highest number already issued this year in the working folder. Skip test folders: any folder whose name ends in `(test)`, and any sheet with `"test": true`. `fetch.mjs` skips the latter in `weeks/`.
+Sheets are not numbered. Each is known by its date: the front page carries the Hebrew date with the year ("6 Cheshvan 5787").
 
 ## 2. Fetch
 
@@ -51,7 +51,7 @@ Before listing any sources, read the passage and its links and give Daniel a bri
 Daniel names the issues that matter this week, or approves the whole map. For each, pull the actual texts with the Sefaria tools on exact refs (`Radak on I Samuel 20:18`), show each in full, translated where needed and labelled, and talk it through. Write each chosen entry to `commentary[]`.
 
 - **Classical** (red square) and **modern** (blue circle): quote or abridge a Sefaria text; set `sourceRef`. For a Hebrew-only source, translate faithfully and set `translation: "claude"`; abridge with `kind: "abridged"`.
-- **What historians say** (teal triangle): a 60 to 120 word summary with a short descriptive `source` title, naming only works from `bibliography/<book>.md` in `works`. When a week needs a work not yet listed, add the line, verify the work exists (publisher catalogue or WorldCat), and mention the addition in the delivery line.
+- **What historians say** (teal triangle): a 60 to 120 word summary with a short descriptive `source` title, naming only works from `bibliography/<book>.md` in `works`. The works themselves cannot be checked from a session, so a summary gives the standard reading and points to the work ("see Blenkinsopp"); it never claims a page number or a quotation it has not seen (Daniel's ruling, 2026-10-08). When a week needs a work not yet listed, add the line, verify the work exists (publisher catalogue or WorldCat), and mention the addition in the delivery line.
 - **Reference** (ochre diamond): a Sefaria reference work by ref.
 - **Margin glosses** (`glosses[]`): word-level notes of 15 to 30 words keyed to one Hebrew word copied exactly from the verse, with `en` naming the English words to key. The JPS translators' notes print in the margin automatically; do not duplicate them.
 
@@ -75,7 +75,7 @@ Look at the page images before calling anything done. Where `pdftoppm` is instal
 
 ## 7. Deliver
 
-- **Public folder** `Haftarah` (owner daniel@centralreform.org, anyone with the link can view; id `1TbSmoeBaCSLciL_-_HSCuKWkJMSZvGwd`): the PDF, named `5787-03 Bereshit — I Samuel 20.18-42.pdf` (year-number, parashah, reading).
+- **Public folder** `Haftarah` (owner daniel@centralreform.org, anyone with the link can view; id `1TbSmoeBaCSLciL_-_HSCuKWkJMSZvGwd`): the PDF, named `2026-10-17 Noach — Isaiah 54.1-55.5.pdf` (date, parashah, reading).
 - **Working folder** `Haftarah working/<slug>/` (private; id `1BamL1Odk8xP5znSIRr3ENc2nt7QRo7ti`; create the week's subfolder): `sheet.json`, `candidates.json` and a copy of the PDF.
 
 The Google Drive connector uploads text files directly (`textContent`, `contentMimeType: application/json`, conversion disabled); compare the reported `fileSize` with the local size after stripping carriage returns. A PDF of several megabytes is too large to pass through the connector, so hand Daniel the PDF and say in the delivery line that it goes into both folders by hand.

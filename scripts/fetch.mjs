@@ -221,21 +221,6 @@ function stripMarks(he) {
 
 // ---- main -------------------------------------------------------------------
 
-// One more than the highest number already issued this Hebrew year in outRoot. A sheet with
-// "test": true (the Bereshit samples) does not count.
-async function nextNumber(outRoot, year) {
-  let max = 0;
-  let dirs = [];
-  try { dirs = await readdir(outRoot); } catch { return 1; }
-  for (const d of dirs) {
-    try {
-      const s = JSON.parse(await readFile(join(outRoot, d, "sheet.json"), "utf8"));
-      if (!s.test && s.series?.year === year && typeof s.series.number === "number") max = Math.max(max, s.series.number);
-    } catch {}
-  }
-  return max + 1;
-}
-
 // The following Shabbat's reading; Daniel confirms it when the calendar offers a choice.
 async function nextWeekFor(date) {
   const d = new Date(date + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() + 7);
@@ -344,7 +329,7 @@ async function main() {
       parashah: { en: item.name?.en, he: item.name?.he, ref: item.summary },
       special,
     },
-    series: { name: "Torah from Scratch", year: String(conv.hy), number: await nextNumber(outRoot, String(conv.hy)) },
+    series: { name: "Torah from Scratch", year: String(conv.hy) },
     haftarah: {
       ref: haftRef,
       heRef: tx.heRef || null,

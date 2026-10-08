@@ -56,7 +56,7 @@ If no shell is available, open `weeks/<slug>/sheet.html` in Chrome and print to 
 ```jsonc
 {
   "schema": 2,
-  "series": { "name": "Torah from Scratch", "year": "5787", "number": 3 },   // number: one more than the highest issued this year
+  "series": { "name": "Torah from Scratch", "year": "5787" },   // sheets are not numbered; the front page shows the Hebrew date
   "haftarah": {
     "ref": "I Samuel 20:18-42",
     "incipit": { "he": "מָחָ֣ר חֹ֑דֶשׁ", "en": "Tomorrow will be the new moon" },   // fetch proposes the first words up to a pause
@@ -90,9 +90,9 @@ If no shell is available, open `weeks/<slug>/sheet.html` in Chrome and print to 
 }
 ```
 
-`node scripts/migrate.mjs weeks/<slug> --number N` converts a schema-1 file. There are no discussion questions and no context box: the opening note replaced them.
+`node scripts/migrate.mjs weeks/<slug>` converts a schema-1 file. There are no discussion questions and no context box: the opening note replaced them.
 
-Every item prints unless its `status` is `rejected`; there is no approval state and no draft build, because Daniel approves a sheet by printing it. Rules the build enforces, refusing to run and naming the entry: every entry outside the critical register needs a Sefaria `sourceRef`; every critical entry names only `works` listed in `bibliography/<book>.md`; the incipit has its English. A sheet with `"test": true` is skipped when `fetch.mjs` numbers the next one. The renderer sets the divine name as יי, keys JPS footnotes and glosses in one letter series per sheet, shows register by a filled mark and a color from the mural (red square classical, blue circle modern, teal triangle historians, ochre diamond reference), and turns Masoretic paragraph breaks into vertical space.
+Every item prints unless its `status` is `rejected`; there is no approval state and no draft build, because Daniel approves a sheet by printing it. Rules the build enforces, refusing to run and naming the entry: every entry outside the critical register needs a Sefaria `sourceRef`; every critical entry names only `works` listed in `bibliography/<book>.md`; the incipit has its English. The renderer sets the divine name as יי, keys JPS footnotes and glosses in one letter series per sheet, shows register by a filled mark and a color from the mural (red square classical, blue circle modern, teal triangle historians, ochre diamond reference), and turns Masoretic paragraph breaks into vertical space.
 
 ## How a page is laid out
 
