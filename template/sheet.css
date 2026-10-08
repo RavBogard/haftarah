@@ -292,6 +292,8 @@ html, body {
   -webkit-hyphens: auto;
 }
 .en small { font-size: 0.78em; letter-spacing: 0.06em; }
+.en.poetry .ln { display: block; padding-left: 1.1em; text-indent: -1.1em; }
+.en .nb { white-space: nowrap; }
 .en .fn {
   font-size: 0.62em;
   line-height: 0;

@@ -182,13 +182,20 @@
 
   function buildVerseRow(v, isFirst) {
     const row = el("div", "verse-row" + (isFirst ? " first" : "") + (v.prevBreak ? ` break-${v.prevBreak}` : ""));
-    const en = el("div", "en", v.en);
+    const lines = L.splitPoetry(v.en);
+    const en = el("div", "en" + (lines.length > 1 ? " poetry" : ""));
+    const enInner = el("div", "inner");
+    if (lines.length > 1) lines.forEach(t => enInner.append(el("span", "ln", L.nowrapKeys(t))));
+    else enInner.innerHTML = L.nowrapKeys(lines[0] || "");
+    en.append(enInner);
     const gut = el("div", "gut");
     gut.innerHTML = (v.showChapter ? `<span class="ch">${v.chapter}</span>` : "") + v.verse;
     let heHtml = divineName(v.he.replace(/&thinsp;|\u2009/g, " "));
     const glosses = (data.glosses || []).filter(g => g.verse === v.verse && (g.chapter == null || g.chapter === v.chapter) && (g.status ? visible(g) : true));
     for (const g of glosses) heHtml = keyHebrew(heHtml, g.lemma);
-    const he = el("div", "he", heHtml);
+    const he = el("div", "he");
+    const heInner = el("div", "inner", heHtml);
+    he.append(heInner);
     row.append(en, gut, he);
     const notes = [];
     for (const n of (v.notes || [])) {

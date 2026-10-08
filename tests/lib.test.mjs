@@ -26,3 +26,22 @@ test("divineName leaves Judah and Jonathan alone", () => {
 test("stripMarks removes vowels and accents", () => {
   assert.equal(lib.stripMarks("וְנִפְקַ֕דְתָּ"), "ונפקדת");
 });
+
+test("splitPoetry splits on JPS line breaks and trims", () => {
+  const en = 'Sing to G<small>OD</small> a new song,<br>Praise from the ends of the earth—<br>You coastlands<sup class="fn">e</sup> and their inhabitants!';
+  assert.deepEqual(lib.splitPoetry(en), [
+    "Sing to G<small>OD</small> a new song,",
+    "Praise from the ends of the earth—",
+    'You coastlands<sup class="fn">e</sup> and their inhabitants!',
+  ]);
+});
+
+test("splitPoetry returns prose as one line and ignores a trailing break", () => {
+  assert.deepEqual(lib.splitPoetry("Jonathan said to him.<br>"), ["Jonathan said to him."]);
+  assert.deepEqual(lib.splitPoetry("Jonathan said to him."), ["Jonathan said to him."]);
+});
+
+test("nowrapKeys keeps key and dash with their word", () => {
+  const out = lib.nowrapKeys('a light of nations<sup class="fn">c</sup>—');
+  assert.equal(out, 'a light of <span class="nb">nations<sup class="fn">c</sup>—</span>');
+});

@@ -24,5 +24,21 @@
     return String(s).normalize("NFD").replace(/[֑-ֽֿ-ׇ]/g, "").normalize("NFC");
   }
 
-  return { TETRA, divineName, stripMarks };
+  // JPS poetry arrives with <br> between lines. Prose has none.
+  function splitPoetry(en) {
+    return String(en == null ? "" : en)
+      .split(/<br\s*\/?>/i)
+      .map(s => s.trim())
+      .filter(s => s.length);
+  }
+
+  // A footnote key, and any dash or punctuation after it, never separates from its word.
+  function nowrapKeys(html) {
+    return String(html == null ? "" : html).replace(
+      /(\S+)(<sup class="fn">[a-z]+<\/sup>)([—–\-,;:.!?”’)]*)/g,
+      '<span class="nb">$1$2$3</span>'
+    );
+  }
+
+  return { TETRA, divineName, stripMarks, splitPoetry, nowrapKeys };
 });
