@@ -167,9 +167,7 @@ async function main() {
       const buf = await readFile(pdfPath);
       const pages = countPdfPages(buf);
       const sizeKb = Math.round(buf.length / 1024);
-      let verdict = "";
-      if (pages != null) verdict = pages < 4 ? " (under the 4-page target: room for more commentary)" : pages > 6 ? " (over the 6-page target: trim commentary or glosses)" : " (within the 4 to 6 page target)";
-      console.log(`Wrote ${relative(ROOT, pdfPath)}: ${pages ?? "?"} pages, ${sizeKb} KB${verdict}`);
+      console.log(`Wrote ${relative(ROOT, pdfPath)}: ${pages ?? "?"} pages, ${sizeKb} KB`);
     }
     if (WANT_PNG) {
       const outDir = join(weekDir, DRAFT ? "preview-draft" : "preview");

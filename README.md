@@ -8,13 +8,20 @@ DESIGN.md                   the visual system (written from the built sheet)
 template/
   sheet.html                page shell filled by the build
   sheet.css                 the one frame every week shares
-  render.js                 browser-side paginator: cover, text pages, apparatus, sidenotes, end matter
+  render.js                 browser-side paginator: front page, text pages, apparatus, margin notes, end matter
+  lib.js                    pure functions shared by the renderer and the tests (keys, poetry, divine name, incipit fit)
+  voices.json               one-line identifications of named sources, for the front page
   fonts/                    Ezra SIL (Hebrew), Literata (English), Noto Serif Hebrew (fallback); OFL licenses alongside
 scripts/
   fetch.mjs                 Hebcal + Sefaria -> weeks/<slug>/sheet.json and candidates.json
-  build.mjs                 sheet.json -> sheet.html -> sheet.pdf (headless Chrome/Edge), optional page PNGs
+  build.mjs                 sheet.json -> sheet.html -> sheet.pdf (headless Chrome/Edge), optional page PNGs; refuses a final with anything proposed
+  check.mjs                 renders twice and asserts the layout rules (no lone verse, no gap over the rule, keys in series, same output both times)
+  migrate.mjs               schema 1 -> schema 2
+bibliography/
+  <book>.md                 the closed list of works a critical entry may cite
+tests/                      node --test; npm test
 assets/
-  logo.svg | logo.png       CRC logo (not yet supplied; a typographic wordmark renders until it is)
+  logo.png                  the Siona Benjamin mural, CRC's mark, on the front page
 weeks/
   <date>-<parashah>[-<special>]/
     sheet.json              the week's content and approvals (the record)
@@ -31,14 +38,19 @@ Requirements: Node 18+ and Chrome or Edge. Nothing to install.
 
 ```
 node scripts/fetch.mjs --date 2026-10-17        # 1. fetch the reading (omit --date for next Shabbat)
-# 2. fill weeks/<slug>/sheet.json: incipit, why-note, approved commentary, context, glossary
-node scripts/build.mjs weeks/<slug> --draft --png  # 3. review proof
-node scripts/build.mjs weeks/<slug>                # 4. final PDF (approved items only)
+# 2. fill weeks/<slug>/sheet.json: incipit, opening note, commentary, glosses, glossary, next week
+node scripts/build.mjs weeks/<slug> --draft --png  # 3. review proof: proposed items shaded, blockers listed as a warning
+node scripts/check.mjs weeks/<slug> --draft        # 4. layout check on the draft
+node scripts/build.mjs weeks/<slug> --png          # 5. final PDF; refuses to run while anything is proposed and names it
+node scripts/check.mjs weeks/<slug>                # 6. layout check on the final
+npm test                                           # unit tests, when the template or scripts change
 ```
 
-In Claude Cowork, ask for "this week's haftarah sheet" and Claude follows `.claude/skills/haftarah-sheet/SKILL.md`: it fetches, proposes commentary for approval, fills the data file, builds, and reports the page count.
+The build prints the browser it used (`Browser: C:/Program Files/Google/Chrome/Application/chrome.exe`) and the page count. Chrome and Edge are tried in that order; set `HAFTARAH_BROWSER` to pin another. The PDF and the page images come from the same headless run with the same flags, so what you see in `preview/` is what prints.
 
-If no shell is available, open `weeks/<slug>/sheet.html` in Chrome and print to PDF: Letter, margins None, background graphics on. Set `HAFTARAH_BROWSER` to a browser executable if the build cannot find Chrome or Edge.
+In Claude Cowork, ask for "this week's haftarah sheet" and Claude follows `.claude/skills/haftarah-sheet/SKILL.md`: it fetches, proposes commentary for approval, fills the data file, builds, and reports the page count. The next-week line is confirmed with the rabbi before it is approved, in case the coming Shabbat has a choice of readings.
+
+If no shell is available, open `weeks/<slug>/sheet.html` in Chrome and print to PDF: Letter, margins None, background graphics on.
 
 ## Data file
 
@@ -88,7 +100,7 @@ Rules the build enforces: a final build refuses to run while anything is `propos
 
 ## How a page is laid out
 
-Page 1 is the front page (mural, incipit, reading line, opening note, legend, voices, provenance); the text starts on page 2. The renderer measures every verse row, margin note and apparatus entry off-screen, then fills letter pages: verse rows go down as far as the apparatus for those verses leaves room. An entry whose verse is on an earlier page is labelled with that page ("30 · p. 3"); a verse never sits alone on a page; a long verse is split across pages at a line boundary rather than leaving a band of white above the rule; margin notes that do not fit beside their verse carry to the next page's margin. End matter (glossary, voices when the front page was full, colophon, next week) goes above the last apparatus when it all fits, else on one page together. `node scripts/check.mjs weeks/<slug>` renders twice and asserts these rules.
+The sheet is stapled in the upper right corner and printed duplex, so the margins mirror: the inner margin is on the right of a recto and the left of a verso, the verse range in the running head and the page number sit in the corner away from the staple, and the gloss column stays on the right of every page. Page 1 is the front page (mural, incipit, reading line, opening note, legend, voices, provenance, wordmark footer); the text starts on page 2. Translators' notes and word glosses share one letter series (a, b, c ...) per sheet, keyed in the English and the Hebrew and answered in the margin; commentary sits in the ruled apparatus at the foot, marked by register with a filled square (classical commentators), circle (modern commentators), triangle (what historians say) or diamond (reference). The renderer measures every verse row, margin note and apparatus entry off-screen, then fills letter pages: verse rows go down as far as the apparatus for those verses leaves room. An entry whose verse is on an earlier page is labelled with that page ("30 · p. 3"); a verse never sits alone on a page; a long verse is split across pages at a line boundary rather than leaving a band of white above the rule; margin notes that do not fit beside their verse carry to the next page's margin. End matter (glossary, voices when the front page was full, colophon, next week) goes above the last apparatus when it all fits, else on one page together. `node scripts/check.mjs weeks/<slug>` renders twice and asserts these rules.
 
 ## Sources and licenses
 

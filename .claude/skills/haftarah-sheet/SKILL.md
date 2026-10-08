@@ -12,6 +12,7 @@ One sheet a week. The template never changes; only `weeks/<slug>/sheet.json` doe
 - Project root: this repository (github.com/RavBogard/haftarah). Scripts need Node 18+ and Chrome or Edge. Run from the root.
 - Any machine works. In a Cowork cloud session, clone the repo, run fetch and build there (the build finds the preinstalled Chromium and adds `--no-sandbox` when running as root), then commit `weeks/<slug>/` back to GitHub and send the PDF to the rabbi. On a local machine, `git pull` first.
 - If a shell is not available in this session, do steps 1 to 3 with the Sefaria MCP tools instead of `fetch.mjs`, write `sheet.json` by hand following `README.md` (section "Data file"), and ask the rabbi to run the build command or open `sheet.html` in a browser and print to PDF.
+- The template is v2 (front page, one key series, hard gate). Runbook v2 replaces this file in the next plan; until then follow README.md for the data fields.
 - Read `PRODUCT.md` once if you have not this session. The translation is pinned (JPS Gender-Sensitive Edition). Gender-sensitive God-language applies to everything you write.
 
 ## 1. Fetch the reading

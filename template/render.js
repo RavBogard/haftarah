@@ -449,6 +449,8 @@
         pageRows.push(r); rowTops.push(top); textH = tryText; i++;
         versePage[keyOf(r.v)] = pageCount;
         for (const x of entriesFor(r.v)) {
+          // An entry already carried onto this page with its verse (Rule 3) is not added twice.
+          if (pageEntries.includes(x) || carry.includes(x)) continue;
           if (spilling) { carry.push(x); continue; }
           const tryEntries = pageEntries.concat(x);
           const tryApp = appHeight(tryEntries);
