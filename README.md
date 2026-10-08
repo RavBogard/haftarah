@@ -48,7 +48,7 @@ npm test                                           # unit tests, when the templa
 
 The build prints the browser it used (`Browser: C:/Program Files/Google/Chrome/Application/chrome.exe`) and the page count. Chrome and Edge are tried in that order; set `HAFTARAH_BROWSER` to pin another. The PDF and the page images come from the same headless run with the same flags, so what you see in `preview/` is what prints.
 
-In Claude Cowork, ask for "this week's haftarah sheet" and Claude follows `.claude/skills/haftarah-sheet/SKILL.md`: it fetches, proposes commentary for approval, fills the data file, builds, and reports the page count. The next-week line is confirmed with the rabbi before it is approved, in case the coming Shabbat has a choice of readings.
+In Claude Cowork, ask for "this week's haftarah sheet" and Claude follows `RUNBOOK.md`: calendar, fetch, a short map of the passage, the texts Daniel wants to dig into, approvals, build, and delivery to Drive. `weeks/` is git-ignored scratch; the records live in Drive. The next-week line is confirmed with the rabbi before it is approved, in case the coming Shabbat has a choice of readings.
 
 If no shell is available, open `weeks/<slug>/sheet.html` in Chrome and print to PDF: Letter, margins None, background graphics on.
 

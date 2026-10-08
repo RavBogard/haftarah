@@ -15,6 +15,20 @@ Plan 2 (to write after plan 1 ships): repo history without `weeks/`, Drive folde
 
 - GATE: `sheet-v2` fast-forwarded into `main` locally after the auditor pass and a green suite; NOT pushed — proceeded because the standing authority covers the merge, while the first push to the public remote waits for plan 2, which recreates the history without `weeks/` (the sheets' source text) before anything leaves the machine.
 
+- GATE: Drive upload spike — the connector uploads binary byte-exact (335-byte test PDF, trashed), but a sheet PDF is 0.8 to 2.7 MB, too large to pass as base64 in one tool call, and the connector can share only with named addresses, not "anyone with the link". Proceeded with text records by connector and PDFs by hand until an uploader exists.
+- BLOCKED (Daniel): the connected Drive is dsbogard@gmail.com and holds no "Torah from Scratch" folder; folders not created until Daniel names the account.
+- BLOCKED (Daniel): history rewrite and force-push. The local permission layer refused `git filter-branch` twice as destructive. Backup bundle at C:/Users/dsbog/haftarah-history-backup-2026-10-08.bundle. Local `main` still carries weeks/ in its history and must NOT be pushed as is.
+- GATE: the week-notes stress fixture carried the full JPS Gender-Sensitive English; replaced by filler words of the same lengths (check still passes, every key printed) — proceeded because the spec's rule is no JPS text in the repo. Half-verse phrases in tests and the plan stay as quotation.
+
+## Plan 2 progress
+
+- [x] Drive spike (above)
+- [x] weeks/ ignored and untracked (commit ed3b6db)
+- [ ] History recreated without weeks/ and force-pushed (blocked, Daniel)
+- [ ] Drive folders and uploads (blocked on account, Daniel)
+- [x] Runbook v2 (RUNBOOK.md); repo skill points to it; claude.ai skill text in docs/claude-ai-skill/SKILL.md for Daniel to upload
+- [ ] Cloud verification (after the push)
+
 ## Progress
 
 - [x] Task 1 Shared library and test scaffold
