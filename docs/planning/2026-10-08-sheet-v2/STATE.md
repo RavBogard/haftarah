@@ -29,10 +29,10 @@ Plan 2 (to write after plan 1 ships): repo history without `weeks/`, Drive folde
 
 - [x] Drive spike (above)
 - [x] weeks/ ignored and untracked (commit ed3b6db)
-- [ ] History recreated without weeks/ and force-pushed (blocked, Daniel)
+- [x] History recreated without weeks/ and force-pushed (Daniel ran it 2026-10-08; origin/main 315d013; no weeks/ path and no Gender-Sensitive verse text in any commit)
 - [x] Drive folders (public `Haftarah` by Daniel, private `Haftarah working` by Claude); text upload proven. Final PDFs wait on Daniel's rulings and go up by hand
 - [x] Runbook v2 (RUNBOOK.md); repo skill points to it; claude.ai skill text in docs/claude-ai-skill/SKILL.md for Daniel to upload
-- [ ] Cloud verification (after the push)
+- [ ] Cloud verification: a fresh clone of the public repo passes tests, builds the fixture, fetches 2026-10-17 Noach (Isaiah 54:1-55:5, 22 verses) and drafts it, but that run was on Daniel's machine (the remote agent option fell back to local). A real Cowork cloud run is still owed: Daniel's first sheet in Cowork is that test.
 
 ## Progress
 

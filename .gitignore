@@ -7,3 +7,4 @@ tests/fixtures/*/sheet-draft.html
 tests/fixtures/*/preview*/
 .superpowers/
 weeks/
+tests/fixtures/*/*.pdf
