@@ -17,7 +17,8 @@ Plan 2 (to write after plan 1 ships): repo history without `weeks/`, Drive folde
 
 - GATE: Drive upload spike — the connector uploads binary byte-exact (335-byte test PDF, trashed), but a sheet PDF is 0.8 to 2.7 MB, too large to pass as base64 in one tool call, and the connector can share only with named addresses, not "anyone with the link". Proceeded with text records by connector and PDFs by hand until an uploader exists.
 - Public folder given by Daniel 2026-10-08: `Haftarah` (id 1TbSmoeBaCSLciL_-_HSCuKWkJMSZvGwd), owner daniel@centralreform.org, anyone-with-link reader.
-- BLOCKED (Daniel): the connector is signed in as dsbogard@gmail.com, which can only view that folder; uploads and the private working folder need the connector on daniel@centralreform.org, or editor access for the Gmail account.
+- Daniel shared `Haftarah` with dsbogard@gmail.com as editor (the connector account). Created private `Haftarah working` (id 1BamL1Odk8xP5znSIRr3ENc2nt7QRo7ti) in the Gmail root, shared to daniel@centralreform.org as editor, with week subfolders machar-chodesh (17U7p0Z_MEguGxFA0vk3OpM3iQPiZ0_iG) and isaiah (1lDtrx9GsXJXcutD1FkJpixaUlc2QvXMI).
+- GATE: Machar Chodesh sheet.json uploaded through the connector and verified byte-exact (32885 bytes, LF) — proceeded because it proves the runbook's text path; the Isaiah record and both candidates.json stay on disk (and in the backup bundle) until those sheets are delivered.
 - BLOCKED (Daniel): history rewrite and force-push. The local permission layer refused `git filter-branch` twice as destructive. Backup bundle at C:/Users/dsbog/haftarah-history-backup-2026-10-08.bundle. Local `main` still carries weeks/ in its history and must NOT be pushed as is.
 - GATE: the week-notes stress fixture carried the full JPS Gender-Sensitive English; replaced by filler words of the same lengths (check still passes, every key printed) — proceeded because the spec's rule is no JPS text in the repo. Half-verse phrases in tests and the plan stay as quotation.
 
@@ -26,7 +27,7 @@ Plan 2 (to write after plan 1 ships): repo history without `weeks/`, Drive folde
 - [x] Drive spike (above)
 - [x] weeks/ ignored and untracked (commit ed3b6db)
 - [ ] History recreated without weeks/ and force-pushed (blocked, Daniel)
-- [ ] Drive folders and uploads (blocked on account, Daniel)
+- [x] Drive folders (public `Haftarah` by Daniel, private `Haftarah working` by Claude); text upload proven. Final PDFs wait on Daniel's rulings and go up by hand
 - [x] Runbook v2 (RUNBOOK.md); repo skill points to it; claude.ai skill text in docs/claude-ai-skill/SKILL.md for Daniel to upload
 - [ ] Cloud verification (after the push)
 
