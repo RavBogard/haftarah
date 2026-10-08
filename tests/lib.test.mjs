@@ -94,3 +94,12 @@ test("assignKeys puts a gloss key at the end of the verse when no English anchor
   const r = lib.assignKeys([{ chapter: 1, verse: 1, en: "In the beginning.", he: "בְּרֵאשִׁ֖ית", notes: [] }], [{ verse: 1, lemma: "בְּרֵאשִׁ֖ית", text: "x", status: "approved" }], () => true);
   assert.equal(r.verses[0].en, 'In the beginning.<sup class="fn">a</sup>');
 });
+
+test("sigla are one filled family and registers have plain names", () => {
+  for (const k of lib.REGISTER_ORDER) {
+    assert.match(lib.SIGLA[k], /fill="currentColor"/);
+    assert.doesNotMatch(lib.SIGLA[k], /fill="none"/);
+  }
+  assert.equal(lib.REGISTER_NAMES.critical, "what historians say");
+  assert.equal(lib.REGISTER_NAMES.traditional, "classical commentators");
+});

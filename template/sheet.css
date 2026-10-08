@@ -32,16 +32,17 @@
   /* paper and ink */
   --paper: #ffffff;
   --ink: #000000;
-  --ink-2: #4a4a4a;          /* secondary: dates, provenance, gloss text */
-  --rubric: #8a0a14;         /* the one color, sampled from the ring of the Siona Benjamin mural */
+  --ink-2: #595959;          /* tails, provenance, gloss tails: 65% black, survives an office laser */
+  --frame: #4d4d4d;          /* running heads and footers */
+  --rubric: #8a0a14;         /* the one color, sampled from the ring of the Siona Benjamin mural; means a source or a key */
   --rule: #000000;
   --rule-w: 0.5pt;
 
   /* the four sizes */
-  --size-incipit: 66pt;      /* the cover incipit */
+  --size-incipit: 60pt;      /* nominal; the renderer fits it to a 3.5in box between 48 and 64pt */
   --size-text: 10.5pt;       /* scripture in both languages; headings; the cover's reading line */
-  --size-apparatus: 8.8pt;   /* commentary, context box, glossary */
-  --size-gloss: 8.5pt;       /* margin notes, tails, running head, folio, provenance: the floor, nothing smaller */
+  --size-apparatus: 9.2pt;   /* commentary, glossary */
+  --size-gloss: 9pt;         /* margin notes, tails, running head, folio, provenance: the floor */
 
   --lh-en: 1.42;
   --lh-he: 1.62;             /* te'amim need air */
@@ -55,12 +56,13 @@
   --page-h: 11in;
   --m-top: 0.62in;
   --m-bottom: 0.62in;
-  --m-outer: 0.55in;
-  --m-inner: 0.62in;
+  --m-outer: 0.75in;         /* away from the staple: thumbs go here */
+  --m-inner: 0.6in;          /* the staple side */
   --head-h: 0.26in;          /* running head block incl. rule */
   --foot-h: 0.22in;
 
-  --col-margin: 1.22in;      /* gloss margin */
+  --col-margin: 1.35in;      /* gloss margin, including the clearance below */
+  --margin-clear: 0.13in;    /* with the 0.12in column gap: 0.25in between the Hebrew's right edge and the notes */
   --col-gutter: 0.34in;      /* verse numbers */
   --col-gap: 0.12in;
 }
@@ -117,7 +119,7 @@ html, body {
   border-bottom: var(--rule-w) solid var(--rule);
   font-size: var(--size-gloss);
   line-height: 1;
-  color: var(--rubric);
+  color: var(--frame);
   letter-spacing: 0.01em;
   padding-bottom: 5pt;
 }
@@ -142,7 +144,7 @@ html, body {
   align-items: flex-end;
   font-size: var(--size-gloss);
   line-height: 1;
-  color: var(--ink-2);
+  color: var(--frame);
   font-variant-numeric: lining-nums;
 }
 .page.verso .frame-foot { left: var(--m-outer); right: var(--m-inner); }
@@ -291,21 +293,22 @@ html, body {
   -webkit-hyphens: auto;
 }
 .en small { font-size: 0.78em; letter-spacing: 0.06em; }
+.en, .he { text-wrap: pretty; }   /* no single-word last lines */
 .en.poetry .ln { display: block; padding-left: 1.1em; text-indent: -1.1em; }
 .en .nb { white-space: nowrap; }
 .en .fn {
-  font-size: 0.62em;
+  font-size: 0.72em;
   line-height: 0;
   vertical-align: 0.55em;
   font-style: italic;
-  color: var(--rubric);
+  color: var(--ink);
   margin-left: 0.5pt;
 }
 
 .gut {
   grid-column: gut;
   text-align: center;
-  font-size: var(--size-text);
+  font-size: 10pt;
   line-height: var(--lh-en);
   font-weight: 600;
   font-variant-numeric: lining-nums tabular-nums;
@@ -317,6 +320,7 @@ html, body {
   font-weight: 400;
   color: var(--rubric);
   margin-bottom: 1pt;
+  white-space: nowrap;
 }
 
 .he {
@@ -345,7 +349,7 @@ html, body {
 .margin-col {
   position: absolute;
   top: 0; right: 0;
-  width: var(--col-margin);
+  width: calc(var(--col-margin) - var(--margin-clear));
   height: 100%;
 }
 .margin-col.measuring { position: static; height: auto; }
@@ -393,9 +397,9 @@ html, body {
 .entry .sig {
   color: var(--rubric);
   display: inline-block;
-  width: 7pt;
-  height: 7pt;
-  vertical-align: -0.3pt;
+  width: 6.5pt;
+  height: 6.5pt;
+  vertical-align: -0.2pt;
   margin-right: 3pt;
 }
 .entry .sig svg { display: block; width: 100%; height: 100%; }

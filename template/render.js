@@ -25,15 +25,8 @@
   const paras = v => Array.isArray(v) ? v : (v ? String(v).split(/\n{2,}/) : []);
   const visible = item => DRAFT ? item.status !== "rejected" : item.status === "approved";
 
-  const SIGLA = {
-    traditional: '<svg viewBox="0 0 10 10" aria-hidden="true"><rect x="1" y="1" width="8" height="8" fill="currentColor"/></svg>',
-    modern: '<svg viewBox="0 0 10 10" aria-hidden="true"><circle cx="5" cy="5" r="3.5" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>',
-    critical: '<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M5 1.3 L9.2 8.7 H0.8 Z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>',
-    reference: '<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M5 1 L9 5 L5 9 L1 5 Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>',
-  };
-  const REGISTER_NAMES = { traditional: "traditional", modern: "modern", critical: "historical-critical", reference: "reference" };
-
   const L = window.HaftarahLib;
+  const SIGLA = L.SIGLA, REGISTER_NAMES = L.REGISTER_NAMES;
   const stripMarks = L.stripMarks;
   // Every Tetragrammaton becomes יי with its accents (see lib.js); the count is reported.
   let yyCount = 0;
@@ -186,7 +179,11 @@
     else enInner.innerHTML = L.nowrapKeys(lines[0] || "");
     en.append(enInner);
     const gut = el("div", "gut");
-    gut.innerHTML = (v.showChapter ? `<span class="ch">${v.chapter}</span>` : "") + v.verse;
+    // The locator ("20:18") shows at a chapter change and on the first row of every page.
+    row.setLocator = (show) => {
+      gut.innerHTML = (show || v.showChapter ? `<span class="ch">${v.chapter}:${v.verse}</span>` : "") + v.verse;
+    };
+    row.setLocator(false);
     let heHtml = divineName(v.he.replace(/&thinsp;|\u2009/g, " "));
     for (const k of (v.keys || [])) if (k.kind === "gloss") heHtml = keyHebrew(heHtml, k.he, k.key);
     const he = el("div", "he");
@@ -227,10 +224,11 @@
 
   function measureRows(rows) {
     const grid = el("div", "text-grid");
-    rows.forEach(r => grid.append(r));
+    rows.forEach(r => { if (r.setLocator) r.setLocator(true); grid.append(r); });
     stage.append(grid);
     const heights = rows.map(r => r.getBoundingClientRect().height + parseFloat(getComputedStyle(r).marginTop));
     grid.remove();
+    rows.forEach(r => { if (r.setLocator) r.setLocator(false); });
     return heights;
   }
   function measureNotes(nodes) {
@@ -358,7 +356,7 @@
   function renderTextPage(p, pageRows, pageEntries, bodyH) {
     p.body.innerHTML = "";
     const grid = el("div", "text-grid");
-    pageRows.forEach((r, k) => { r.node.classList.toggle("first", k === 0); grid.append(r.node); });
+    pageRows.forEach((r, k) => { r.node.classList.toggle("first", k === 0); if (r.node.setLocator) r.node.setLocator(k === 0); grid.append(r.node); });
     p.body.append(grid);
 
     // place sidenotes from the rows' real positions, not the predicted ones
