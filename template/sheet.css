@@ -1,0 +1,483 @@
+/* Haftarah sheet — the critical edition.
+   One frame for every week. Everything week-specific comes from sheet.json. */
+
+@font-face {
+  font-family: "Ezra SIL";
+  src: url("fonts/EzraSIL.ttf") format("truetype");
+  font-weight: 400;
+  font-display: block;
+}
+@font-face {
+  font-family: "Literata";
+  src: url("fonts/Literata[opsz,wght].ttf") format("truetype");
+  font-weight: 200 900;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: "Literata";
+  src: url("fonts/Literata-Italic[opsz,wght].ttf") format("truetype");
+  font-weight: 200 900;
+  font-style: italic;
+  font-display: block;
+}
+@font-face {
+  font-family: "Noto Serif Hebrew";
+  src: url("fonts/NotoSerifHebrew[wdth,wght].ttf") format("truetype");
+  font-weight: 100 900;
+  font-display: block;
+}
+
+:root {
+  /* paper and ink */
+  --paper: #ffffff;
+  --ink: #000000;
+  --ink-2: #4a4a4a;          /* secondary: dates, provenance, gloss text */
+  --rubric: #6e1e2b;         /* the one color: frame, sigla, source names */
+  --rule: #000000;
+  --rule-w: 0.5pt;
+
+  /* the four sizes */
+  --size-incipit: 66pt;      /* the cover incipit */
+  --size-text: 10.5pt;       /* scripture in both languages; headings; the cover's reading line */
+  --size-apparatus: 8.8pt;   /* commentary, context box, glossary */
+  --size-gloss: 8.5pt;       /* margin notes, running head, folio, provenance (the floor for an older group) */
+
+  --lh-en: 1.42;
+  --lh-he: 1.62;             /* te'amim need air */
+  --lh-app: 1.36;
+
+  --serif: "Literata", "Georgia", serif;
+  --hebrew: "Ezra SIL", "Noto Serif Hebrew", "SBL Hebrew", serif;
+
+  /* page geometry (letter) */
+  --page-w: 8.5in;
+  --page-h: 11in;
+  --m-top: 0.62in;
+  --m-bottom: 0.62in;
+  --m-outer: 0.55in;
+  --m-inner: 0.62in;
+  --head-h: 0.26in;          /* running head block incl. rule */
+  --foot-h: 0.22in;
+
+  --col-margin: 1.22in;      /* gloss margin */
+  --col-gutter: 0.34in;      /* verse numbers */
+  --col-gap: 0.12in;
+}
+
+@page { size: letter; margin: 0; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: var(--size-text);
+  font-optical-sizing: auto;
+  font-kerning: normal;
+  font-variant-numeric: oldstyle-nums proportional-nums;
+  text-rendering: optimizeLegibility;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+::selection { background: #e9d7da; color: var(--ink); }
+
+/* ---- Pages --------------------------------------------------------------- */
+
+.page {
+  position: relative;
+  width: var(--page-w);
+  height: var(--page-h);
+  box-sizing: border-box;
+  padding: var(--m-top) var(--m-outer) var(--m-bottom) var(--m-inner);
+  overflow: hidden;
+  break-after: page;
+  page-break-after: always;
+  background: var(--paper);
+}
+.page:last-child { break-after: auto; page-break-after: auto; }
+.page.verso { padding-left: var(--m-outer); padding-right: var(--m-inner); }
+
+@media screen {
+  body { background: #c9ccd1; padding: 24px 0; }
+  html[data-single] body { background: var(--paper); padding: 0; }
+  html[data-single] .page { margin: 0; box-shadow: none; }
+  html[data-single] .page.hidden, html[data-single] .review-note { display: none; }
+  .page { margin: 0 auto 24px; box-shadow: 0 2px 2px rgba(0,0,0,.08), 0 14px 32px rgba(20,10,12,.18); }
+}
+
+.frame-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  height: var(--head-h);
+  box-sizing: border-box;
+  border-bottom: var(--rule-w) solid var(--rule);
+  font-size: var(--size-gloss);
+  line-height: 1;
+  color: var(--rubric);
+  letter-spacing: 0.01em;
+  padding-bottom: 5pt;
+}
+.frame-head .head-left { font-style: italic; }
+.frame-head .head-right { font-variant-numeric: lining-nums; }
+.frame-head .draft-flag {
+  color: var(--paper);
+  background: var(--rubric);
+  padding: 1pt 5pt 2pt;
+  margin-left: 10pt;
+  font-style: normal;
+}
+
+.frame-foot {
+  position: absolute;
+  left: var(--m-inner);
+  right: var(--m-outer);
+  bottom: calc(var(--m-bottom) - var(--foot-h));
+  height: var(--foot-h);
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  font-size: var(--size-gloss);
+  line-height: 1;
+  color: var(--ink-2);
+  font-variant-numeric: lining-nums;
+}
+.page.verso .frame-foot { left: var(--m-outer); right: var(--m-inner); }
+.frame-foot .folio { color: var(--ink); }
+
+.page-body {
+  position: relative;
+  height: calc(var(--page-h) - var(--m-top) - var(--m-bottom) - var(--head-h) - var(--foot-h));
+  margin-top: 14pt;
+}
+
+/* ---- Cover --------------------------------------------------------------- */
+
+.cover .page-body { display: flex; flex-direction: column; }
+
+.issuer { height: 0.5in; }
+.issuer img { height: 0.5in; width: auto; display: block; }
+.issuer .wordmark {
+  font-size: var(--size-text);
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--ink);
+}
+.issuer .wordmark small {
+  display: block;
+  font-size: var(--size-gloss);
+  font-weight: 400;
+  color: var(--ink-2);
+  margin-top: 2pt;
+}
+
+.incipit-block {
+  margin-top: 1.0in;
+  text-align: right;
+  direction: rtl;
+}
+.incipit {
+  font-family: var(--hebrew);
+  font-size: var(--size-incipit);
+  line-height: 1.25;
+  color: var(--ink);
+  margin: 0;
+  letter-spacing: 0;
+  text-wrap: balance;
+}
+.incipit-en {
+  direction: ltr;
+  text-align: right;
+  font-size: var(--size-text);
+  font-style: italic;
+  line-height: 1.3;
+  margin: 12pt 0 0;
+  color: var(--ink);
+  font-weight: 400;
+}
+.reading-line {
+  direction: ltr;
+  text-align: right;
+  margin-top: 20pt;
+  color: var(--rubric);
+  font-size: var(--size-text);
+  line-height: 1.5;
+  font-variant-numeric: lining-nums;
+}
+.reading-line .ref { font-weight: 600; }
+.reading-line .dates { color: var(--ink-2); }
+.reading-line .he-date { font-family: var(--hebrew); font-size: calc(var(--size-text) * 1.18); }
+
+.why {
+  margin-top: 22pt;
+  font-size: var(--size-text);
+  line-height: var(--lh-en);
+  max-width: 5.1in;
+}
+.why p { margin: 0 0 6pt; }
+.why p:last-child { margin-bottom: 0; }
+
+.context {
+  margin-top: 26pt;
+  border-top: var(--rule-w) solid var(--rule);
+  padding-top: 8pt;
+  columns: 2;
+  column-gap: 0.28in;
+  font-size: var(--size-apparatus);
+  line-height: var(--lh-app);
+}
+.context h2 {
+  column-span: all;
+  font-size: var(--size-text);
+  font-weight: 600;
+  margin: 0 0 6pt;
+  color: var(--ink);
+}
+.context p { margin: 0 0 5pt; text-align: left; hyphens: auto; }
+.context p:last-child { margin-bottom: 0; }
+.context.proposed { background: #f3eced; outline: 4pt solid #f3eced; }
+
+.provenance {
+  margin-top: auto;
+  padding-top: 12pt;
+  font-size: var(--size-gloss);
+  line-height: 1.4;
+  color: var(--ink-2);
+}
+
+/* ---- Text pages ------------------------------------------------------------ */
+
+.text-grid {
+  display: grid;
+  grid-template-columns:
+    [en] 1fr
+    [gut] var(--col-gutter)
+    [he] 1fr
+    [mg] var(--col-margin);
+  column-gap: var(--col-gap);
+  align-content: start;
+}
+
+.verse-row {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  margin-top: 5.5pt;
+}
+.verse-row.verse-row.first { margin-top: 0; }
+.verse-row.break-setumah { margin-top: 15pt; }
+.verse-row.break-petuchah { margin-top: 24pt; }
+
+.en {
+  grid-column: en;
+  font-size: var(--size-text);
+  line-height: var(--lh-en);
+  text-align: left;
+  hyphens: auto;
+  -webkit-hyphens: auto;
+}
+.en small { font-size: 0.78em; letter-spacing: 0.06em; }
+.en .fn {
+  font-size: 0.62em;
+  line-height: 0;
+  vertical-align: 0.55em;
+  font-style: italic;
+  color: var(--rubric);
+  margin-left: 0.5pt;
+}
+
+.gut {
+  grid-column: gut;
+  text-align: center;
+  font-size: var(--size-text);
+  line-height: var(--lh-en);
+  font-weight: 600;
+  font-variant-numeric: lining-nums tabular-nums;
+  color: var(--ink);
+}
+.gut .ch {
+  display: block;
+  font-size: var(--size-gloss);
+  font-weight: 400;
+  color: var(--rubric);
+  margin-bottom: 1pt;
+}
+
+.he {
+  grid-column: he;
+  direction: rtl;
+  text-align: right;
+  font-family: var(--hebrew);
+  font-size: calc(var(--size-text) * 1.18);
+  line-height: var(--lh-he);
+  unicode-bidi: isolate;
+}
+.he b, .he small { font-weight: normal; font-size: inherit; }
+.he .pisqa { display: inline-block; width: 1.6em; }
+.he .mam-kq-k { font-size: 0.72em; color: var(--ink-2); }
+.he .circ {
+  color: var(--rubric);
+  font-family: var(--serif);
+  font-size: 0.55em;
+  vertical-align: 0.9em;
+  line-height: 0;
+  margin: 0 0.1em;
+  font-variant-numeric: lining-nums;
+}
+
+.margin-col {
+  position: absolute;
+  top: 0; right: 0;
+  width: var(--col-margin);
+  height: 100%;
+}
+.margin-col.measuring { position: static; height: auto; }
+.note {
+  position: absolute;
+  left: 0; right: 0;
+  margin: 0;
+  font-size: var(--size-gloss);
+  line-height: 1.32;
+  color: var(--ink-2);
+  text-indent: -7pt;
+  padding-left: 7pt;
+}
+.margin-col.measuring .note { position: static; }
+.note .k { color: var(--rubric); font-style: italic; margin-right: 2pt; }
+.note .k.circ { font-style: normal; }
+.note .lemma { color: var(--ink); }
+.note .he-lemma { font-family: var(--hebrew); font-size: 1.12em; color: var(--ink); direction: rtl; unicode-bidi: isolate; }
+.note.proposed { background: #f3eced; outline: 2pt solid #f3eced; }
+
+/* ---- Apparatus ------------------------------------------------------------- */
+
+.apparatus {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  border-top: var(--rule-w) solid var(--rule);
+  padding-top: 7pt;
+  font-size: var(--size-apparatus);
+  line-height: var(--lh-app);
+  columns: 2;
+  column-gap: 0.26in;
+  column-fill: balance;
+}
+.apparatus.measuring { position: static; }
+.entry {
+  margin: 0 0 5pt;
+  orphans: 2;
+  widows: 2;
+  text-align: left;
+  hyphens: auto;
+}
+.entry:last-child { margin-bottom: 0; }
+.entry .sig {
+  color: var(--rubric);
+  display: inline-block;
+  width: 7pt;
+  height: 7pt;
+  vertical-align: -0.3pt;
+  margin-right: 3pt;
+}
+.entry .sig svg { display: block; width: 100%; height: 100%; }
+.entry .v {
+  font-weight: 700;
+  font-variant-numeric: lining-nums;
+  margin-right: 3pt;
+}
+.entry .lem { font-style: italic; }
+.entry .lem.he-lemma { font-style: normal; font-family: var(--hebrew); font-size: 1.1em; direction: rtl; unicode-bidi: isolate; }
+.entry .brk { margin: 0 3pt 0 1pt; color: var(--ink-2); }
+.entry .src { color: var(--rubric); font-weight: 500; }
+.entry .src::after { content: " "; }
+.entry .body b { font-weight: 600; }
+.entry .body i { font-style: italic; }
+.entry .body span[dir="rtl"], .entry .body .heb { font-family: var(--hebrew); font-size: 1.1em; }
+.entry .tail {
+  color: var(--ink-2);
+  font-size: 0.9em;
+  font-style: italic;
+}
+.entry.proposed {
+  background: #f3eced;
+  outline: 3pt solid #f3eced;
+}
+.entry.proposed .tail::before { content: "proposed — "; color: var(--rubric); font-style: normal; font-weight: 600; }
+.entry.continued .v::after { content: " (cont.)"; font-weight: 400; font-style: italic; }
+
+/* ---- End matter ----------------------------------------------------------- */
+
+.endmatter h2 {
+  font-size: var(--size-text);
+  font-weight: 600;
+  margin: 0 0 6pt;
+  padding-top: 7pt;
+  border-top: var(--rule-w) solid var(--rule);
+}
+.endmatter .block { margin-bottom: 16pt; break-inside: avoid; }
+.endmatter .block:first-child h2 { border-top: 0; padding-top: 0; }
+.endmatter.inline .block:first-child h2 { border-top: var(--rule-w) solid var(--rule); padding-top: 7pt; }
+
+.glossary {
+  columns: 2;
+  column-gap: 0.28in;
+  font-size: var(--size-apparatus);
+  line-height: var(--lh-app);
+}
+.glossary p { margin: 0 0 4pt; break-inside: avoid; text-indent: -10pt; padding-left: 10pt; }
+.glossary .term { font-weight: 600; }
+.glossary .term-he { font-family: var(--hebrew); font-size: 1.1em; margin-left: 4pt; direction: rtl; unicode-bidi: isolate; }
+
+.questions {
+  font-size: var(--size-text);
+  line-height: var(--lh-en);
+  max-width: 5.6in;
+}
+.questions ol { margin: 0; padding-left: 18pt; }
+.questions li { margin-bottom: 5pt; padding-left: 3pt; }
+.questions li::marker { color: var(--rubric); font-weight: 600; font-variant-numeric: lining-nums; }
+
+.prose {
+  font-size: var(--size-text);
+  line-height: var(--lh-en);
+  max-width: 5.6in;
+}
+.prose p { margin: 0 0 6pt; }
+
+.colophon {
+  font-size: var(--size-gloss);
+  line-height: 1.45;
+  color: var(--ink-2);
+}
+.colophon p { max-width: 5.6in; }
+.colophon p { margin: 0 0 3pt; }
+
+/* ---- Measuring stage ------------------------------------------------------- */
+
+#stage {
+  position: absolute;
+  left: -200in;
+  top: 0;
+  width: var(--page-w);
+  box-sizing: border-box;
+  padding: 0 var(--m-outer) 0 var(--m-inner);
+  visibility: hidden;
+}
+
+/* ---- Screen-only review chrome ------------------------------------------- */
+
+@media screen {
+  .review-note {
+    max-width: 8.5in;
+    margin: 0 auto 16px;
+    font-size: 12px;
+    color: #4a4a4a;
+    font-family: var(--serif);
+  }
+}
+@media print {
+  .review-note { display: none; }
+}

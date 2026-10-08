@@ -1,0 +1,4 @@
+weeks/*/preview/
+weeks/*/preview-draft/
+node_modules/
+.DS_Store
