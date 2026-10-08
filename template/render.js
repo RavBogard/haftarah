@@ -33,22 +33,11 @@
   };
   const REGISTER_NAMES = { traditional: "traditional", modern: "modern", critical: "historical-critical", reference: "reference" };
 
-  const stripMarks = s => s.normalize("NFD").replace(/[֑-ֽֿ-ׇ]/g, "").normalize("NFC");
-
-  // ---- the divine name --------------------------------------------------------
-  // Every Tetragrammaton (any pointing, including the Elohim pointing) becomes יי.
-  // The verse's cantillation marks (U+0591–U+05AE) are kept and placed on the second yud
-  // so a chanter is not thrown; vowels and meteg are dropped. The count is logged.
+  const L = window.HaftarahLib;
+  const stripMarks = L.stripMarks;
+  // Every Tetragrammaton becomes יי with its accents (see lib.js); the count is reported.
   let yyCount = 0;
-  const TETRA = /י[֑-ׇ]*ה[֑-ׇ]*ו[֑-ׇ]*ה[֑-ׇ]*/g;
-  function divineName(html) {
-    if (!html) return html;
-    return String(html).replace(TETRA, m => {
-      yyCount++;
-      const accents = (m.match(/[֑-֮]/g) || []).join("");
-      return "יי" + accents;
-    });
-  }
+  const divineName = html => { const r = L.divineName(html); yyCount += r.count; return r.html; };
 
   // ---- series and opening note (schema 2, with schema-1 fallbacks) -------------
   const series = Object.assign(

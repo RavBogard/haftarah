@@ -95,6 +95,7 @@ async function main() {
     .replace("{{TITLE}}", title.replace(/[<>&]/g, ""))
     .replace("{{CSS}}", toPosix(relative(weekDir, join(ROOT, "template", "sheet.css"))))
     .replace("{{RENDER}}", toPosix(relative(weekDir, join(ROOT, "template", "render.js"))))
+    .replace("{{LIB}}", toPosix(relative(weekDir, join(ROOT, "template", "lib.js"))))
     .replace("{{DATA}}", JSON.stringify(data).replace(/<\/script/gi, "<\\/script"))
     .replace("{{OPTIONS}}", JSON.stringify({ draft: DRAFT, logo }))
     .replace("{{NOTE}}", note);
