@@ -9,7 +9,7 @@ The sheet maker lives in the public GitHub repo **RavBogard/haftarah**: template
 
 1. Clone `https://github.com/RavBogard/haftarah` into the working directory. Reading needs no special access, and nothing in the weekly run pushes to GitHub.
 2. Read `RUNBOOK.md` in the repo and follow it.
-3. Keep every record in Drive: the final PDF in `Haftarah sheets`, and the week's `sheet.json`, `candidates.json` and draft in `Haftarah working/<slug>/`.
+3. Keep every record in Drive: the final PDF in the public `Haftarah` folder, and the week's `sheet.json`, `candidates.json` and draft in `Haftarah working/<slug>/`.
 
 If the cloud build fails, say so in one line and fall back to Daniel's computer, where a `haftarah` folder holds the same repo (`git pull` first).
 

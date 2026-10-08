@@ -70,7 +70,7 @@ Send Daniel the draft. Look at the page images before calling anything done. Whe
 
 ## 7. Deliver
 
-- **Public folder** `Haftarah sheets`: the final PDF, named `5787-03 Bereshit — I Samuel 20.18-42.pdf` (year-number, parashah, reading).
+- **Public folder** `Haftarah` (owner daniel@centralreform.org, anyone with the link can view; id `1TbSmoeBaCSLciL_-_HSCuKWkJMSZvGwd`): the final PDF, named `5787-03 Bereshit — I Samuel 20.18-42.pdf` (year-number, parashah, reading).
 - **Working folder** `Haftarah working/<slug>/`: `sheet.json`, `candidates.json`, `sheet-draft.pdf` and a copy of the final.
 
 The Google Drive connector uploads text files directly (`textContent`, conversion disabled). A PDF of several megabytes is too large to pass through the connector, so until a PDF uploader exists, hand Daniel the PDFs and say so in the delivery line.
