@@ -2,9 +2,8 @@
 /**
  * build.mjs — render a week's sheet.json to HTML and a letter-size PDF.
  *
- *   node scripts/build.mjs weeks/<slug>            # final: approved items only -> sheet.pdf
- *   node scripts/build.mjs weeks/<slug> --draft    # review proof: proposed items flagged -> sheet-draft.pdf
- *   node scripts/build.mjs weeks/<slug> --png      # also write page images for review
+ *   node scripts/build.mjs weeks/<slug>            # sheet.pdf: everything not rejected
+ *   node scripts/build.mjs weeks/<slug> --png      # also write page images (from the PDF when pdftoppm is present)
  *   node scripts/build.mjs weeks/<slug> --no-pdf   # HTML only (open sheet.html in a browser and print)
  *
  * Needs Node 18+ and Chrome or Edge installed (or set HAFTARAH_BROWSER to a browser executable).
@@ -26,12 +25,11 @@ const ROOT = resolve(here, "..");
 function flag(name) { return process.argv.includes(`--${name}`); }
 // Set by main(); kept at module level so the helpers below can see them. Importing this module
 // (check.mjs and the tests do) must not parse arguments or exit.
-let weekDir, DRAFT, WANT_PDF, WANT_PNG;
+let weekDir, WANT_PDF, WANT_PNG;
 function parseArgs() {
   const dirArg = process.argv.slice(2).find(a => !a.startsWith("--"));
-  if (!dirArg) { console.error("usage: node scripts/build.mjs weeks/<slug> [--draft] [--png] [--no-pdf]"); process.exit(1); }
+  if (!dirArg) { console.error("usage: node scripts/build.mjs weeks/<slug> [--png] [--no-pdf]"); process.exit(1); }
   weekDir = resolve(dirArg);
-  DRAFT = flag("draft");
   WANT_PDF = !flag("no-pdf");
   WANT_PNG = flag("png");
 }
@@ -78,22 +76,13 @@ export function fillTemplate(tpl, vars) {
   return Object.entries(vars).reduce((s, [k, v]) => s.replace(`{{${k}}}`, () => v), tpl);
 }
 
+// The citation checks. Status is optional and only "rejected" keeps an item off the page; Daniel
+// approves a sheet by printing it, so nothing here asks whether an item was approved.
 export function gate(data, biblio) {
   const problems = [];
-  const open = st => st && st !== "approved" && st !== "rejected";
   const where = e => `${e.chapter ? e.chapter + ":" : ""}${e.verse} ${e.source}`;
-  // Every printable item needs a status; an item with none was never put to the rabbi.
-  const check = (item, label, what) => {
-    if (item.status == null) problems.push(`${label} has no status: ${what}`);
-    else if (open(item.status)) problems.push(`${label} proposed: ${what}`);
-  };
-  for (const e of data.commentary || []) check(e, "commentary entry", where(e));
-  for (const g of data.glosses || []) check(g, "gloss", `${g.verse} ${g.lemma}`);
-  for (const t of data.glossary || []) check(t, "glossary term", t.term);
-  if (data.openingNote) check(data.openingNote, "opening note", "calendar and setting");
-  if (data.nextWeek && open(data.nextWeek.status)) problems.push("next-week line proposed: approve it or set nextWeek to null");
   if (!data.haftarah?.incipit?.en) problems.push("incipit.en is empty");
-  for (const e of (data.commentary || []).filter(e => e.status === "approved")) {
+  for (const e of (data.commentary || []).filter(e => e.status !== "rejected")) {
     if (e.register !== "critical") { if (!e.sourceRef) problems.push(`no Sefaria ref: ${where(e)}`); continue; }
     if (!(e.works || []).length) problems.push(`critical entry names no work: ${where(e)}`);
     else if (!biblio) problems.push(`bibliography/${data.haftarah.book}.md is missing (needed by ${where(e)})`);
@@ -123,38 +112,28 @@ async function main() {
   const sheetPath = join(weekDir, "sheet.json");
   const data = JSON.parse(await readFile(sheetPath, "utf8"));
 
-  const counts = { approved: 0, proposed: 0, rejected: 0 };
-  for (const e of data.commentary || []) counts[e.status === "approved" ? "approved" : e.status === "rejected" ? "rejected" : "proposed"]++;
-  // The hard gate: nothing proposed prints, every quoted entry has a Sefaria ref, every critical
-  // entry names only works on the closed bibliography. A draft prints the same list as a warning.
   let biblio = null;
   try { biblio = HaftarahLib.parseBibliography(await readFile(join(ROOT, "bibliography", `${data.haftarah.book}.md`), "utf8")); } catch {}
   const problems = gate(data, biblio);
-  if (problems.length) {
-    const list = problems.map(x => "  - " + x).join("\n");
-    if (DRAFT) console.warn("Draft; these would block the final:\n" + list);
-    else { console.error("Blocking the final sheet:\n" + list); process.exit(1); }
-  }
+  if (problems.length) { console.error("Not built; fix these first:\n" + problems.map(x => "  - " + x).join("\n")); process.exit(1); }
+  const shown = (data.commentary || []).filter(e => e.status !== "rejected").length;
 
   const logo = await findLogo();
   const voices = JSON.parse(await readFile(join(ROOT, "template", "voices.json"), "utf8"));
   const tpl = await readFile(join(ROOT, "template", "sheet.html"), "utf8");
-  const title = `${data.shabbat?.parashah?.en || ""} haftarah${DRAFT ? " (draft)" : ""}`;
-  const note = DRAFT
-    ? `Draft for review. Shaded entries are proposed and awaiting approval; they will not appear in the final sheet. ${counts.approved} approved, ${counts.proposed} proposed, ${counts.rejected} rejected.`
-    : `Final. ${counts.approved} approved entries.`;
+  const title = `${data.shabbat?.parashah?.en || ""} haftarah`;
+  const note = `${shown} commentary entr${shown === 1 ? "y" : "ies"}.`;
   const html = fillTemplate(tpl, {
     TITLE: title.replace(/[<>&]/g, ""),
     CSS: toPosix(relative(weekDir, join(ROOT, "template", "sheet.css"))),
     RENDER: toPosix(relative(weekDir, join(ROOT, "template", "render.js"))),
     LIB: toPosix(relative(weekDir, join(ROOT, "template", "lib.js"))),
     DATA: JSON.stringify(data).replace(/<\/script/gi, "<\\/script"),
-    OPTIONS: JSON.stringify({ draft: DRAFT, logo, voices }),
+    OPTIONS: JSON.stringify({ logo, voices }),
     NOTE: note,
   });
 
-  const htmlName = DRAFT ? "sheet-draft.html" : "sheet.html";
-  const htmlPath = join(weekDir, htmlName);
+  const htmlPath = join(weekDir, "sheet.html");
   await writeFile(htmlPath, html, "utf8");
   console.log(`Wrote ${relative(ROOT, htmlPath)}${logo ? ` (logo: ${logo})` : " (no logo in assets/; typographic wordmark)"}`);
 
@@ -172,32 +151,40 @@ async function main() {
   const common = chromeFlags(profile);
 
   try {
-    if (WANT_PDF) {
-      const pdfPath = join(weekDir, DRAFT ? "sheet-draft.pdf" : "sheet.pdf");
-      await run(browser, [...common, "--no-pdf-header-footer", `--print-to-pdf=${pdfPath}`, url]);
-      const buf = await readFile(pdfPath);
-      const pages = countPdfPages(buf);
-      const sizeKb = Math.round(buf.length / 1024);
-      console.log(`Wrote ${relative(ROOT, pdfPath)}: ${pages ?? "?"} pages, ${sizeKb} KB`);
-    }
+    // The page images are rendered from the PDF when pdftoppm is present: a headless screenshot
+    // on Linux Chromium loses the bottom of the page, and the PDF is what prints.
+    const pdfPath = WANT_PDF ? join(weekDir, "sheet.pdf") : join(profile, "probe.pdf");
+    await run(browser, [...common, "--no-pdf-header-footer", `--print-to-pdf=${pdfPath}`, url]);
+    const buf = await readFile(pdfPath);
+    const pages = countPdfPages(buf) || 1;
+    if (WANT_PDF) console.log(`Wrote ${relative(ROOT, pdfPath)}: ${pages} pages, ${Math.round(buf.length / 1024)} KB`);
     if (WANT_PNG) {
-      const outDir = join(weekDir, DRAFT ? "preview-draft" : "preview");
+      const outDir = join(weekDir, "preview");
       await rm(outDir, { recursive: true, force: true }).catch(() => {});
       await mkdir(outDir, { recursive: true });
-      // Probe the page count, then capture each page alone at 2x (1632 x 2112 px).
-      const probe = join(outDir, "probe.pdf");
-      await run(browser, [...common, "--no-pdf-header-footer", `--print-to-pdf=${probe}`, url]);
-      const pages = countPdfPages(await readFile(probe)) || 1;
-      await rm(probe, { force: true });
-      for (let p = 1; p <= pages; p++) {
-        const png = join(outDir, `page-${String(p).padStart(2, "0")}.png`);
-        await run(browser, [...common, "--window-size=816,1056", "--force-device-scale-factor=2", `--screenshot=${png}`, `${url}?page=${p}`]);
+      const pdftoppm = findPdftoppm();
+      if (pdftoppm) {
+        // 192 dpi = 2x CSS pixels, 1632 x 2112 px, the same size as the screenshots.
+        await run(pdftoppm, ["-png", "-r", "192", pdfPath, join(outDir, "page")]);
+        console.log(`Wrote ${pages} page image${pages === 1 ? "" : "s"} to ${relative(ROOT, outDir)}/ (pdftoppm)`);
+      } else {
+        for (let p = 1; p <= pages; p++) {
+          const png = join(outDir, `page-${String(p).padStart(2, "0")}.png`);
+          await run(browser, [...common, "--window-size=816,1056", "--force-device-scale-factor=2", `--screenshot=${png}`, `${url}?page=${p}`]);
+        }
+        console.log(`Wrote ${pages} page image${pages === 1 ? "" : "s"} to ${relative(ROOT, outDir)}/ (screenshots; check the PDF if a page looks cut off)`);
       }
-      console.log(`Wrote ${pages} page image${pages === 1 ? "" : "s"} to ${relative(ROOT, outDir)}/`);
     }
   } finally {
     await rm(profile, { recursive: true, force: true }).catch(() => {});
   }
+}
+
+function findPdftoppm() {
+  const dirs = (process.env.PATH || "").split(process.platform === "win32" ? ";" : ":");
+  const names = process.platform === "win32" ? ["pdftoppm.exe"] : ["pdftoppm"];
+  for (const d of dirs) for (const n of names) { const p = join(d, n); if (d && existsSync(p)) return p; }
+  return null;
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {

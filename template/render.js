@@ -1,13 +1,12 @@
 /* render.js — lays one week's sheet.json out as fixed letter pages.
    Runs in the browser (headless Chrome for the PDF, or a normal browser for review).
-   Expects window.SHEET (the data) and window.SHEET_OPTIONS ({ draft, logo }). */
+   Expects window.SHEET (the data) and window.SHEET_OPTIONS ({ logo, voices }). */
 
 (function () {
   "use strict";
 
   const data = window.SHEET;
   const opts = window.SHEET_OPTIONS || {};
-  const DRAFT = !!opts.draft;
 
   const root = document.getElementById("sheet");
   const stage = document.getElementById("stage");
@@ -23,8 +22,8 @@
   const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const dash = s => String(s ?? "").replace(/(\d)-(\d)/g, "$1–$2");
   const paras = v => Array.isArray(v) ? v : (v ? String(v).split(/\n{2,}/) : []);
-  // No status means never approved: shown (shaded) in a draft, never in a final.
-  const visible = item => DRAFT ? item.status !== "rejected" : item.status === "approved";
+  // Status is optional; only a rejected item stays off the page (it is kept in the data as a record).
+  const visible = item => item.status !== "rejected";
 
   const L = window.HaftarahLib;
   const SIGLA = L.SIGLA, REGISTER_NAMES = L.REGISTER_NAMES;
@@ -102,11 +101,10 @@
   // The staple corner is top right on a recto, top left on a verso. The verse range goes in the
   // free corner; the Shabbat name sits under the staple, where losing it costs nothing.
   function setHead(p, shabbat, range) {
-    const flag = DRAFT ? '<span class="draft-flag">draft for review</span>' : "";
     const name = `<span class="shabbat">${esc(shabbat)}</span>`;
     const rng = `<span class="range">${esc(range || "")}</span>`;
-    p.left.innerHTML = (p.recto ? rng : name) + (p.recto ? "" : flag);
-    p.right.innerHTML = (p.recto ? name : rng) + (p.recto ? flag : "");
+    p.left.innerHTML = p.recto ? rng : name;
+    p.right.innerHTML = p.recto ? name : rng;
   }
 
   // Folio away from the staple (recto bottom left, verso bottom right); the other side carries
@@ -124,7 +122,7 @@
     return ["traditional", "modern", "critical", "reference"].filter(k => used.has(k));
   }
   function microLegend() {
-    return usedRegisters().map(k => `<span>${SIGLA[k]}${REGISTER_NAMES[k]}</span>`).join("");
+    return usedRegisters().map(k => `<span class="reg-${k}">${SIGLA[k]}${REGISTER_NAMES[k]}</span>`).join("");
   }
 
   // ---- cover ----------------------------------------------------------------
@@ -162,7 +160,7 @@
     p.page.dataset.incipit = `${fit.size}pt/${fit.lines}`;
 
     // Opening note: calendar paragraph(s), hairline, setting paragraph(s).
-    const note = el("div", "opening-note" + (openingNote.status && openingNote.status !== "approved" ? " proposed" : ""));
+    const note = el("div", "opening-note");
     const cal = paras(openingNote.calendar), set = paras(openingNote.setting);
     cal.forEach(t => note.append(el("p", "cal", t)));
     set.forEach((t, i) => note.append(el("p", i === 0 && cal.length ? "setting rule" : "setting", t)));
@@ -171,7 +169,7 @@
     // Legend: always the same four, in the same order; unused ones greyed; then the keys.
     const used = new Set(usedRegisters());
     const legend = el("div", "legend");
-    L.REGISTER_ORDER.forEach(k => legend.append(el("span", used.has(k) ? "" : "unused", `${SIGLA[k]}${REGISTER_NAMES[k]}`)));
+    L.REGISTER_ORDER.forEach(k => legend.append(el("span", `reg-${k}` + (used.has(k) ? "" : " unused"), `${SIGLA[k]}${REGISTER_NAMES[k]}`)));
     const hasKeys = (document.documentElement.dataset.keys || "").length > 0;
     legend.append(el("span", hasKeys ? "" : "unused", `<span class="k">a–z</span>translators’ notes (JPS) and word notes, in the margin`));
     if (data.verses.some(v => /\[[^\]]*\]\s*\([^)]*\)|\([^)]*\)\s*\[[^\]]*\]/.test(v.he))) {
@@ -237,7 +235,7 @@
     row.append(en, gut, he);
     const notes = [];
     for (const k of (v.keys || [])) {
-      const cls = "note " + k.kind + (k.kind === "gloss" && k.status !== "approved" ? " proposed" : "");
+      const cls = "note " + k.kind;
       const vn = k.kind === "gloss" ? `<span class="vn">${k.verse}</span>` : "";
       const lemma = k.lemma ? `<span class="lemma">${esc(k.lemma)}</span><span class="brk">]</span> ` : "";
       const heLemma = k.kind === "gloss" && k.he ? `<span class="he-lemma">${divineName(esc(k.he))}</span> ` : "";
@@ -251,7 +249,7 @@
 
   function buildEntry(e, { offpage = null } = {}) {
     const reg = SIGLA[e.register] ? e.register : "traditional";
-    const entry = el("p", "entry" + (e.status !== "approved" ? " proposed" : ""));
+    const entry = el("p", `entry reg-${reg}`);
     const vr = e.verseEnd ? `${e.verse}–${e.verseEnd}` : String(e.verse);
     const where = offpage ? `<span class="where"> · p. ${offpage}</span>` : "";
     const lemma = e.lemma ? `<span class="lem${e.lemmaLang === "he" ? " he-lemma" : ""}">${esc(e.lemma)}</span><span class="brk">]</span>` : "";
@@ -646,7 +644,7 @@
       const b = el("div", "block");
       b.append(el("h2", null, "Names and places"));
       const g = el("div", "glossary");
-      for (const t of terms) g.append(el("p", t.status !== "approved" ? "proposed" : null, `<span class="term">${esc(t.term)}</span>${t.he ? `<span class="term-he">${divineName(esc(t.he))}</span>` : ""} ${divineName(t.text)}`));
+      for (const t of terms) g.append(el("p", null, `<span class="term">${esc(t.term)}</span>${t.he ? `<span class="term-he">${divineName(esc(t.he))}</span>` : ""} ${divineName(t.text)}`));
       b.append(g); blocks.push(b);
     }
     // Discussion questions are never printed (decision of 2026-10-07).
@@ -659,7 +657,7 @@
     if (data.nextWeek && visible(data.nextWeek)) {
       const nw = data.nextWeek;
       const line = `Next week: ${esc(nw.shabbat)}${nw.special ? `, ${esc(String(nw.special).replace(/^Shabbat\s+/i, ""))}` : ""} · ${esc(dash(nw.ref))}${nw.civilDisplay ? ` · ${esc(nw.civilDisplay)}` : ""}`;
-      blocks.push(el("p", "nextweek" + (nw.status !== "approved" ? " proposed" : ""), line));
+      blocks.push(el("p", "nextweek", line));
     }
     document.documentElement.dataset.emptySections = "0";
     return blocks;
@@ -705,7 +703,7 @@
     buildFrontPage();
     const last = buildTextPages();
     buildEndMatter(last);
-    document.title = `${shabbatName()} — ${dash(data.haftarah.ref)}${DRAFT ? " (draft)" : ""}`;
+    document.title = `${shabbatName()} — ${dash(data.haftarah.ref)}`;
     document.documentElement.dataset.pages = String(pageCount);
     document.documentElement.dataset.yy = String(yyCount);
     window.SHEET_PAGES = pageCount;

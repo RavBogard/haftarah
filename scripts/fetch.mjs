@@ -16,7 +16,8 @@
  */
 
 import { mkdir, writeFile, access, readFile, readdir } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const HEBREW_VERSION = "Miqra according to the Masorah";
 const ENGLISH_VERSION = "THE JPS TANAKH: Gender-Sensitive Edition";
@@ -141,9 +142,10 @@ function cleanHebrew(html) {
   return { he: out, break: brk };
 }
 
-const FOOTNOTE_RE = /<sup class="footnote-marker">(.*?)<\/sup><i class="footnote">(.*?)<\/i>/g;
+// The note body may itself hold <i>…</i> (e.g. "Taking <i>pukh</i> as a byform…"), so match one level of nesting.
+const FOOTNOTE_RE = /<sup class="footnote-marker">(.*?)<\/sup><i class="footnote">((?:<i>.*?<\/i>|(?!<\/i>)[\s\S])*?)<\/i>/g;
 
-function cleanEnglish(html) {
+export function cleanEnglish(html) {
   const notes = [];
   let out = html.replace(FOOTNOTE_RE, (_, marker, body) => {
     let lemma = null;
@@ -178,6 +180,40 @@ function firstWords(he, n = 3) {
   return plain.split(/\s+/).filter(w => !/^[׀]$/.test(w)).slice(0, n).join(" ");
 }
 
+// Words a haftarah's name never ends on: the incipit stops before them.
+const FUNCTION_WORDS = new Set(["לא", "כי", "אשר", "את", "על", "אל", "גם", "כן", "אם", "הנה", "עד", "מן", "כל", "בי", "לי", "לו", "יהוה"]);
+// Disjunctive accents strong enough to end a phrase: etnachta, segolta, zaqef qatan and gadol, tipcha, revia, sof pasuq.
+const PAUSE = /[֑֖֒֔֕֗׃]/;
+
+// The words a haftarah is known by: two to four from the start of the first verse, ending at the
+// first strong pause and never on a function word like לֹא.
+export function incipitHe(he) {
+  const words = firstWords(he, 6).split(" ").filter(Boolean);
+  const out = [];
+  for (const w of words) {
+    if (out.length >= 2 && FUNCTION_WORDS.has(stripMarks(w).replace(/[־׃]/g, "").replace(/^ו/, ""))) break;
+    out.push(w);
+    if (out.length >= 2 && PAUSE.test(w)) break;
+    if (out.length === 4) break;
+  }
+  return out.join(" ").replace(/[׃]$/, "");
+}
+
+// The JPS words for the incipit: the first line of poetry, or the prose up to the first clause
+// break after three words. Footnote keys and markup are dropped; trailing punctuation too.
+export function incipitEn(en) {
+  const strip = s => s.replace(/<sup[^>]*>.*?<\/sup>/g, "").replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
+  const lines = String(en || "").split(/<br\s*\/?>/i).map(strip).filter(Boolean);
+  if (!lines.length) return "";
+  let s = lines[0];
+  if (lines.length === 1) {
+    const re = /[,;:.!?—]/g;
+    let m;
+    while ((m = re.exec(s))) if (s.slice(0, m.index).trim().split(/\s+/).length >= 3) { s = s.slice(0, m.index); break; }
+  }
+  return s.replace(/^[—–\-\s"“]+/, "").replace(/[\s,;:.!?—–"”]+$/, "");
+}
+
 function stripMarks(he) {
   // Remove nikud and te'amim for display titles.
   return he.normalize("NFD").replace(/[֑-ֽֿ-ׇ]/g, "").normalize("NFC");
@@ -185,7 +221,8 @@ function stripMarks(he) {
 
 // ---- main -------------------------------------------------------------------
 
-// One more than the highest number already issued this Hebrew year in outRoot.
+// One more than the highest number already issued this Hebrew year in outRoot. A sheet with
+// "test": true (the Bereshit samples) does not count.
 async function nextNumber(outRoot, year) {
   let max = 0;
   let dirs = [];
@@ -193,13 +230,13 @@ async function nextNumber(outRoot, year) {
   for (const d of dirs) {
     try {
       const s = JSON.parse(await readFile(join(outRoot, d, "sheet.json"), "utf8"));
-      if (s.series?.year === year && typeof s.series.number === "number") max = Math.max(max, s.series.number);
+      if (!s.test && s.series?.year === year && typeof s.series.number === "number") max = Math.max(max, s.series.number);
     } catch {}
   }
   return max + 1;
 }
 
-// The following Shabbat's reading, proposed; Daniel confirms it before it prints.
+// The following Shabbat's reading; Daniel confirms it when the calendar offers a choice.
 async function nextWeekFor(date) {
   const d = new Date(date + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() + 7);
   const next = d.toISOString().slice(0, 10);
@@ -212,7 +249,6 @@ async function nextWeekFor(date) {
       special: it.reason?.haftara || null,
       ref: it.haftara,
       civilDisplay: new Date(next + "T12:00:00Z").toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric", timeZone: "UTC" }),
-      status: "proposed",
     };
   } catch { return null; }
 }
@@ -222,6 +258,21 @@ async function main() {
   const outRoot = arg("out", "weeks");
   const force = arg("force", false) === true;
   const refOverride = arg("ref", null);
+
+  // "This week" is ambiguous once the coming Shabbat already has a folder: name both Shabbatot and
+  // stop, so the question to Daniel can offer the one after as well.
+  if (arg("date", null) === null) {
+    const taken = (await readdir(outRoot).catch(() => [])).filter(d => d.startsWith(date));
+    if (taken.length) {
+      const after = new Date(date + "T12:00:00Z"); after.setUTCDate(after.getUTCDate() + 7);
+      const next = after.toISOString().slice(0, 10);
+      const name = async d => { try { const it = (await getJSON(`https://www.hebcal.com/leyning?cfg=json&start=${d}&end=${d}`)).items?.[0]; return it ? `${it.name?.en}, haftarah ${it.haftara}` : "?"; } catch { return "?"; } };
+      console.log(`${date} already has ${taken.map(t => `${outRoot}/${t}`).join(", ")}.`);
+      console.log(`  ${date}: ${await name(date)}\n  ${next}: ${await name(next)}`);
+      console.log(`Run again with --date ${date} or --date ${next}.`);
+      process.exit(2);
+    }
+  }
 
   console.log(`Shabbat ${date}`);
 
@@ -298,8 +349,8 @@ async function main() {
       ref: haftRef,
       heRef: tx.heRef || null,
       book,
-      incipit: { he: firstWords(first.he, 3), en: "" },
-      title: { he: stripMarks(firstWords(first.he, 3)), en: special ? special.replace(/^Shabbat\s+/i, "") : `Haftarat ${item.name?.en}` },
+      incipit: { he: incipitHe(first.he), en: incipitEn(first.en) },
+      title: { he: stripMarks(incipitHe(first.he)), en: special ? special.replace(/^Shabbat\s+/i, "") : `Haftarat ${item.name?.en}` },
       defaultHaftarah: special && defaultHaftarah !== haftRef ? defaultHaftarah : null,
       versions: { he: HEBREW_VERSION, en: ENGLISH_VERSION },
       fetched: new Date().toISOString(),
@@ -307,7 +358,7 @@ async function main() {
     verses,
     glosses: [],
     commentary: [],
-    openingNote: { calendar: "", setting: [], status: "proposed" },
+    openingNote: { calendar: "", setting: [] },
     glossary: [],
     nextWeek: await nextWeekFor(date),
     credits: {
@@ -328,7 +379,9 @@ async function main() {
   }
   await writeFile(join(dir, "candidates.json"), JSON.stringify({ ref: haftRef, fetched: sheet.haftarah.fetched, sources: candidates }, null, 2), "utf8");
   console.log(`Wrote ${join(dir, "candidates.json")} (${candidates.length} sources, ${links.length} links)`);
-  console.log(`\nNext: review candidates, add approved entries to sheet.json, then\n  node scripts/build.mjs ${dir} --draft`);
+  console.log(`\nNext: review candidates, add entries to sheet.json, then\n  node scripts/build.mjs ${dir} --png`);
 }
 
-main().catch(err => { console.error(err.message || err); process.exit(1); });
+if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
+  main().catch(err => { console.error(err.message || err); process.exit(1); });
+}

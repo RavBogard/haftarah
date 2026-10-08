@@ -24,11 +24,11 @@ A Mikraot Gedolot for a Reform study table: Sefaria's sources, pulled live each 
 
 ## Operating Context
 
-- The weekly ritual: in Cowork, Claude reads the Jewish calendar (Sefaria `get_current_calendar`, Diaspora schedule), fetches the haftarah text in both languages, lists candidate commentary from Sefaria's links, and proposes a shortlist. The rabbi approves or rejects each source and each Claude-written summary. Only approved items render. A draft PDF with proposed items visibly flagged supports the review; a clean PDF is the final.
+- The weekly ritual: in Cowork, Claude reads the Jewish calendar (Sefaria `get_current_calendar`, Diaspora schedule), fetches the haftarah text in both languages, lists candidate commentary from Sefaria's links, and proposes a shortlist. The rabbi reads the texts and summaries in the conversation, then reviews the built PDF and approves the sheet by printing it. One build makes the sheet he reviews and prints; anything he turns down is marked rejected and stays off the page.
 - Special haftarot are normal, not edge cases: Machar Chodesh, Shabbat Rosh Chodesh, the Three of Affliction, the Seven of Consolation, Shabbat Shuvah, the four parshiyot, festivals. The sheet always names the actual reading and, when it differs from the parashah's default haftarah, says why.
 - The sheet is printed double-sided in color by the rabbi, stapled upper right. It is also sent as a PDF.
 - Hebrew source text: Sefaria's "Miqra according to the Masorah" (full te'amim). English: "THE JPS TANAKH: Gender-Sensitive Edition". Both are verse-aligned.
-- Historical-critical content does not exist on Sefaria in quotable form; Claude drafts it as attributed summaries (naming the scholarship it rests on) and the rabbi approves before it prints.
+- Historical-critical content does not exist on Sefaria in quotable form; Claude drafts it as attributed summaries (naming only works on the closed bibliography) and the rabbi reads it before he prints.
 
 ## Capabilities and Constraints
 
@@ -54,12 +54,12 @@ A Mikraot Gedolot for a Reform study table: Sefaria's sources, pulled live each 
 ## Product Principles
 
 - The text is the host; commentary is the guest. Scripture gets the best position and the best type on every page.
-- Three registers, one voice. Traditional, modern, and critical commentary sit as equals on the page and are told apart by a quiet, consistent system, never by one shouting over the others.
-- Nothing unattributed, nothing unapproved. Provenance is part of the design.
+- Three registers, one voice. Traditional, modern, and critical commentary sit as equals on the page and are told apart by a consistent system, a shape and a color from the mural for each, never by one shouting over the others.
+- Nothing unattributed, nothing unapproved: Daniel approves a sheet by printing it. Provenance is part of the design.
 - Fast to make, slow to read. The weekly run should feel like filling a form; the sheet should feel like a book.
 
 ## Accessibility & Inclusion
 
 - Printed body text no smaller than 10 pt for English, with Hebrew sized to match its x-height; commentary no smaller than 9pt. The group includes older adults.
-- Shape carries register, letters carry keys, position carries hierarchy; color is never the only signal. But the sheet is designed for color: the mural, the rubric and the greys are chosen for an inkjet, not a photocopier.
+- Shape and color together carry register, letters carry keys, position carries hierarchy; color is never the only signal, so a photocopy still reads. But the sheet is designed for color: the mural, the rubric, the four register colors and the greys are chosen for an inkjet, not a photocopier.
 - Gender-sensitive translation throughout; Claude-written text follows the same convention for God-language and human referents.

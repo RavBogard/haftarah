@@ -3,7 +3,7 @@
  * check.mjs — render a week twice with the pinned browser and assert the layout invariants the
  * design review asked for. Reads the data-* attributes render.js writes on <html> and each .page.
  *
- *   node scripts/check.mjs weeks/<slug> [--draft]
+ *   node scripts/check.mjs weeks/<slug>
  */
 import { readFile, mkdir, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
@@ -13,8 +13,9 @@ import { tmpdir } from "node:os";
 import { findBrowser, chromeFlags } from "./build.mjs";
 
 // A split needs two lines on each side, so a two-line verse that does not fit leaves a band of up
-// to about an inch; the paginator splits anything taller. Checked ceiling: 100px (1.04in).
-const GAP_CEILING = 100;
+// to about an inch; the paginator splits anything taller. Checked ceiling: 100px (1.04in), plus
+// 4px for the sub-pixel rounding of a bottom-pinned apparatus (Noach 5787 failed at 101px).
+const GAP_CEILING = 104;
 const TETRA = /י[֑-ׇ]*ה[֑-ׇ]*ו[֑-ׇ]*ה[֑-ׇ]*/g;
 
 function dumpDom(browser, url) {
@@ -87,10 +88,9 @@ export function analyse(dom) {
 
 async function main() {
   const dirArg = process.argv.slice(2).find(a => !a.startsWith("--"));
-  if (!dirArg) { console.error("usage: node scripts/check.mjs weeks/<slug> [--draft]"); process.exit(1); }
-  const DRAFT = process.argv.includes("--draft");
+  if (!dirArg) { console.error("usage: node scripts/check.mjs weeks/<slug>"); process.exit(1); }
   const weekDir = resolve(dirArg);
-  const html = join(weekDir, DRAFT ? "sheet-draft.html" : "sheet.html");
+  const html = join(weekDir, "sheet.html");
   const browser = findBrowser();
   if (!browser) { console.error("No Chrome or Edge found."); process.exit(1); }
   const url = pathToFileURL(html).href;

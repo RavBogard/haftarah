@@ -8,3 +8,4 @@ tests/fixtures/*/preview*/
 .superpowers/
 weeks/
 tests/fixtures/*/*.pdf
+package-lock.json

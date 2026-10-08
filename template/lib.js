@@ -122,12 +122,12 @@
     return [...seen.values()];
   }
 
-  // The incipit fits a 3.5in box: 64pt at most, 48pt at least on one line; otherwise two lines at 54pt.
+  // The incipit fits a 3.5in box beside the 1.6in mural: 54pt at most, 40pt at least on one line; otherwise two lines at 44pt.
   function fitIncipitSize(widthAt60pt, boxWidth) {
     const size = Math.floor(60 * boxWidth / widthAt60pt);
-    if (size >= 64) return { size: 64, lines: 1 };
-    if (size >= 48) return { size, lines: 1 };
-    return { size: 54, lines: 2 };
+    if (size >= 54) return { size: 54, lines: 1 };
+    if (size >= 40) return { size, lines: 1 };
+    return { size: 44, lines: 2 };
   }
 
   // "- key: McCarter 1980 | citation | use" → Map(key → { citation, use })

@@ -7,4 +7,6 @@ description: Make this week's haftarah study sheet for Central Reform Congregati
 
 Follow `RUNBOOK.md` at the root of this repository, step by step. It covers the calendar, fetch, the map, digging in, the opening note, the build, and delivery to Drive. `README.md` documents every field of `sheet.json`.
 
-Do not edit `template/` during a weekly run. A template change is a separate task.
+Do not edit `template/` during a weekly run. A template change is a separate task, done on Daniel's machine: a cloud session cannot push to GitHub.
+
+Daniel approves a sheet by printing it. One build makes the PDF he reviews and prints; there is no draft build.

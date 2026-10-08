@@ -120,11 +120,11 @@ test("voicesFor introduces each named source once, in order of first use, skippi
   assert.equal(r[2].line, null);
 });
 
-test("fitIncipitSize shrinks to the box and falls back to two lines at 54pt", () => {
-  assert.deepEqual(lib.fitIncipitSize(330, 336), { size: 61, lines: 1 });
+test("fitIncipitSize shrinks to the box and falls back to two lines at 44pt", () => {
   assert.deepEqual(lib.fitIncipitSize(400, 336), { size: 50, lines: 1 });
-  assert.deepEqual(lib.fitIncipitSize(600, 336), { size: 54, lines: 2 });
-  assert.deepEqual(lib.fitIncipitSize(250, 336), { size: 64, lines: 1 });
+  assert.deepEqual(lib.fitIncipitSize(480, 336), { size: 42, lines: 1 });
+  assert.deepEqual(lib.fitIncipitSize(600, 336), { size: 44, lines: 2 });
+  assert.deepEqual(lib.fitIncipitSize(250, 336), { size: 54, lines: 1 });
 });
 
 test("nowrapKeys leaves a key that follows a tag alone", () => {
