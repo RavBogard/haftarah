@@ -54,7 +54,7 @@
 
   // JPS writes 19.2; the sheet writes 19:2. Years (four digits) are not refs.
   function normalizeRefs(text) {
-    return String(text == null ? "" : text).replace(/\b(\d{1,3})\.(\d{1,3})\b/g, "$1:$2");
+    return String(text == null ? "" : text).replace(/\b(\d{1,3})\.(\d{1,3})(?!\d)/g, "$1:$2");
   }
 
   // One letter series per sheet, in reading order: a verse's JPS notes first (in the order
