@@ -33,7 +33,7 @@
   --paper: #ffffff;
   --ink: #000000;
   --ink-2: #4a4a4a;          /* secondary: dates, provenance, gloss text */
-  --rubric: #6e1e2b;         /* the one color: frame, sigla, source names */
+  --rubric: #8a0a14;         /* the one color, sampled from the ring of the Siona Benjamin mural */
   --rule: #000000;
   --rule-w: 0.5pt;
 
@@ -41,7 +41,7 @@
   --size-incipit: 66pt;      /* the cover incipit */
   --size-text: 10.5pt;       /* scripture in both languages; headings; the cover's reading line */
   --size-apparatus: 8.8pt;   /* commentary, context box, glossary */
-  --size-gloss: 8.5pt;       /* margin notes, running head, folio, provenance (the floor for an older group) */
+  --size-gloss: 8.5pt;       /* margin notes, tails, running head, folio, provenance: the floor, nothing smaller */
 
   --lh-en: 1.42;
   --lh-he: 1.62;             /* te'amim need air */
@@ -158,31 +158,25 @@ html, body {
 
 .cover .page-body { display: flex; flex-direction: column; }
 
-.issuer { height: 0.5in; }
-.issuer img { height: 0.5in; width: auto; display: block; }
-.issuer .wordmark {
-  font-size: var(--size-text);
-  font-weight: 600;
-  line-height: 1.2;
-  color: var(--ink);
+/* Hero: the mural and the incipit stand on the same baseline, the reading line. */
+.hero {
+  display: grid;
+  grid-template-columns: 2.4in 1fr;
+  column-gap: 0.4in;
+  align-items: end;
+  margin-top: 0.55in;
 }
-.issuer .wordmark small {
-  display: block;
-  font-size: var(--size-gloss);
-  font-weight: 400;
-  color: var(--ink-2);
-  margin-top: 2pt;
-}
-
+.hero.no-mark { grid-template-columns: 1fr; }
+.hero .mark { width: 2.4in; height: 2.4in; display: block; object-fit: contain; }
 .incipit-block {
-  margin-top: 1.0in;
   text-align: right;
   direction: rtl;
+  align-self: end;
 }
 .incipit {
   font-family: var(--hebrew);
-  font-size: var(--size-incipit);
-  line-height: 1.25;
+  font-size: 60pt;
+  line-height: 1.2;
   color: var(--ink);
   margin: 0;
   letter-spacing: 0;
@@ -194,14 +188,14 @@ html, body {
   font-size: var(--size-text);
   font-style: italic;
   line-height: 1.3;
-  margin: 12pt 0 0;
+  margin: 10pt 0 0;
   color: var(--ink);
   font-weight: 400;
 }
 .reading-line {
   direction: ltr;
   text-align: right;
-  margin-top: 20pt;
+  margin-top: 16pt;
   color: var(--rubric);
   font-size: var(--size-text);
   line-height: 1.5;
@@ -211,17 +205,32 @@ html, body {
 .reading-line .dates { color: var(--ink-2); }
 .reading-line .he-date { font-family: var(--hebrew); font-size: calc(var(--size-text) * 1.18); }
 
-.why {
+/* Opening note: calendar reason, hairline, setting. */
+.opening-note {
   margin-top: 22pt;
   font-size: var(--size-text);
   line-height: var(--lh-en);
-  max-width: 5.1in;
+  max-width: 5.4in;
 }
-.why p { margin: 0 0 6pt; }
-.why p:last-child { margin-bottom: 0; }
+.opening-note p { margin: 0 0 6pt; }
+.opening-note p:last-child { margin-bottom: 0; }
+.opening-note p.rule { border-top: var(--rule-w) solid var(--rule); padding-top: 7pt; margin-top: 12pt; }
+.opening-note.proposed { background: #f3eced; outline: 4pt solid #f3eced; }
 
+.legend {
+  margin-top: 14pt;
+  font-size: var(--size-gloss);
+  color: var(--ink-2);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4pt 14pt;
+  align-items: center;
+}
+.legend svg { width: 7pt; height: 7pt; vertical-align: -0.5pt; margin-right: 4pt; color: var(--rubric); }
+.legend .circ { color: var(--rubric); margin-right: 4pt; font-variant-numeric: lining-nums; }
+
+/* The setting moves to its own page only when the note is too long for the cover. */
 .context {
-  margin-top: 26pt;
   border-top: var(--rule-w) solid var(--rule);
   padding-top: 8pt;
   columns: 2;
@@ -229,24 +238,27 @@ html, body {
   font-size: var(--size-apparatus);
   line-height: var(--lh-app);
 }
-.context h2 {
-  column-span: all;
-  font-size: var(--size-text);
-  font-weight: 600;
-  margin: 0 0 6pt;
-  color: var(--ink);
-}
+.context h2 { column-span: all; font-size: var(--size-text); font-weight: 600; margin: 0 0 6pt; color: var(--ink); }
 .context p { margin: 0 0 5pt; text-align: left; hyphens: auto; }
-.context p:last-child { margin-bottom: 0; }
-.context.proposed { background: #f3eced; outline: 4pt solid #f3eced; }
 
 .provenance {
   margin-top: auto;
   padding-top: 12pt;
+  margin-bottom: 0.34in;      /* clears the two-line cover footer */
   font-size: var(--size-gloss);
   line-height: 1.4;
   color: var(--ink-2);
+  max-width: 6.2in;
 }
+.provenance .signature { color: var(--ink); font-style: italic; white-space: nowrap; }
+
+/* Footer: wordmark everywhere; the tagline on the cover only. */
+.frame-foot .wm { color: var(--ink); letter-spacing: 0.01em; }
+.frame-foot .sep { margin: 0 5pt; }
+.cover .frame-foot { align-items: flex-end; line-height: 1.35; }
+.cover .frame-foot .foot-left { display: flex; flex-direction: column; }
+.cover .frame-foot .wm { font-size: var(--size-text); }
+.cover .frame-foot .tagline { color: var(--ink-2); }
 
 /* ---- Text pages ------------------------------------------------------------ */
 
@@ -341,7 +353,7 @@ html, body {
   margin: 0;
   font-size: var(--size-gloss);
   line-height: 1.32;
-  color: var(--ink-2);
+  color: var(--ink);
   text-indent: -7pt;
   padding-left: 7pt;
 }
@@ -398,7 +410,7 @@ html, body {
 .entry .body span[dir="rtl"], .entry .body .heb { font-family: var(--hebrew); font-size: 1.1em; }
 .entry .tail {
   color: var(--ink-2);
-  font-size: 0.9em;
+  font-size: var(--size-gloss);   /* never below the floor */
   font-style: italic;
 }
 .entry.proposed {
@@ -430,15 +442,6 @@ html, body {
 .glossary p { margin: 0 0 4pt; break-inside: avoid; text-indent: -10pt; padding-left: 10pt; }
 .glossary .term { font-weight: 600; }
 .glossary .term-he { font-family: var(--hebrew); font-size: 1.1em; margin-left: 4pt; direction: rtl; unicode-bidi: isolate; }
-
-.questions {
-  font-size: var(--size-text);
-  line-height: var(--lh-en);
-  max-width: 5.6in;
-}
-.questions ol { margin: 0; padding-left: 18pt; }
-.questions li { margin-bottom: 5pt; padding-left: 3pt; }
-.questions li::marker { color: var(--rubric); font-weight: 600; font-variant-numeric: lining-nums; }
 
 .prose {
   font-size: var(--size-text);

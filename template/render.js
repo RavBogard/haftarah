@@ -35,6 +35,44 @@
 
   const stripMarks = s => s.normalize("NFD").replace(/[֑-ֽֿ-ׇ]/g, "").normalize("NFC");
 
+  // ---- the divine name --------------------------------------------------------
+  // Every Tetragrammaton (any pointing, including the Elohim pointing) becomes יי.
+  // The verse's cantillation marks (U+0591–U+05AE) are kept and placed on the second yud
+  // so a chanter is not thrown; vowels and meteg are dropped. The count is logged.
+  let yyCount = 0;
+  const TETRA = /י[֑-ׇ]*ה[֑-ׇ]*ו[֑-ׇ]*ה[֑-ׇ]*/g;
+  function divineName(html) {
+    if (!html) return html;
+    return String(html).replace(TETRA, m => {
+      yyCount++;
+      const accents = (m.match(/[֑-֮]/g) || []).join("");
+      return "יי" + accents;
+    });
+  }
+
+  // ---- series and opening note (schema 2, with schema-1 fallbacks) -------------
+  const series = Object.assign(
+    { name: "Torah from Scratch", year: (data.shabbat?.hebrewEn || "").split(/\s+/).pop() || "", number: null },
+    data.series || {}
+  );
+  const seriesLabel = `${series.year}${series.number != null ? ` · No. ${series.number}` : ""}`;
+  const openingNote = (() => {
+    if (data.openingNote) return data.openingNote;
+    const cal = [];
+    if (data.haftarah.defaultHaftarah) cal.push(`Read in place of the usual haftarah for ${esc(data.shabbat.parashah.en)}, ${esc(dash(data.haftarah.defaultHaftarah))}.`);
+    cal.push(...paras(data.haftarah.whyThisHaftarah));
+    if (data.parashahConnection) cal.push(...paras(data.parashahConnection));
+    return {
+      calendar: cal.join(" "),
+      setting: (data.context && (data.context.paragraphs || []).length) ? data.context.paragraphs.slice() : [],
+      status: data.context?.status || "approved",
+    };
+  })();
+  const signoff = data.credits?.signoff ||
+    (data.credits?.editor ? `Commentary selected and approved by ${esc(data.credits.editor)}. ${esc(data.credits?.note || "")}` : esc(data.credits?.note || ""));
+  const WORDMARK = "central reform congregation";
+  const TAGLINE = "A Jewish Presence in the City of St. Louis";
+
   // Insert a keying circle after the Hebrew lemma inside the verse HTML.
   function keyHebrew(html, lemma) {
     if (!lemma) return html;
@@ -69,7 +107,7 @@
     head.append(left, right);
     const body = el("div", "page-body");
     const foot = el("footer", "frame-foot");
-    const fl = el("span", "foot-left", esc(data.credits?.issuedBy || ""));
+    const fl = el("span", "foot-left", `<span class="wm">${WORDMARK}</span><span class="sep">·</span>${esc(series.name)} · ${esc(seriesLabel)}`);
     const fr = el("span", "folio", String(pageCount));
     if (pageCount % 2 === 0) foot.append(fr, fl); else foot.append(fl, fr);
     page.append(head, body, foot);
@@ -83,26 +121,29 @@
 
   // ---- cover ----------------------------------------------------------------
 
+  function usedRegisters() {
+    const used = new Set((data.commentary || []).filter(visible).map(e => (SIGLA[e.register] ? e.register : "traditional")));
+    return ["traditional", "modern", "critical", "reference"].filter(k => used.has(k));
+  }
+
   function buildCover() {
     const p = newPage("cover");
-    // With a logo the head names the congregation (contract); without one the wordmark
-    // in the logo slot names it, so the head carries the Hebrew date instead of repeating it.
-    setHead(p, opts.logo ? (data.credits?.issuedBy || "") : (data.shabbat.hebrewEn || ""), "Haftarah");
-    p.foot.innerHTML = "";
+    setHead(p, series.name, `Haftarah · ${seriesLabel}`);
+    // The cover's foot carries the full wordmark and tagline; text pages carry the short form.
+    p.foot.innerHTML =
+      `<span class="foot-left"><span class="wm">${WORDMARK}</span><span class="tagline">${TAGLINE}</span></span>` +
+      `<span class="foot-right">${esc(series.name)} · ${esc(seriesLabel)}</span>`;
 
-    const issuer = el("div", "issuer");
+    // Hero: the mural beside the incipit, both sitting on the reading line.
+    const hero = el("div", "hero" + (opts.logo ? "" : " no-mark"));
     if (opts.logo) {
-      const img = el("img");
+      const img = el("img", "mark");
       img.src = opts.logo;
-      img.alt = data.credits?.issuedBy || "";
-      issuer.append(img);
-    } else {
-      issuer.append(el("div", "wordmark", `${esc(data.credits?.issuedBy || "")}<small>Haftarah study sheet</small>`));
+      img.alt = "";
+      hero.append(img);
     }
-
     const inc = el("div", "incipit-block");
-    const heInc = data.haftarah.incipit?.he || "";
-    inc.append(el("h1", "incipit", heInc));
+    inc.append(el("h1", "incipit", divineName(data.haftarah.incipit?.he || "")));
     if (data.haftarah.incipit?.en) inc.append(el("p", "incipit-en", esc(data.haftarah.incipit.en)));
     const rl = el("div", "reading-line");
     rl.innerHTML =
@@ -110,39 +151,41 @@
       `<div>${esc(shabbatName())}</div>` +
       `<div class="dates">${esc(data.shabbat.civilDisplay)}&nbsp;&nbsp;<span class="he-date">${esc(data.shabbat.hebrew || "")}</span></div>`;
     inc.append(rl);
+    hero.append(inc);
 
-    const why = el("div", "why");
-    if (data.haftarah.defaultHaftarah) {
-      why.append(el("p", null, `Read in place of the usual haftarah for ${esc(data.shabbat.parashah.en)}, ${esc(dash(data.haftarah.defaultHaftarah))}.`));
+    // Opening note: the calendar reason, a hairline, the setting.
+    const note = el("div", "opening-note" + (openingNote.status && openingNote.status !== "approved" ? " proposed" : ""));
+    const cal = paras(openingNote.calendar);
+    const set = paras(openingNote.setting);
+    cal.forEach(t => note.append(el("p", "cal", t)));
+    set.forEach((t, i) => note.append(el("p", i === 0 && cal.length ? "setting rule" : "setting", t)));
+
+    // Legend: only the sigla this week uses.
+    const regs = usedRegisters();
+    const legend = el("div", "legend");
+    regs.forEach(k => legend.append(el("span", null, `${SIGLA[k]}${REGISTER_NAMES[k]}`)));
+    if ((data.glosses || []).some(g => g.status ? visible(g) : true)) {
+      legend.append(el("span", "glossnote", `<span class="circ">°</span>margin note on a Hebrew word`));
     }
-    for (const t of paras(data.haftarah.whyThisHaftarah)) why.append(el("p", null, t));
-    if (data.parashahConnection) for (const t of paras(data.parashahConnection)) why.append(el("p", null, t));
 
-    p.body.append(issuer, inc);
-    if (why.childElementCount) p.body.append(why);
-
-    let context = null;
-    if (data.context && visible(data.context) && (data.context.paragraphs || []).length) {
-      context = el("div", "context" + (data.context.status !== "approved" ? " proposed" : ""));
-      context.append(el("h2", null, esc(data.context.heading || `${data.haftarah.book}: the book and its world`)));
-      for (const t of data.context.paragraphs) context.append(el("p", null, t));
-    }
     const prov = el("div", "provenance");
-    prov.innerHTML = `Hebrew: ${esc(data.haftarah.versions.he)}. English: ${esc(data.haftarah.versions.en)}. ` +
-      (data.credits?.editor ? `Commentary selected and approved by ${esc(data.credits.editor)}. ` : "") +
-      esc(data.credits?.note || "");
+    prov.innerHTML =
+      `<span class="editions">Hebrew: ${esc(data.haftarah.versions.he)}. English: ${esc(data.haftarah.versions.en)}.</span> ` +
+      `<span class="signoff">${signoff}</span>` +
+      (data.credits?.editor && data.credits?.signoff ? ` <span class="signature">— ${esc(data.credits.editor)}</span>` : "");
 
-    if (context) p.body.append(context);
+    p.body.append(hero, note);
+    if (regs.length || legend.childElementCount) p.body.append(legend);
     p.body.append(prov);
 
-    // If the context box pushes the cover past one page, move it to its own page.
-    if (p.body.scrollHeight > p.body.clientHeight + 1 && context) {
-      context.remove();
-      if (p.body.scrollHeight > p.body.clientHeight + 1) prov.remove();
+    // If the note is too long for one page, the setting paragraphs move to their own page.
+    if (p.body.scrollHeight > p.body.clientHeight + 1 && set.length) {
       const q = newPage("context-page");
       setHead(q, shabbatName(), dash(data.haftarah.ref));
-      context.classList.add("standalone");
-      q.body.append(context);
+      const ctx = el("div", "context standalone");
+      ctx.append(el("h2", null, `${esc(data.haftarah.book)}: the book and its world`));
+      note.querySelectorAll("p.setting").forEach(n => ctx.append(n));
+      q.body.append(ctx);
     }
   }
 
@@ -153,7 +196,7 @@
     const en = el("div", "en", v.en);
     const gut = el("div", "gut");
     gut.innerHTML = (v.showChapter ? `<span class="ch">${v.chapter}</span>` : "") + v.verse;
-    let heHtml = v.he.replace(/&thinsp;|\u2009/g, " ");
+    let heHtml = divineName(v.he.replace(/&thinsp;|\u2009/g, " "));
     const glosses = (data.glosses || []).filter(g => g.verse === v.verse && (g.chapter == null || g.chapter === v.chapter) && (g.status ? visible(g) : true));
     for (const g of glosses) heHtml = keyHebrew(heHtml, g.lemma);
     const he = el("div", "he", heHtml);
@@ -163,7 +206,7 @@
       notes.push(el("p", "note", `<span class="k">${esc(n.marker)}</span>${n.lemma ? `<span class="lemma">${esc(n.lemma)}</span> ` : ""}${n.text}`));
     }
     for (const g of glosses) {
-      notes.push(el("p", "note" + (g.status && g.status !== "approved" ? " proposed" : ""), `<span class="k circ">°</span>${g.lemma ? `<span class="he-lemma">${esc(g.lemma)}</span> ` : ""}${g.text}`));
+      notes.push(el("p", "note" + (g.status && g.status !== "approved" ? " proposed" : ""), `<span class="k circ">°</span>${g.lemma ? `<span class="he-lemma">${divineName(esc(g.lemma))}</span> ` : ""}${divineName(g.text)}`));
     }
     return { row, notes };
   }
@@ -183,7 +226,7 @@
       `<span class="sig" title="${REGISTER_NAMES[reg]}">${SIGLA[reg]}</span>` +
       `<span class="v">${vr}</span>${lemma} ` +
       `<span class="src">${esc(e.source)}</span>` +
-      `<span class="body">${e.text}</span>` +
+      `<span class="body">${divineName(e.text)}</span>` +
       (tailBits.length ? ` <span class="tail">${tailBits.join("; ")}.</span>` : "");
     return entry;
   }
@@ -366,26 +409,12 @@
       }
       b.append(g); blocks.push(b);
     }
-    if ((data.questions || []).length) {
-      const b = el("div", "block");
-      b.append(el("h2", null, "For discussion"));
-      const q = el("div", "questions");
-      const ol = el("ol");
-      for (const t of data.questions) ol.append(el("li", null, typeof t === "string" ? t : t.text));
-      q.append(ol); b.append(q); blocks.push(b);
-    }
+    // Discussion questions are never printed (decision of 2026-10-07).
     const col = el("div", "block colophon");
     const lines = [
-      `Hebrew text: ${esc(data.haftarah.versions.he)}, via Sefaria.`,
-      `English translation: ${esc(data.haftarah.versions.en)}, via Sefaria.`,
-      (() => {
-        const used = new Set((data.commentary || []).filter(visible).map(e => (SIGLA[e.register] ? e.register : "traditional")));
-        const names = { traditional: "filled square, traditional", modern: "open circle, modern", critical: "triangle, historical-critical", reference: "diamond, reference work" };
-        const list = ["traditional", "modern", "critical", "reference"].filter(k => used.has(k)).map(k => names[k]).join("; ");
-        return `Commentary sources as credited in each entry.${list ? ` Register marks: ${list}.` : ""}`;
-      })(),
-      esc(data.credits?.note || ""),
-      `${esc(data.credits?.issuedBy || "")}${data.credits?.editor ? `. Edited by ${esc(data.credits.editor)}` : ""}.`,
+      `Hebrew text: ${esc(data.haftarah.versions.he)}; English: ${esc(data.haftarah.versions.en)}; both via Sefaria. Commentary as credited in each entry.`,
+      `${signoff}${data.credits?.editor && data.credits?.signoff ? ` — ${esc(data.credits.editor)}` : ""}`,
+      `${esc(data.credits?.issuedBy || "")} · ${esc(series.name)} · ${esc(seriesLabel)}`,
     ].filter(Boolean);
     col.append(el("h2", null, "About this sheet"));
     lines.forEach(t => col.append(el("p", null, t)));
@@ -438,7 +467,11 @@
     buildEndMatter(last);
     document.title = `${shabbatName()} — ${dash(data.haftarah.ref)}${DRAFT ? " (draft)" : ""}`;
     document.documentElement.dataset.pages = String(pageCount);
+    document.documentElement.dataset.yy = String(yyCount);
     window.SHEET_PAGES = pageCount;
+    window.SHEET_YY = yyCount;
+    const rn = document.querySelector(".review-note");
+    if (rn) rn.append(` Divine name set as יי ${yyCount} time${yyCount === 1 ? "" : "s"}.`);
     // ?page=N shows one page alone (used for review captures).
     const only = Number(new URLSearchParams(location.search).get("page"));
     if (only) {
