@@ -13,6 +13,8 @@ Plan 2 (to write after plan 1 ships): repo history without `weeks/`, Drive folde
 - GATE: Rule 3 bounded by the spec's 0.5in band (a short verse stays and its entries follow under a page pointer rather than leaving up to 1.2in of white) — proceeded because the spec states the band and the plan's 1.2in was its own argument; Daniel can flip one constant.
 - GATE: status-less glossary terms and glosses are stamped "proposed" by migrate and blocked by the gate — proceeded because "nothing unapproved prints" is the standing rule; the Samuel glossary now needs Daniel's one-word approval.
 
+- GATE: `sheet-v2` fast-forwarded into `main` locally after the auditor pass and a green suite; NOT pushed — proceeded because the standing authority covers the merge, while the first push to the public remote waits for plan 2, which recreates the history without `weeks/` (the sheets' source text) before anything leaves the machine.
+
 ## Progress
 
 - [x] Task 1 Shared library and test scaffold
