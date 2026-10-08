@@ -147,3 +147,29 @@ test("analyse flags a lone verse, a wide gap, an empty section and a broken key 
   assert.ok(problems.some(p => /key series is ac not ab/.test(p)));
   assert.ok(problems.some(p => /labelled \(cont\.\)/.test(p)));
 });
+
+import { migrate } from "../scripts/migrate.mjs";
+
+test("migrate builds the opening note from the v1 fields and drops what v2 removed", () => {
+  const v1 = {
+    schema: 1, shabbat: { hebrewEn: "29 Tishrei 5787", parashah: { en: "Bereshit" } },
+    haftarah: { ref: "I Samuel 20:18-42", defaultHaftarah: "Isaiah 42:5-43:10", whyThisHaftarah: "Why." },
+    context: { status: "approved", heading: "x", paragraphs: ["Setting one.", "Setting two."] },
+    questions: ["q"], parashahConnection: "Link.", glosses: [{ verse: 18, lemma: "א" }],
+    commentary: [{ verse: 1, register: "critical", source: "S" }, { verse: 2, register: "traditional", source: "Rashi" }],
+    credits: { editor: "R" },
+  };
+  const v2 = migrate(v1, 3);
+  assert.equal(v2.schema, 2);
+  assert.deepEqual(v2.series, { name: "Torah from Scratch", year: "5787", number: 3 });
+  assert.equal(v2.openingNote.calendar, "Read in place of the usual haftarah for Bereshit, Isaiah 42:5–43:10. Why. Link.");
+  assert.deepEqual(v2.openingNote.setting, ["Setting one.", "Setting two."]);
+  assert.equal(v2.openingNote.status, "approved");
+  assert.equal(v2.questions, undefined);
+  assert.equal(v2.context, undefined);
+  assert.equal(v2.haftarah.whyThisHaftarah, undefined);
+  assert.deepEqual(v2.commentary[0].works, []);
+  assert.equal(v2.commentary[1].works, undefined);
+  assert.equal(v2.glosses[0].en, "");
+  assert.match(v2.credits.signoff, /Tell me what I got wrong/);
+});

@@ -15,7 +15,7 @@
  * Dependency-free: Node 18+ with global fetch.
  */
 
-import { mkdir, writeFile, access } from "node:fs/promises";
+import { mkdir, writeFile, access, readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 
 const HEBREW_VERSION = "Miqra according to the Masorah";
@@ -185,6 +185,38 @@ function stripMarks(he) {
 
 // ---- main -------------------------------------------------------------------
 
+// One more than the highest number already issued this Hebrew year in outRoot.
+async function nextNumber(outRoot, year) {
+  let max = 0;
+  let dirs = [];
+  try { dirs = await readdir(outRoot); } catch { return 1; }
+  for (const d of dirs) {
+    try {
+      const s = JSON.parse(await readFile(join(outRoot, d, "sheet.json"), "utf8"));
+      if (s.series?.year === year && typeof s.series.number === "number") max = Math.max(max, s.series.number);
+    } catch {}
+  }
+  return max + 1;
+}
+
+// The following Shabbat's reading, proposed; Daniel confirms it before it prints.
+async function nextWeekFor(date) {
+  const d = new Date(date + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() + 7);
+  const next = d.toISOString().slice(0, 10);
+  try {
+    const ley = await getJSON(`https://www.hebcal.com/leyning?cfg=json&start=${next}&end=${next}`);
+    const it = (ley.items || [])[0];
+    if (!it || !it.haftara) return null;
+    return {
+      shabbat: it.name?.en || "",
+      special: it.reason?.haftara || null,
+      ref: it.haftara,
+      civilDisplay: new Date(next + "T12:00:00Z").toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric", timeZone: "UTC" }),
+      status: "proposed",
+    };
+  } catch { return null; }
+}
+
 async function main() {
   const date = arg("date", nextShabbat());
   const outRoot = arg("out", "weeks");
@@ -250,7 +282,7 @@ async function main() {
   const civilDisplay = new Date(date + "T12:00:00Z").toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric", timeZone: "UTC" });
   const first = verses[0];
   const sheet = {
-    schema: 1,
+    schema: 2,
     slug,
     status: "draft",
     shabbat: {
@@ -261,6 +293,7 @@ async function main() {
       parashah: { en: item.name?.en, he: item.name?.he, ref: item.summary },
       special,
     },
+    series: { name: "Torah from Scratch", year: String(conv.hy), number: await nextNumber(outRoot, String(conv.hy)) },
     haftarah: {
       ref: haftRef,
       heRef: tx.heRef || null,
@@ -268,21 +301,19 @@ async function main() {
       incipit: { he: firstWords(first.he, 3), en: "" },
       title: { he: stripMarks(firstWords(first.he, 3)), en: special ? special.replace(/^Shabbat\s+/i, "") : `Haftarat ${item.name?.en}` },
       defaultHaftarah: special && defaultHaftarah !== haftRef ? defaultHaftarah : null,
-      whyThisHaftarah: "",
       versions: { he: HEBREW_VERSION, en: ENGLISH_VERSION },
       fetched: new Date().toISOString(),
     },
     verses,
     glosses: [],
     commentary: [],
-    context: { heading: "", paragraphs: [], status: "proposed" },
+    openingNote: { calendar: "", setting: [], status: "proposed" },
     glossary: [],
-    questions: [],
-    parashahConnection: "",
+    nextWeek: await nextWeekFor(date),
     credits: {
       issuedBy: "Central Reform Congregation",
       editor: "Rabbi Daniel Bogard",
-      note: "Summaries marked as such were drafted with Claude and reviewed before printing.",
+      signoff: "I chose and approved every entry on this sheet; summaries marked as such were drafted with Claude and read before printing. Tell me what I got wrong.",
     },
   };
 

@@ -42,46 +42,53 @@ If no shell is available, open `weeks/<slug>/sheet.html` in Chrome and print to 
 
 ## Data file
 
-`sheet.json` is self-contained. The parts the weekly run edits:
+`sheet.json` (schema 2) is self-contained. The parts the weekly run edits:
 
 ```jsonc
 {
+  "schema": 2,
+  "series": { "name": "Torah from Scratch", "year": "5787", "number": 3 },   // number: one more than the highest issued this year
   "haftarah": {
     "ref": "I Samuel 20:18-42",
     "incipit": { "he": "מָחָ֣ר חֹ֑דֶשׁ", "en": "Tomorrow will be the new moon" },
-    "whyThisHaftarah": "one paragraph, or an array of paragraphs",
     "defaultHaftarah": "Isaiah 42:5-43:10"       // set by fetch when a special Shabbat replaces the usual reading
   },
+  "openingNote": {                                 // the front page: calendar reason, then the historical setting
+    "calendar": "one paragraph",
+    "setting": ["paragraph", "paragraph"],
+    "status": "proposed | approved"
+  },
   "verses": [ { "chapter": 20, "verse": 18, "he": "<html>", "en": "<html>", "notes": [ { "marker": "h", "lemma": "vacant", "text": "At the festal meal." } ], "break": null } ],
-  "glosses": [ { "verse": 19, "lemma": "הָאָֽזֶל", "text": "<i>Ezel</i>: a place-name ...", "status": "approved" } ],
+  "glosses": [ { "verse": 19, "lemma": "הָאָֽזֶל", "en": "the Ezel stone", "text": "<i>Ezel</i>: a place-name ...", "status": "approved" } ],
   "commentary": [
     {
-      "verse": 30, "verseEnd": 31,                  // verseEnd optional
+      "verse": 30, "verseEnd": 31,                  // verseEnd optional; chapter when the reading spans chapters
       "register": "traditional | modern | critical | reference",
-      "source": "Rashi",                            // printed in oxblood
+      "source": "Rashi",                            // printed in the rubric; a drafted title for critical entries
       "lemma": "son of a perverse, rebellious woman", // the words commented on; lemmaLang: "he" for Hebrew
       "text": "<html>",
-      "sourceRef": "Rashi on I Samuel 20:30",        // Sefaria ref, printed in the tail
+      "sourceRef": "Rashi on I Samuel 20:30",        // Sefaria ref; required for every register but critical
       "translation": "claude | Metsudah translation | ...", // "claude" prints "translated for this sheet"
-      "cites": "McCarter, <i>I Samuel</i>",          // for critical summaries
+      "works": ["McCarter 1980"],                    // critical only: keys from bibliography/<book>.md
+      "cites": "McCarter, <i>I Samuel</i>",          // printed in the tail
       "kind": "abridged",                            // optional
       "status": "proposed | approved | rejected",
       "order": 1                                     // order within the verse
     }
   ],
-  "context": { "heading": "First Samuel: the book and its world", "paragraphs": ["..."], "status": "approved" },
-  "glossary": [ { "term": "Abner", "he": "אַבְנֵר", "text": "..." } ],
-  "questions": [],                                  // optional "For discussion" block
-  "parashahConnection": "",                         // optional paragraph on the cover
-  "credits": { "issuedBy": "Central Reform Congregation", "editor": "Rabbi Daniel Bogard", "note": "..." }
+  "glossary": [ { "term": "Abner", "he": "אַבְנֵר", "text": "...", "status": "approved" } ],
+  "nextWeek": { "shabbat": "Noach", "special": null, "ref": "Isaiah 54:1-55:5", "civilDisplay": "October 17, 2026", "status": "proposed" },
+  "credits": { "issuedBy": "Central Reform Congregation", "editor": "Rabbi Daniel Bogard", "signoff": "one first-person sentence" }
 }
 ```
 
-Rules the renderer enforces: final builds print only `approved` items; draft builds shade `proposed` items and never show `rejected` ones; register is shown by a drawn mark in the rubric color (filled square traditional, open circle modern, triangle historical-critical; a diamond is available for reference works) and the colophon lists only the marks the sheet uses; Claude translations and critical summaries are labeled in the entry tail; JPS translators' footnotes print as margin notes automatically; Masoretic paragraph breaks (setumah, petuchah) become vertical space between verses, and a mid-verse break becomes a gap in the line.
+`node scripts/migrate.mjs weeks/<slug> --number N` converts a schema-1 file. There are no discussion questions and no context box: the opening note replaced them.
+
+Rules the build enforces: a final build refuses to run while anything is `proposed` (commentary, glosses, glossary, the opening note, the next-week line) and names what is blocking; every entry outside the critical register needs a Sefaria `sourceRef`; every critical entry names only `works` listed in `bibliography/<book>.md`. Draft builds print the same list as a warning and shade proposed items. The renderer sets the divine name as יי, keys JPS footnotes and glosses in one letter series per sheet, shows register by a filled mark (square classical, circle modern, triangle historians, diamond reference), and turns Masoretic paragraph breaks into vertical space.
 
 ## How a page is laid out
 
-The renderer measures every verse row, sidenote, and apparatus entry off-screen, then fills letter pages: verse rows go down as far as the apparatus for those verses leaves room; when a verse's apparatus will not fit, the rest spills to the next page's apparatus marked "(cont.)". Sidenotes stack beside their verses and push down when they collide. End matter (glossary, questions, colophon) uses space left above the last apparatus when there is any, then its own pages. The build reports the page count against the 4 to 6 page target.
+Page 1 is the front page (mural, incipit, reading line, opening note, legend, voices, provenance); the text starts on page 2. The renderer measures every verse row, margin note and apparatus entry off-screen, then fills letter pages: verse rows go down as far as the apparatus for those verses leaves room. An entry whose verse is on an earlier page is labelled with that page ("30 · p. 3"); a verse never sits alone on a page; a long verse is split across pages at a line boundary rather than leaving a band of white above the rule; margin notes that do not fit beside their verse carry to the next page's margin. End matter (glossary, voices when the front page was full, colophon, next week) goes above the last apparatus when it all fits, else on one page together. `node scripts/check.mjs weeks/<slug>` renders twice and asserts these rules.
 
 ## Sources and licenses
 
