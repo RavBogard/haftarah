@@ -588,67 +588,56 @@
 
   function endBlocks() {
     const blocks = [];
-    if ((data.glossary || []).length) {
+    const terms = (data.glossary || []).filter(t => !t.status || visible(t));
+    if (terms.length) {
       const b = el("div", "block");
       b.append(el("h2", null, "Names and places"));
       const g = el("div", "glossary");
-      for (const t of data.glossary) {
-        if (t.status && !visible(t)) continue;
-        g.append(el("p", null, `<span class="term">${esc(t.term)}</span>${t.he ? `<span class="term-he">${esc(t.he)}</span>` : ""} ${t.text}`));
-      }
+      for (const t of terms) g.append(el("p", null, `<span class="term">${esc(t.term)}</span>${t.he ? `<span class="term-he">${divineName(esc(t.he))}</span>` : ""} ${divineName(t.text)}`));
       b.append(g); blocks.push(b);
     }
     // Discussion questions are never printed (decision of 2026-10-07).
     if (voicesForEnd) blocks.push(voicesForEnd);
     const col = el("div", "block colophon");
-    const lines = [
-      `Hebrew text: ${esc(data.haftarah.versions.he)}; English: ${esc(data.haftarah.versions.en)}; both via Sefaria. Commentary as credited in each entry.`,
-      `${signoff}${data.credits?.editor && data.credits?.signoff ? ` — ${esc(data.credits.editor)}` : ""}`,
-      `${esc(data.credits?.issuedBy || "")} · ${esc(series.name)} · ${esc(seriesLabel)}`,
-    ].filter(Boolean);
     col.append(el("h2", null, "About this sheet"));
-    lines.forEach(t => col.append(el("p", null, t)));
+    col.append(el("p", null, `Hebrew text: ${esc(data.haftarah.versions.he)}; English: ${esc(data.haftarah.versions.en)}; both via Sefaria. Commentary as credited in each entry.`));
+    col.append(el("p", null, `${esc(data.credits?.issuedBy || "")} · ${esc(series.name)} · ${esc(seriesLabel)}`));
     blocks.push(col);
+    if (data.nextWeek && visible(data.nextWeek)) {
+      const nw = data.nextWeek;
+      const line = `Next week: ${esc(nw.shabbat)}${nw.special ? `, ${esc(String(nw.special).replace(/^Shabbat\s+/i, ""))}` : ""} · ${esc(dash(nw.ref))}${nw.civilDisplay ? ` · ${esc(nw.civilDisplay)}` : ""}`;
+      blocks.push(el("p", "nextweek" + (nw.status !== "approved" ? " proposed" : ""), line));
+    }
+    document.documentElement.dataset.emptySections = "0";
     return blocks;
   }
 
+  // End matter goes above the last apparatus when it all fits there; otherwise it all goes to one
+  // new page together. The colophon is never alone on a page.
   function buildEndMatter(lastTextPage) {
     const blocks = endBlocks();
     const measure = node => { stage.append(node); const h = node.getBoundingClientRect().height + 16; node.remove(); return h; };
-    let p = null;
-    let remaining = 0;
-    // Try to use the room left above the apparatus on the last text page.
-    if (lastTextPage && lastTextPage.leftover > 0) {
+    const total = blocks.map(b => measure(b.cloneNode(true))).reduce((a, b) => a + b, 0) + 18;
+    if (lastTextPage && lastTextPage.leftover > total + 8) {
       const wrap = el("div", "endmatter inline");
       wrap.style.marginTop = "18pt";
-      let used = 18;
-      const fit = [];
-      for (const b of blocks) {
-        const h = measure(b.cloneNode(true));
-        if (used + h <= lastTextPage.leftover - 8) { fit.push(b); used += h; } else break;
-      }
-      if (fit.length) {
-        fit.forEach(b => wrap.append(b));
-        lastTextPage.grid.after(wrap);
-        blocks.splice(0, fit.length);
-        const bh = lastTextPage.body.getBoundingClientRect().height;
-        const prev = Number(lastTextPage.page.dataset.fill || 0);
-        lastTextPage.page.dataset.fill = String(Math.min(100, Math.round(prev + 100 * wrap.getBoundingClientRect().height / bh)));
-      }
+      blocks.forEach(b => wrap.append(b));
+      lastTextPage.grid.after(wrap);
+      const bh = lastTextPage.body.getBoundingClientRect().height;
+      const prev = Number(lastTextPage.page.dataset.fill || 0);
+      lastTextPage.page.dataset.fill = String(Math.min(100, Math.round(prev + 100 * wrap.getBoundingClientRect().height / bh)));
+      return;
     }
-    for (const b of blocks) {
-      const h = measure(b.cloneNode(true));
-      if (!p || h > remaining) {
-        p = newPage("end");
-        setHead(p, shabbatName(), dash(data.haftarah.ref));
-        setFoot(p, { legend: microLegend() });
-        p.wrap = el("div", "endmatter");
-        p.body.append(p.wrap);
-        remaining = p.body.getBoundingClientRect().height;
-      }
-      p.wrap.append(b);
-      remaining -= h;
-    }
+    const p = newPage("end");
+    setHead(p, shabbatName(), dash(data.haftarah.ref));
+    setFoot(p, { legend: microLegend() });
+    const wrap = el("div", "endmatter");
+    p.body.append(wrap);
+    blocks.forEach(b => wrap.append(b));
+    const used = wrap.getBoundingClientRect().height;
+    p.page.dataset.fill = String(Math.round(100 * used / p.body.getBoundingClientRect().height));
+    // A glossary too long for one page is a data problem; report it rather than hide it.
+    p.page.dataset.overflow = String(p.body.scrollHeight > p.body.clientHeight + 1);
   }
 
   // ---- go -------------------------------------------------------------------

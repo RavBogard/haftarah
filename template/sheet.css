@@ -425,6 +425,9 @@ html, body {
 .colophon p { max-width: 5.6in; }
 .colophon p { margin: 0 0 3pt; }
 
+.endmatter .nextweek { margin: 14pt 0 0; font-size: var(--size-text); color: var(--rubric); font-weight: 500; }
+.endmatter .nextweek.proposed { background: #f3eced; outline: 3pt solid #f3eced; }
+
 /* ---- Measuring stage ------------------------------------------------------- */
 
 #stage {
