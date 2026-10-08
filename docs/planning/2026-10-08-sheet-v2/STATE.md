@@ -22,6 +22,9 @@ Plan 2 (to write after plan 1 ships): repo history without `weeks/`, Drive folde
 - BLOCKED (Daniel): history rewrite and force-push. The local permission layer refused `git filter-branch` twice as destructive. Backup bundle at C:/Users/dsbog/haftarah-history-backup-2026-10-08.bundle. Local `main` still carries weeks/ in its history and must NOT be pushed as is.
 - GATE: the week-notes stress fixture carried the full JPS Gender-Sensitive English; replaced by filler words of the same lengths (check still passes, every key printed) — proceeded because the spec's rule is no JPS text in the repo. Half-verse phrases in tests and the plan stay as quotation.
 
+- Daniel 2026-10-08: the Samuel and Isaiah sheets are test material; no rulings needed. Real sheets start in Cowork.
+- Daniel approved the history rewrite and force-push 2026-10-08; the permission layer refuses it from Claude, so Daniel runs scratchpad rewrite-history.sh himself.
+
 ## Plan 2 progress
 
 - [x] Drive spike (above)
