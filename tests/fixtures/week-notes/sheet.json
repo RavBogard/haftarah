@@ -1,0 +1,912 @@
+{
+  "schema": 2,
+  "slug": "2026-10-10-bereshit-machar-chodesh",
+  "status": "approved",
+  "shabbat": {
+    "civil": "2026-10-10",
+    "civilDisplay": "October 10, 2026",
+    "hebrew": "כ״ט בְּתִשְׁרֵי תשפ״ז",
+    "hebrewEn": "29 Tishrei 5787",
+    "parashah": {
+      "en": "Bereshit",
+      "he": "בְּרֵאשִׁית",
+      "ref": "Genesis 1:1-6:8"
+    },
+    "special": "Shabbat Machar Chodesh"
+  },
+  "haftarah": {
+    "ref": "I Samuel 20:18-42",
+    "heRef": "שמואל א כ׳:י״ח-מ״ב",
+    "book": "I Samuel",
+    "incipit": {
+      "he": "מָחָ֣ר חֹ֑דֶשׁ",
+      "en": "Tomorrow will be the new moon"
+    },
+    "title": {
+      "he": "מחר חדש",
+      "en": "Machar Chodesh"
+    },
+    "defaultHaftarah": "Isaiah 42:5-43:10",
+    "versions": {
+      "he": "Miqra according to the Masorah",
+      "en": "Synthetic filler English (stress fixture; no translation text)"
+    },
+    "fetched": "2026-10-07T16:28:38.339Z"
+  },
+  "verses": [
+    {
+      "ref": "I Samuel 20:18",
+      "chapter": 20,
+      "verse": 18,
+      "he": "וַיֹּאמֶר־ל֥וֹ יְהוֹנָתָ֖ן מָחָ֣ר חֹ֑דֶשׁ וְנִפְקַ֕דְתָּ כִּ֥י יִפָּקֵ֖ד מוֹשָׁבֶֽךָ׃",
+      "en": "Sentence word of the, “Sentence word of the the word; the you will be missed word word word lengthy vacant.<sup class=\"fn\">h</sup><sup class=\"fn\">x</sup><sup class=\"fn\">y</sup>",
+      "notes": [
+        {
+          "marker": "h",
+          "lemma": "vacant",
+          "text": "Of the filler word."
+        },
+        {
+          "marker": "x",
+          "lemma": "word",
+          "text": "The. “a word measurement word words the the filler, word filler word lengthy of word lengthy filler words filler word the the of the filler the word words of the word word.”"
+        },
+        {
+          "marker": "y",
+          "lemma": "word",
+          "text": "The. “a word measurement word words the the filler, word filler word lengthy of word lengthy filler words filler word the the of the filler the word words of the word word.”"
+        }
+      ],
+      "break": null
+    },
+    {
+      "ref": "I Samuel 20:19",
+      "chapter": 20,
+      "verse": 19,
+      "he": "וְשִׁלַּשְׁתָּ֙ תֵּרֵ֣ד מְאֹ֔ד וּבָאתָ֙ אֶל־הַמָּק֔וֹם אֲשֶׁר־נִסְתַּ֥רְתָּ שָּׁ֖ם בְּי֣וֹם הַֽמַּעֲשֶׂ֑ה וְיָ֣שַׁבְתָּ֔ אֵ֖צֶל הָאֶ֥בֶן הָאָֽזֶל׃",
+      "en": "Of the the words sentence, of word all the way<sup class=\"fn\">i</sup> of the words words the the the other time,<sup class=\"fn\">j</sup> the word words of the Ezel stone.<sup class=\"fn\">x</sup><sup class=\"fn\">y</sup>",
+      "notes": [
+        {
+          "marker": "i",
+          "lemma": "all the way",
+          "text": "The. “word word.”"
+        },
+        {
+          "marker": "j",
+          "lemma": "the other time",
+          "text": "The. “of the the of the sentence”; the 19.2of."
+        },
+        {
+          "marker": "x",
+          "lemma": "word",
+          "text": "The. “a word measurement word words the the filler, word filler word lengthy of word lengthy filler words filler word the the of the filler the word words of the word word.”"
+        },
+        {
+          "marker": "y",
+          "lemma": "word",
+          "text": "The. “a word measurement word words the the filler, word filler word lengthy of word lengthy filler words filler word the the of the filler the word words of the word word.”"
+        }
+      ],
+      "break": null
+    },
+    {
+      "ref": "I Samuel 20:20",
+      "chapter": 20,
+      "verse": 20,
+      "he": "וַאֲנִ֕י שְׁלֹ֥שֶׁת הַחִצִּ֖ים צִדָּ֣הֿ אוֹרֶ֑ה לְשַֽׁלַּֽח־לִ֖י לְמַטָּרָֽה׃",
+      "en": "The A word words words filler of the word of of, of filler A word sentence of a word,<sup class=\"fn\">x</sup><sup class=\"fn\">y</sup>",
+      "notes": [
+        {
+          "marker": "x",
+          "lemma": "word",
+          "text": "The. “a word measurement word words the the filler, word filler word lengthy of word lengthy filler words filler word the the of the filler the word words of the word word.”"
+        },
+        {
+          "marker": "y",
+          "lemma": "word",
+          "text": "The. “a word measurement word words the the filler, word filler word lengthy of word lengthy filler words filler word the the of the filler the word words of the word word.”"
+        }
+      ],
+      "break": null
+    },
+    {
+      "ref": "I Samuel 20:21",
+      "chapter": 20,
+      "verse": 21,
+      "he": "וְהִנֵּה֙ אֶשְׁלַ֣ח אֶת־הַנַּ֔עַר לֵ֖ךְ מְצָ֣א אֶת־הַחִצִּ֑ים אִם־אָמֹר֩ אֹמַ֨ר לַנַּ֜עַר הִנֵּ֥ה הַחִצִּ֣ים&thinsp;<b>׀</b> מִמְּךָ֣ וָהֵ֗נָּה קָחֶ֧נּוּ&thinsp;<small>׀</small>&thinsp;וָבֹ֛אָה כִּי־שָׁל֥וֹם לְךָ֛ וְאֵ֥ין דָּבָ֖ר חַי־יְהֹוָֽה׃",
+      "en": "the A word words the the of of the word the filler. Of A word of the the, ‘The! the filler the of word word of the,a of reassured<sup class=\"fn\">k</sup> the word, the the the word the words of of filler—of A<small>Of</small> words!<sup class=\"fn\">x</sup><sup class=\"fn\">y</sup>",
+      "notes": [
+        {
+          "marker": "k",
+          "lemma": "reassured",
+          "text": "The. “filler of.”"
+        },
+        {
+          "marker": "x",
+          "lemma": "word",
+          "text": "The. “a word measurement word words the the filler, word filler word lengthy of word lengthy filler words filler word the the of the filler the word words of the word word.”"
+        },
+        {
+          "marker": "y",
+          "lemma": "word",
+          "text": "The. “a word measurement word words the the filler, word filler word lengthy of word lengthy filler words filler word the the of the filler the word words of the word word.”"
+        }
+      ],
+      "break": null
+    },
+    {
+      "ref": "I Samuel 20:22",
+      "chapter": 20,
+      "verse": 22,
+      "he": "וְאִם־כֹּ֤ה אֹמַר֙ לָעֶ֔לֶם הִנֵּ֥ה הַחִצִּ֖ים מִמְּךָ֣ וָהָ֑לְאָה לֵ֕ךְ כִּ֥י שִֽׁלַּחֲךָ֖ יְהֹוָֽה׃",
+      "en": "The of, lengthy, A word of the the, ‘The! the filler the filler the,a word words, the A<small>Of</small> the word the word.<sup class=\"fn\">x</sup><sup class=\"fn\">y</sup>",
+      "notes": [
+        {
+          "marker": "x",
+          "lemma": "word",
+          "text": "The. “a word measurement word words the the filler, word filler word lengthy of word lengthy filler words filler word the the of the filler the word words of the word word.”"
+        },
+        {
+          "marker": "y",
+          "lemma": "word",
+          "text": "The. “a word measurement word words the the filler, word filler word lengthy of word lengthy filler words filler word the the of the filler the word words of the word word.”"
+        }
+      ],
+      "break": null
+    },
+    {
+      "ref": "I Samuel 20:23",
+      "chapter": 20,
+      "verse": 23,
+      "he": "וְהַ֨דָּבָ֔ר אֲשֶׁ֥ר דִּבַּ֖רְנוּ אֲנִ֣י וָאָ֑תָּה הִנֵּ֧ה יְהֹוָ֛ה בֵּינִ֥י וּבֵינְךָ֖ עַד־עוֹלָֽם׃",
+      "en": "As for the promise we made to each other,<sup class=\"fn\">l</sup> the A<small>Of</small> of [lengthy] lengthy the the of lengthy.”<sup class=\"fn\">x</sup><sup class=\"fn\">y</sup>",
+      "notes": [
+        {
+          "marker": "l",
+          "lemma": "As for the promise we made to each other",
+          "text": "The words, of. 12–17."
+        },
+        {
+          "marker": "x",
+          "lemma": "word",
+          "text": "The. “a word measurement word words the the filler, word filler word lengthy of word lengthy filler words filler word the the of the filler the word words of the word word.”"
+        },
+        {
+          "marker": "y",
+          "lemma": "word",
+          "text": "The. “a word measurement word words the the filler, word filler word lengthy of word lengthy filler words filler word the the of the filler the word words of the word word.”"
+        }
+      ],
+      "break": "setumah"
+    },
+    {
+      "ref": "I Samuel 20:24",
+      "chapter": 20,
+      "verse": 24,
+      "he": "וַיִּסָּתֵ֥ר דָּוִ֖ד בַּשָּׂדֶ֑ה וַיְהִ֣י הַחֹ֔דֶשׁ וַיֵּ֧שֶׁב הַמֶּ֛לֶךְ <span class=\"mam-kq\"><span class=\"mam-kq-k\">(על)</span> <span class=\"mam-kq-q\">[אֶל־]</span></span>הַלֶּ֖חֶם לֶאֱכֽוֹל׃",
+      "en": "Words the of the words. The the word word, the the word the word of lengthy of the word.<sup class=\"fn\">x</sup><sup class=\"fn\">y</sup>",
+      "notes": [
+        {
+          "marker": "x",
+          "lemma": "word",
+          "text": "The. “a word measurement word words the the filler, word filler word lengthy of word lengthy filler words filler word the the of the filler the word words of the word word.”"
+        },
+        {
+          "marker": "y",
+          "lemma": "word",
+          "text": "The. “a word measurement word words the the filler, word filler word lengthy of word lengthy filler words filler word the the of the filler the word words of the word word.”"
+        }
+      ],
+      "break": null
+    },
+    {
+      "ref": "I Samuel 20:25",
+      "chapter": 20,
+      "verse": 25,
+      "he": "וַיֵּ֣שֶׁב הַ֠מֶּ֠לֶךְ עַל־מ֨וֹשָׁב֜וֹ כְּפַ֣עַם&thinsp;<b>׀</b> בְּפַ֗עַם אֶל־מוֹשַׁב֙ הַקִּ֔יר וַיָּ֙קׇם֙ יְה֣וֹנָתָ֔ן וַיֵּ֥שֶׁב אַבְנֵ֖ר מִצַּ֣ד שָׁא֑וּל וַיִּפָּקֵ֖ד מְק֥וֹם דָּוִֽד׃",
+      "en": "Word the word word the words words of the word of the word, Sentence rose<sup class=\"fn\">m</sup> the Words the word of Filler word; the Lengthy words sentence filler.<sup class=\"fn\">x</sup><sup class=\"fn\">y</sup>",
+      "notes": [
+        {
+          "marker": "m",
+          "lemma": "rose",
+          "text": "Words of The. something; Placement “words the.”"
+        },
+        {
+          "marker": "x",
+          "lemma": "word",
+          "text": "The. “a word measurement word words the the filler, word filler word lengthy of word lengthy filler words filler word the the of the filler the word words of the word word.”"
+        },
+        {
+          "marker": "y",
+          "lemma": "word",
+          "text": "The. “a word measurement word words the the filler, word filler word lengthy of word lengthy filler words filler word the the of the filler the word words of the word word.”"
+        }
+      ],
+      "break": null
+    },
+    {
+      "ref": "I Samuel 20:26",
+      "chapter": 20,
+      "verse": 26,
+      "he": "וְלֹא־דִבֶּ֥ר שָׁא֛וּל מְא֖וּמָה בַּיּ֣וֹם הַה֑וּא כִּ֤י אָמַר֙ מִקְרֶ֣ה ה֔וּא בִּלְתִּ֥י טָה֛וֹר ה֖וּא כִּי־לֹ֥א טָהֽוֹר׃",
+      "en": "Word the, lengthy, Word word lengthy. “Word placement,” of lengthy. “He must be impure the the the sentence.”<sup class=\"fn\">n</sup><sup class=\"fn\">x</sup><sup class=\"fn\">y</sup>",
+      "notes": [
+        {
+          "marker": "n",
+          "lemma": "He must be impure and not yet purified",
+          "text": "The. measurement lengthy."
+        },
+        {
+          "marker": "x",
+          "lemma": "word",
+          "text": "The. “a word measurement word words the the filler, word filler word lengthy of word lengthy filler words filler word the the of the filler the word words of the word word.”"
+        },
+        {
+          "marker": "y",
+          "lemma": "word",
+          "text": "The. “a word measurement word words the the filler, word filler word lengthy of word lengthy filler words filler word the the of the filler the word words of the word word.”"
+        }
+      ],
+      "break": "setumah"
+    },
+    {
+      "ref": "I Samuel 20:27",
+      "chapter": 20,
+      "verse": 27,
+      "he": "וַיְהִ֗י מִֽמׇּחֳרַ֤ת הַחֹ֙דֶשׁ֙ הַשֵּׁנִ֔י וַיִּפָּקֵ֖ד מְק֣וֹם דָּוִ֑ד <span class=\"pisqa\"></span> וַיֹּ֤אמֶר שָׁאוּל֙ אֶל־יְהוֹנָתָ֣ן בְּנ֔וֹ מַדּ֜וּעַ לֹא־בָ֧א בֶן־יִשַׁ֛י גַּם־תְּמ֥וֹל גַּם־הַיּ֖וֹם אֶל־הַלָּֽחֶם׃",
+      "en": "The of the the words the the word, the filler the, Lengthy words the filler words. Of Word word of the the Sentence, “The filler the son of Jesse<sup class=\"fn\">o</sup> word of the word something of words?”<sup class=\"fn\">x</sup><sup class=\"fn\">y</sup>",
+      "notes": [
+        {
+          "marker": "o",
+          "lemma": "the son of Jesse",
+          "text": "The word of 10.11."
+        },
+        {
+          "marker": "x",
+          "lemma": "word",
+          "text": "The. “a word measurement word words the the filler, word filler word lengthy of word lengthy filler words filler word the the of the filler the word words of the word word.”"
+        },
+        {
+          "marker": "y",
+          "lemma": "word",
+          "text": "The. “a word measurement word words the the filler, word filler word lengthy of word lengthy filler words filler word the the of the filler the word words of the word word.”"
+        }
+      ],
+      "break": null
+    },
+    {
+      "ref": "I Samuel 20:28",
+      "chapter": 20,
+      "verse": 28,
+      "he": "וַיַּ֥עַן יְהוֹנָתָ֖ן אֶת־שָׁא֑וּל נִשְׁאֹ֨ל נִשְׁאַ֥ל דָּוִ֛ד מֵעִמָּדִ֖י עַד־בֵּ֥ית לָֽחֶם׃",
+      "en": "Sentence sentence Word, “Words filler words of of of of of Something.<sup class=\"fn\">x</sup><sup class=\"fn\">y</sup>",
+      "notes": [
+        {
+          "marker": "x",
+          "lemma": "word",
+          "text": "The. “a word measurement word words the the filler, word filler word lengthy of word lengthy filler words filler word the the of the filler the word words of the word word.”"
+        },
+        {
+          "marker": "y",
+          "lemma": "word",
+          "text": "The. “a word measurement word words the the filler, word filler word lengthy of word lengthy filler words filler word the the of the filler the word words of the word word.”"
+        }
+      ],
+      "break": null
+    },
+    {
+      "ref": "I Samuel 20:29",
+      "chapter": 20,
+      "verse": 29,
+      "he": "וַיֹּ֡אמֶר שַׁלְּחֵ֣נִי נָ֡א כִּ֣י זֶ֩בַח֩ מִשְׁפָּחָ֨ה לָ֜נוּ בָּעִ֗יר וְה֤וּא צִוָּה־לִי֙ אָחִ֔י וְעַתָּ֗ה אִם־מָצָ֤אתִי חֵן֙ בְּעֵינֶ֔יךָ אִמָּ֥לְטָה נָּ֖א וְאֶרְאֶ֣ה אֶת־אֶחָ֑י עַל־כֵּ֣ן לֹא־בָ֔א אֶל־שֻׁלְחַ֖ן הַמֶּֽלֶךְ׃",
+      "en": "Of word, ‘Filler the of of, the of the words of word a filler words of the word the of lengthy the sentence of of of. Of of a words, the of word word of the of the.a Word of the of the the word of the filler words.”<sup class=\"fn\">x</sup><sup class=\"fn\">y</sup>",
+      "notes": [
+        {
+          "marker": "x",
+          "lemma": "word",
+          "text": "The. “a word measurement word words the the filler, word filler word lengthy of word lengthy filler words filler word the the of the filler the word words of the word word.”"
+        },
+        {
+          "marker": "y",
+          "lemma": "word",
+          "text": "The. “a word measurement word words the the filler, word filler word lengthy of word lengthy filler words filler word the the of the filler the word words of the word word.”"
+        }
+      ],
+      "break": "setumah"
+    },
+    {
+      "ref": "I Samuel 20:30",
+      "chapter": 20,
+      "verse": 30,
+      "he": "וַיִּֽחַר־אַ֤ף שָׁאוּל֙ בִּיה֣וֹנָתָ֔ן וַיֹּ֣אמֶר ל֔וֹ בֶּֽן־נַעֲוַ֖ת הַמַּרְדּ֑וּת הֲל֣וֹא יָדַ֗עְתִּי כִּֽי־בֹחֵ֤ר אַתָּה֙ לְבֶן־יִשַׁ֔י לְבׇ֨שְׁתְּךָ֔ וּלְבֹ֖שֶׁת עֶרְוַ֥ת אִמֶּֽךָ׃",
+      "en": "Word word word a word lengthy Sentence. “The the of a perverse, placement words!” of lengthy. “A word word the word word the the of Words—of word words, the of the words of word sentence something!<sup class=\"fn\">x</sup><sup class=\"fn\">y</sup>",
+      "notes": [
+        {
+          "marker": "x",
+          "lemma": "word",
+          "text": "The. “a word measurement word words the the filler, word filler word lengthy of word lengthy filler words filler word the the of the filler the word words of the word word.”"
+        },
+        {
+          "marker": "y",
+          "lemma": "word",
+          "text": "The. “a word measurement word words the the filler, word filler word lengthy of word lengthy filler words filler word the the of the filler the word words of the word word.”"
+        }
+      ],
+      "break": null
+    },
+    {
+      "ref": "I Samuel 20:31",
+      "chapter": 20,
+      "verse": 31,
+      "he": "כִּ֣י כׇל־הַיָּמִ֗ים אֲשֶׁ֤ר בֶּן־יִשַׁי֙ חַ֣י עַל־הָאֲדָמָ֔ה לֹ֥א תִכּ֖וֹן אַתָּ֣ה וּמַלְכוּתֶ֑ךָ וְעַתָּ֗ה שְׁלַ֨ח וְקַ֤ח אֹתוֹ֙ אֵלַ֔י כִּ֥י בֶן־מָ֖וֶת הֽוּא׃",
+      "en": "The of word of the the of Words words of words, lengthy the the word sentence word of filler. The word, word the lengthy of of, the of of filler the words.”<sup class=\"fn\">x</sup><sup class=\"fn\">y</sup>",
+      "notes": [
+        {
+          "marker": "x",
+          "lemma": "word",
+          "text": "The. “a word measurement word words the the filler, word filler word lengthy of word lengthy filler words filler word the the of the filler the word words of the word word.”"
+        },
+        {
+          "marker": "y",
+          "lemma": "word",
+          "text": "The. “a word measurement word words the the filler, word filler word lengthy of word lengthy filler words filler word the the of the filler the word words of the word word.”"
+        }
+      ],
+      "break": "setumah"
+    },
+    {
+      "ref": "I Samuel 20:32",
+      "chapter": 20,
+      "verse": 32,
+      "he": "וַיַּ֙עַן֙ יְה֣וֹנָתָ֔ן אֶת־שָׁא֖וּל אָבִ֑יו וַיֹּ֧אמֶר אֵלָ֛יו לָ֥מָּה יוּמַ֖ת מֶ֥ה עָשָֽׂה׃",
+      "en": "The Sentence words of the word of his father,<sup class=\"fn\">p</sup> “The filler of of the of words? Word the of word?”<sup class=\"fn\">x</sup><sup class=\"fn\">y</sup>",
+      "notes": [
+        {
+          "marker": "p",
+          "lemma": "his father",
+          "text": "The. “the filler Word.”"
+        },
+        {
+          "marker": "x",
+          "lemma": "word",
+          "text": "The. “a word measurement word words the the filler, word filler word lengthy of word lengthy filler words filler word the the of the filler the word words of the word word.”"
+        },
+        {
+          "marker": "y",
+          "lemma": "word",
+          "text": "The. “a word measurement word words the the filler, word filler word lengthy of word lengthy filler words filler word the the of the filler the word words of the word word.”"
+        }
+      ],
+      "break": null
+    },
+    {
+      "ref": "I Samuel 20:33",
+      "chapter": 20,
+      "verse": 33,
+      "he": "וַיָּ֨טֶל שָׁא֧וּל אֶֽת־הַחֲנִ֛ית עָלָ֖יו לְהַכֹּת֑וֹ וַיֵּ֙דַע֙ יְה֣וֹנָתָ֔ן כִּי־כָ֥לָה הִ֛יא מֵעִ֥ם אָבִ֖יו לְהָמִ֥ית אֶת־דָּוִֽד׃",
+      "en": "Of word, Word threw<sup class=\"fn\">p</sup> the words of the of filler the word; the Sentence sentence word the filler the placement of of word word Words.<sup class=\"fn\">x</sup><sup class=\"fn\">y</sup>",
+      "notes": [
+        {
+          "marker": "p",
+          "lemma": "threw",
+          "text": "The 18.11 the word."
+        },
+        {
+          "marker": "x",
+          "lemma": "word",
+          "text": "The. “a word measurement word words the the filler, word filler word lengthy of word lengthy filler words filler word the the of the filler the word words of the word word.”"
+        },
+        {
+          "marker": "y",
+          "lemma": "word",
+          "text": "The. “a word measurement word words the the filler, word filler word lengthy of word lengthy filler words filler word the the of the filler the word words of the word word.”"
+        }
+      ],
+      "break": "setumah"
+    },
+    {
+      "ref": "I Samuel 20:34",
+      "chapter": 20,
+      "verse": 34,
+      "he": "וַיָּ֧קׇם יְהוֹנָתָ֛ן מֵעִ֥ם הַשֻּׁלְחָ֖ן בׇּחֳרִי־אָ֑ף וְלֹֽא־אָכַ֞ל בְּיוֹם־הַחֹ֤דֶשׁ הַשֵּׁנִי֙ לֶ֔חֶם כִּ֤י נֶעְצַב֙ אֶל־דָּוִ֔ד כִּ֥י הִכְלִמ֖וֹ אָבִֽיו׃",
+      "en": "Sentence word word the words of a word. Of the of word of the filler the of the the word, lengthy of the lengthy words Words, the lengthy the filler the placement the.<sup class=\"fn\">x</sup><sup class=\"fn\">y</sup>",
+      "notes": [
+        {
+          "marker": "x",
+          "lemma": "word",
+          "text": "The. “a word measurement word words the the filler, word filler word lengthy of word lengthy filler words filler word the the of the filler the word words of the word word.”"
+        },
+        {
+          "marker": "y",
+          "lemma": "word",
+          "text": "The. “a word measurement word words the the filler, word filler word lengthy of word lengthy filler words filler word the the of the filler the word words of the word word.”"
+        }
+      ],
+      "break": "setumah"
+    },
+    {
+      "ref": "I Samuel 20:35",
+      "chapter": 20,
+      "verse": 35,
+      "he": "וַיְהִ֣י בַבֹּ֔קֶר וַיֵּצֵ֧א יְהוֹנָתָ֛ן הַשָּׂדֶ֖ה לְמוֹעֵ֣ד דָּוִ֑ד וְנַ֥עַר קָטֹ֖ן עִמּֽוֹ׃",
+      "en": "Of the lengthy, Sentence word the word the word the the lengthy word Words, stretching of a young boy.<sup class=\"fn\">q</sup><sup class=\"fn\">x</sup><sup class=\"fn\">y</sup>",
+      "notes": [
+        {
+          "marker": "q",
+          "lemma": "young boy",
+          "text": "Of “something.”"
+        },
+        {
+          "marker": "x",
+          "lemma": "word",
+          "text": "The. “a word measurement word words the the filler, word filler word lengthy of word lengthy filler words filler word the the of the filler the word words of the word word.”"
+        },
+        {
+          "marker": "y",
+          "lemma": "word",
+          "text": "The. “a word measurement word words the the filler, word filler word lengthy of word lengthy filler words filler word the the of the filler the word words of the word word.”"
+        }
+      ],
+      "break": null
+    },
+    {
+      "ref": "I Samuel 20:36",
+      "chapter": 20,
+      "verse": 36,
+      "he": "וַיֹּ֣אמֶר לְנַֽעֲר֔וֹ רֻ֗ץ מְצָ֥א נָא֙ אֶת־הַ֣חִצִּ֔ים אֲשֶׁ֥ר אָנֹכִ֖י מוֹרֶ֑ה הַנַּ֣עַר רָ֔ץ וְהוּא־יָרָ֥ה הַחֵ֖צִי לְהַעֲבִרֽוֹ׃",
+      "en": "Of word of the the, “The words the word the filler word A words.” The of the the the, of word the filler word the.<sup class=\"fn\">x</sup><sup class=\"fn\">y</sup>",
+      "notes": [
+        {
+          "marker": "x",
+          "lemma": "word",
+          "text": "The. “a word measurement word words the the filler, word filler word lengthy of word lengthy filler words filler word the the of the filler the word words of the word word.”"
+        },
+        {
+          "marker": "y",
+          "lemma": "word",
+          "text": "The. “a word measurement word words the the filler, word filler word lengthy of word lengthy filler words filler word the the of the filler the word words of the word word.”"
+        }
+      ],
+      "break": null
+    },
+    {
+      "ref": "I Samuel 20:37",
+      "chapter": 20,
+      "verse": 37,
+      "he": "וַיָּבֹ֤א הַנַּ֙עַר֙ עַד־מְק֣וֹם הַחֵ֔צִי אֲשֶׁ֥ר יָרָ֖ה יְהוֹנָתָ֑ן וַיִּקְרָ֨א יְהוֹנָתָ֜ן אַחֲרֵ֤י הַנַּ֙עַר֙ וַיֹּ֔אמֶר הֲל֥וֹא הַחֵ֖צִי מִמְּךָ֥ וָהָֽלְאָה׃",
+      "en": "Word the the word of the words words the filler word of Sentence the filler, Sentence filler the of the the, “The, the filler the filler the!”<sup class=\"fn\">x</sup><sup class=\"fn\">y</sup>",
+      "notes": [
+        {
+          "marker": "x",
+          "lemma": "word",
+          "text": "The. “a word measurement word words the the filler, word filler word lengthy of word lengthy filler words filler word the the of the filler the word words of the word word.”"
+        },
+        {
+          "marker": "y",
+          "lemma": "word",
+          "text": "The. “a word measurement word words the the filler, word filler word lengthy of word lengthy filler words filler word the the of the filler the word words of the word word.”"
+        }
+      ],
+      "break": null
+    },
+    {
+      "ref": "I Samuel 20:38",
+      "chapter": 20,
+      "verse": 38,
+      "he": "וַיִּקְרָ֤א יְהֽוֹנָתָן֙ אַחֲרֵ֣י הַנַּ֔עַר מְהֵרָ֥ה ח֖וּשָׁה אַֽל־תַּעֲמֹ֑ד וַיְלַקֵּ֞ט נַ֤עַר יְהֽוֹנָתָן֙ אֶת־<span class=\"mam-kq\"><span class=\"mam-kq-q\">[הַ֣חִצִּ֔ים]</span> <span class=\"mam-kq-k\">(החצי)</span></span> וַיָּבֹ֖א אֶל־אֲדֹנָֽיו׃",
+      "en": "The Sentence filler words the the, “Words, words of. Words word!” Of Placement the sentence the filler the word word of the filler.—<sup class=\"fn\">x</sup><sup class=\"fn\">y</sup>",
+      "notes": [
+        {
+          "marker": "x",
+          "lemma": "word",
+          "text": "The. “a word measurement word words the the filler, word filler word lengthy of word lengthy filler words filler word the the of the filler the word words of the word word.”"
+        },
+        {
+          "marker": "y",
+          "lemma": "word",
+          "text": "The. “a word measurement word words the the filler, word filler word lengthy of word lengthy filler words filler word the the of the filler the word words of the word word.”"
+        }
+      ],
+      "break": null
+    },
+    {
+      "ref": "I Samuel 20:39",
+      "chapter": 20,
+      "verse": 39,
+      "he": "וְהַנַּ֖עַר לֹא־יָדַ֣ע מְא֑וּמָה אַ֤ךְ יְהֽוֹנָתָן֙ וְדָוִ֔ד יָדְע֖וּ אֶת־הַדָּבָֽר׃",
+      "en": "The the something lengthy; word Sentence the Words word the stretching.—<sup class=\"fn\">x</sup><sup class=\"fn\">y</sup>",
+      "notes": [
+        {
+          "marker": "x",
+          "lemma": "word",
+          "text": "The. “a word measurement word words the the filler, word filler word lengthy of word lengthy filler words filler word the the of the filler the word words of the word word.”"
+        },
+        {
+          "marker": "y",
+          "lemma": "word",
+          "text": "The. “a word measurement word words the the filler, word filler word lengthy of word lengthy filler words filler word the the of the filler the word words of the word word.”"
+        }
+      ],
+      "break": "setumah"
+    },
+    {
+      "ref": "I Samuel 20:40",
+      "chapter": 20,
+      "verse": 40,
+      "he": "וַיִּתֵּ֤ן יְהֽוֹנָתָן֙ אֶת־כֵּלָ֔יו אֶל־הַנַּ֖עַר אֲשֶׁר־ל֑וֹ וַיֹּ֣אמֶר ל֔וֹ לֵ֖ךְ הָבֵ֥יא הָעִֽיר׃",
+      "en": "Sentence filler the word of the the the word the, “Word words word of the word.”<sup class=\"fn\">x</sup><sup class=\"fn\">y</sup>",
+      "notes": [
+        {
+          "marker": "x",
+          "lemma": "word",
+          "text": "The. “a word measurement word words the the filler, word filler word lengthy of word lengthy filler words filler word the the of the filler the word words of the word word.”"
+        },
+        {
+          "marker": "y",
+          "lemma": "word",
+          "text": "The. “a word measurement word words the the filler, word filler word lengthy of word lengthy filler words filler word the the of the filler the word words of the word word.”"
+        }
+      ],
+      "break": null
+    },
+    {
+      "ref": "I Samuel 20:41",
+      "chapter": 20,
+      "verse": 41,
+      "he": "הַנַּ֘עַר֮ בָּא֒ וְדָוִ֗ד קָ֚ם מֵאֵ֣צֶל הַנֶּ֔גֶב וַיִּפֹּ֨ל לְאַפָּ֥יו אַ֛רְצָה וַיִּשְׁתַּ֖חוּ שָׁלֹ֣שׁ פְּעָמִ֑ים וַֽיִּשְּׁק֣וּ&thinsp;<b>׀</b> אִ֣ישׁ אֶת־רֵעֵ֗הוּ וַיִּבְכּוּ֙ אִ֣ישׁ אֶת־רֵעֵ֔הוּ עַד־דָּוִ֖ד הִגְדִּֽיל׃",
+      "en": "Word the the the words, Words emerged from his concealment at<sup class=\"fn\">r</sup> the Negeb.<sup class=\"fn\">s</sup> Of words lengthy word word of the filler the words the words words. Word filler word words the word sentence; David wept the longer.<sup class=\"fn\">x</sup><sup class=\"fn\">y</sup>",
+      "notes": [
+        {
+          "marker": "r",
+          "lemma": "emerged from his concealment at",
+          "text": "The. “word of word filler.”"
+        },
+        {
+          "marker": "s",
+          "lemma": "the Negeb",
+          "text": "Something word the “Word Words,” a. 19."
+        },
+        {
+          "marker": "x",
+          "lemma": "word",
+          "text": "The. “a word measurement word words the the filler, word filler word lengthy of word lengthy filler words filler word the the of the filler the word words of the word word.”"
+        },
+        {
+          "marker": "y",
+          "lemma": "word",
+          "text": "The. “a word measurement word words the the filler, word filler word lengthy of word lengthy filler words filler word the the of the filler the word words of the word word.”"
+        }
+      ],
+      "break": null
+    },
+    {
+      "ref": "I Samuel 20:42",
+      "chapter": 20,
+      "verse": 42,
+      "he": "וַיֹּ֧אמֶר יְהוֹנָתָ֛ן לְדָוִ֖ד לֵ֣ךְ לְשָׁל֑וֹם אֲשֶׁר֩ נִשְׁבַּ֨עְנוּ שְׁנֵ֜ינוּ אֲנַ֗חְנוּ בְּשֵׁ֤ם יְהֹוָה֙ לֵאמֹ֔ר יְהֹוָ֞ה יִהְיֶ֣ה&thinsp;<b>׀</b> בֵּינִ֣י וּבֵינֶ֗ךָ וּבֵ֥ין זַרְעִ֛י וּבֵ֥ין זַרְעֲךָ֖ עַד־עוֹלָֽם׃",
+      "en": "Sentence word of Words, “Of of words! The of the word words of word words of the word of A<small>Of</small>: ‘The A<small>Of</small> of [lengthy] lengthy the the of, the lengthy word something the word, lengthy!a”<sup class=\"fn\">x</sup><sup class=\"fn\">y</sup>",
+      "notes": [
+        {
+          "marker": "x",
+          "lemma": "word",
+          "text": "The. “a word measurement word words the the filler, word filler word lengthy of word lengthy filler words filler word the the of the filler the word words of the word word.”"
+        },
+        {
+          "marker": "y",
+          "lemma": "word",
+          "text": "The. “a word measurement word words the the filler, word filler word lengthy of word lengthy filler words filler word the the of the filler the word words of the word word.”"
+        }
+      ],
+      "break": "petuchah"
+    }
+  ],
+  "glosses": [
+    {
+      "en": "you will be missed",
+      "status": "approved",
+      "verse": 18,
+      "lemma": "וְנִפְקַ֕דְתָּ",
+      "text": "<i>nifkadta</i>, “you will be missed”; the same root as <i>yippaked</i>, “remains vacant,” and again in vv. 25 and 27. The empty seat is the plot."
+    },
+    {
+      "en": "the Ezel stone",
+      "status": "approved",
+      "verse": 19,
+      "lemma": "הָאָֽזֶל",
+      "text": "<i>Ezel</i>: a place-name, or “the stone of going,” a wayside marker. Septuagint: “that mound.” Compare v. 41."
+    },
+    {
+      "en": "He must be impure",
+      "status": "approved",
+      "verse": 26,
+      "lemma": "מִקְרֶ֣ה",
+      "text": "<i>mikreh</i>, “a chance happening”: the Torah’s euphemism for a nocturnal emission (Deut. 23:11)."
+    },
+    {
+      "en": "perverse",
+      "status": "approved",
+      "verse": 30,
+      "lemma": "נַעֲוַ֖ת",
+      "text": "<i>na‘avat</i>, “perverse, twisted”: a rare form. The insult reaches Jonathan through his mother, Ahinoam (14:50)."
+    },
+    {
+      "en": "David wept the longer",
+      "status": "approved",
+      "verse": 41,
+      "lemma": "הִגְדִּֽיל",
+      "text": "<i>higdil</i>, literally “made great,” hence “wept the longer.” Septuagint: “until a great finish.” Often emended."
+    }
+  ],
+  "commentary": [
+    {
+      "verse": 18,
+      "register": "traditional",
+      "source": "Talmud, Megillah 31a",
+      "lemma": "Tomorrow will be the new moon",
+      "text": "When the New Moon occurs on Shabbat, they read as the <i>haftarah</i> “And it shall come to pass that every New Moon” (Isaiah 66). When it occurs on Sunday, on the previous day they read as the <i>haftarah</i> “And Jonathan said to him: Tomorrow is the New Moon.”",
+      "sourceRef": "Megillah 31a",
+      "translation": "William Davidson Talmud, abridged",
+      "status": "approved",
+      "order": 1
+    },
+    {
+      "verse": 18,
+      "register": "traditional",
+      "source": "Radak",
+      "lemma": "you will be missed",
+      "text": "You will be remembered: my father will recall you when your seat stands empty of the one who sits in it. <i>Yippaked</i> means lacking, as in “not one of us is missing” (Numbers 31:49). Targum Jonathan: “you will be sought, for the place where you recline will be empty.”",
+      "sourceRef": "Radak on I Samuel 20:18",
+      "translation": "claude",
+      "status": "approved",
+      "order": 2
+    },
+    {
+      "verse": 18,
+      "register": "traditional",
+      "source": "Abarbanel",
+      "lemma": "Tomorrow will be the new moon",
+      "text": "Jonathan answers both things David may have meant by “who will tell me?” (v. 10). If David meant “will you tell me the truth,” Jonathan swears by the God of Israel that he will sound out his father. If he meant “how will you tell me without anyone noticing,” Jonathan answers: tomorrow is the new moon, everyone who eats at the king’s table comes on the festival, and your empty seat will speak for you.",
+      "sourceRef": "Abarbanel on I Samuel 20:18",
+      "translation": "claude",
+      "kind": "abridged",
+      "status": "approved",
+      "order": 3
+    },
+    {
+      "verse": 19,
+      "register": "traditional",
+      "source": "Rashi",
+      "lemma": "the Ezel stone",
+      "text": "A stone that was a landmark for travelers; <i>ha-ozel</i>, “those who go.” So Targum Jonathan renders it <i>even ata</i>, “the stone that served as a sign.”",
+      "sourceRef": "Rashi on I Samuel 20:19",
+      "translation": "Metsudah translation",
+      "status": "approved",
+      "order": 1
+    },
+    {
+      "verse": 19,
+      "register": "traditional",
+      "source": "Metzudat David",
+      "lemma": "the day after tomorrow",
+      "text": "All three days, today, tomorrow, and the day after, go well down into the valley and stay hidden where you hid “on the day of the deed,” the day Saul swore to Jonathan that he would not kill you (19:6), for you were hidden in that place then too.",
+      "sourceRef": "Metzudat David on I Samuel 20:19",
+      "translation": "claude",
+      "status": "approved",
+      "order": 2
+    },
+    {
+      "works": [
+        "McCarter 1980",
+        "Alter 1999"
+      ],
+      "verse": 23,
+      "register": "critical",
+      "source": "Covenant",
+      "lemma": "the promise we made to each other",
+      "text": "The oath of vv. 12–17 and 42 is the legal spine of the David story. It explains why David later spares and feeds Jonathan’s son Mephibosheth (2 Samuel 9) and gives him grounds to execute other Saulides (2 Samuel 21) without breaking faith. For a narrator defending David against the charge of usurpation, a covenant freely offered by the heir is the strongest possible evidence.",
+      "cites": "P. Kyle McCarter Jr., <i>I Samuel</i>, Anchor Bible (1980); Robert Alter, <i>The David Story</i> (1999)",
+      "status": "proposed",
+      "order": 1
+    },
+    {
+      "verse": 26,
+      "register": "modern",
+      "source": "Steinsaltz",
+      "lemma": "He must be impure",
+      "text": "Due to a nocturnal emission or some other reason; surely he did not come to eat from the sacred offering as he has not yet ritually purified himself. This common form of impurity would be the most obvious explanation for an unexpected absence. Saul assumed David would come the next day, after immersing, in accordance with Deuteronomy 23:11–12.",
+      "sourceRef": "Steinsaltz on I Samuel 20:26",
+      "translation": "Steinsaltz Tanakh, abridged",
+      "status": "approved",
+      "order": 1
+    },
+    {
+      "works": [
+        "McCarter 1980",
+        "JSB 2014"
+      ],
+      "verse": 26,
+      "register": "critical",
+      "source": "The new-moon feast",
+      "lemma": "Saul said nothing",
+      "text": "Saul’s first explanation is cultic, not political. The meal is a <i>zevach</i>, a sacrificial feast (v. 29), and whoever eats of it must be pure (Leviticus 7:20–21). This scene is the Bible’s fullest glimpse of the pre-exilic new-moon festival as a court occasion, with a fixed seating order and a two-day observance (vv. 27, 34) that may reflect uncertainty about when the month began.",
+      "cites": "McCarter, <i>I Samuel</i>; <i>The Jewish Study Bible</i>, 2nd ed. (2014)",
+      "status": "approved",
+      "order": 2
+    },
+    {
+      "verse": 30,
+      "register": "traditional",
+      "source": "Rashi",
+      "lemma": "son of a perverse, rebellious woman",
+      "text": "<i>Na‘avat</i> is from <i>na</i>, to stray and wander: a gadding woman. Another explanation: when the Benjaminites seized the girls of Shiloh who came out to dance in the vineyards (Judges 21), Saul was bashful and would not seize one, until she herself came, behaving brazenly, and pursued him.",
+      "sourceRef": "Rashi on I Samuel 20:30",
+      "translation": "Metsudah translation",
+      "status": "approved",
+      "order": 1
+    },
+    {
+      "verse": 30,
+      "register": "traditional",
+      "source": "Targum Jonathan",
+      "lemma": "son of a perverse, rebellious woman",
+      "text": "“You son of a perverse and strongly rebellious woman! Do I not know that you love the son of Jesse to your own shame and to the shame of your mother’s nakedness?”",
+      "sourceRef": "Targum Jonathan on I Samuel 20:30",
+      "translation": "trans. E. van Staalduine-Sulman (Brill, 2002)",
+      "status": "approved",
+      "order": 2
+    },
+    {
+      "verse": 30,
+      "register": "traditional",
+      "source": "Malbim",
+      "lemma": "rebellious",
+      "text": "The phrase names rebellion in the abstract. A servant may rebel against his master to throw off the yoke or to reign in his place; a son does not rebel against his father in order to enthrone a stranger. If it happens, it is a rebellion of madness and twisted reason. “I know you have chosen the son of Jesse” for this very end; remember that it is “to your shame and the shame of your mother’s nakedness,” for the kingship will pass from her line to a stranger.",
+      "sourceRef": "Malbim on I Samuel 20:30",
+      "translation": "claude",
+      "status": "approved",
+      "order": 3
+    },
+    {
+      "verse": 30,
+      "register": "modern",
+      "source": "Steinsaltz",
+      "lemma": "Saul flew into a rage",
+      "text": "Saul cursed and shamed Yehonatan’s mother. He further sharpened his outburst, employing coarse, disrespectful language: you prefer that David shall become king, to your own shame.",
+      "sourceRef": "Steinsaltz on I Samuel 20:30",
+      "translation": "Steinsaltz Tanakh, abridged",
+      "status": "approved",
+      "order": 4
+    },
+    {
+      "works": [
+        "McCarter 1980",
+        "Alter 1999"
+      ],
+      "verse": 30,
+      "verseEnd": 31,
+      "register": "critical",
+      "source": "Saul’s concession",
+      "lemma": "neither you nor your kingship will be secure",
+      "text": "The insult reaches Jonathan through his mother, a pattern of abuse attested across the ancient Near East; “your mother’s nakedness” borrows the vocabulary of the incest laws (Leviticus 18:7–8), as if Jonathan’s loyalty exposed the royal house itself. Then Saul says aloud what the narrator has been arguing since chapter 16: as long as David lives, Jonathan will never reign. Critics read vv. 30–31 as the thesis of the History of David’s Rise, placed in the mouth of its chief opponent.",
+      "cites": "McCarter, <i>I Samuel</i>; Alter, <i>The David Story</i>",
+      "status": "approved",
+      "order": 5
+    },
+    {
+      "verse": 41,
+      "register": "traditional",
+      "source": "Rashi",
+      "lemma": "David wept the longer",
+      "text": "Until David exceeded: he wept more. Ralbag reads it as “more than was fitting.” David wept more than Jonathan because Jonathan could go home, while David now had to flee from Saul, who sought his life.",
+      "sourceRef": "Rashi on I Samuel 20:41",
+      "translation": "Metsudah translation, with its note",
+      "status": "approved",
+      "order": 1
+    },
+    {
+      "verse": 41,
+      "register": "modern",
+      "source": "Steinsaltz",
+      "lemma": "They kissed each other and wept together",
+      "text": "They knew they would probably not meet again. Yehonatan loved David no less than David loved Yehonatan; but David knew that from then on he was doomed to a life of hardship, persecution, and suffering.",
+      "sourceRef": "Steinsaltz on I Samuel 20:41",
+      "translation": "Steinsaltz Tanakh, abridged",
+      "status": "approved",
+      "order": 2
+    },
+    {
+      "works": [
+        "McCarter 1980",
+        "Tov 2012"
+      ],
+      "verse": 41,
+      "register": "critical",
+      "source": "A damaged verse",
+      "lemma": "the Negeb",
+      "text": "The Hebrew is in trouble here. “The Negeb” (the southern desert) makes no sense in a field outside Gibeah and is almost certainly a corruption of the “Ezel” of v. 19, as the JPS note allows. “David wept the longer” translates a phrase the Greek read differently. Samuel is the Hebrew Bible’s most damaged book textually, and 4QSamᵃ from Qumran often sides with the Greek against the received text.",
+      "cites": "McCarter, <i>I Samuel</i>; Emanuel Tov, <i>Textual Criticism of the Hebrew Bible</i>, 3rd ed. (2012)",
+      "status": "approved",
+      "order": 3
+    },
+    {
+      "verse": 42,
+      "register": "modern",
+      "source": "Steinsaltz",
+      "lemma": "Go in peace",
+      "text": "The haftarah closes on the oath rather than on the parting, so that what the congregation hears last is the covenant “between your offspring and mine, forever.” Chapter 21 opens with David on the road.",
+      "sourceRef": "Steinsaltz on I Samuel 20:42",
+      "translation": "paraphrase",
+      "status": "proposed",
+      "order": 1
+    }
+  ],
+  "glossary": [
+    {
+      "status": "proposed",
+      "term": "Abner",
+      "he": "אַבְנֵר",
+      "text": "Saul’s cousin and the commander of his army (14:50). He sits at the king’s side at the feast and later becomes a power broker between the houses of Saul and David."
+    },
+    {
+      "status": "proposed",
+      "term": "Bethlehem",
+      "he": "בֵּית לָחֶם",
+      "text": "David’s hometown in Judah, a few miles south of Jerusalem. The “family feast” there is David’s alibi, or Jonathan’s invention."
+    },
+    {
+      "status": "proposed",
+      "term": "Ezel stone",
+      "he": "הָאֶבֶן הָאָזֶל",
+      "text": "A landmark stone in the open country outside Gibeah, the agreed hiding place. See the margin note at v. 19."
+    },
+    {
+      "status": "proposed",
+      "term": "Gibeah",
+      "he": "גִּבְעָה",
+      "text": "Saul’s capital, in Benjamin just north of Jerusalem; the unnamed “town” of vv. 40–41."
+    },
+    {
+      "status": "proposed",
+      "term": "Jesse",
+      "he": "יִשַׁי",
+      "text": "David’s father. Saul never says David’s name in this chapter, only “the son of Jesse,” a slight that the narrator lets us hear."
+    },
+    {
+      "status": "proposed",
+      "term": "Jonathan",
+      "he": "יְהוֹנָתָן",
+      "text": "Saul’s eldest son and heir, a war hero (chapters 13–14), bound to David by covenant since 18:3."
+    },
+    {
+      "status": "proposed",
+      "term": "New moon",
+      "he": "חֹדֶשׁ",
+      "text": "Rosh Chodesh, the first day of the lunar month, marked by sacrifices (Numbers 28:11–15) and here by a two-day royal feast."
+    },
+    {
+      "status": "proposed",
+      "term": "Negeb",
+      "he": "נֶגֶב",
+      "text": "“The south,” the desert region of Judah. In v. 41 the word is probably a scribal error for Ezel."
+    }
+  ],
+  "credits": {
+    "signoff": "I chose and approved every entry on this sheet; summaries marked as such were drafted with Claude and read before printing. Tell me what I got wrong.",
+    "issuedBy": "Central Reform Congregation",
+    "editor": "Rabbi Daniel Bogard"
+  },
+  "series": {
+    "name": "Torah from Scratch",
+    "year": "5787",
+    "number": 3
+  },
+  "openingNote": {
+    "calendar": "Read in place of the usual haftarah for Bereshit, Isaiah 42:5–43:10. When Rosh Chodesh falls on a Sunday, the Shabbat before it takes this reading (Megillah 31a): its first words announce a new moon tomorrow. This Shabbat is 29 Tishrei, the eve of Rosh Chodesh Cheshvan.",
+    "setting": [
+      "Samuel belongs to the Former Prophets, a history most scholars read as a Deuteronomistic work of the late seventh and sixth centuries BCE, built from older sources. One of them, the History of David’s Rise (1 Samuel 16 to 2 Samuel 5), argues scene by scene that David did not seize Saul’s throne but was given it, and that Saul’s own son recognized him first. Our chapter is the hinge of that argument: Jonathan, the heir, binds himself to David by covenant and is cursed by his father for it.",
+      "The setting is the new-moon feast, a court festival older than the written Torah’s calendar, with a fixed seating order and a requirement of ritual purity. The Hebrew of Samuel is the most damaged in the Bible; the Greek and the Qumran scroll preserve readings the Masoretic Text has lost, and the margin notes flag where this week’s verses are read differently."
+    ],
+    "status": "approved"
+  },
+  "nextWeek": null
+}

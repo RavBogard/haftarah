@@ -21,7 +21,9 @@ export function migrate(d, number) {
   out.nextWeek = d.nextWeek ?? null;
   out.haftarah = { ...d.haftarah }; delete out.haftarah.whyThisHaftarah;
   delete out.questions; delete out.context; delete out.parashahConnection;
-  out.glosses = (d.glosses || []).map(g => ({ en: "", ...g }));
+  // Every printable item carries a status, so the gate can see it; anything unmarked is proposed.
+  out.glosses = (d.glosses || []).map(g => ({ en: "", status: "proposed", ...g }));
+  out.glossary = (d.glossary || []).map(t => ({ status: "proposed", ...t }));
   out.commentary = (d.commentary || []).map(e => e.register === "critical" ? { works: [], ...e } : e);
   const credits = { ...d.credits }; delete credits.note;
   out.credits = { signoff: SIGNOFF, ...credits };

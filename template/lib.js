@@ -46,10 +46,17 @@
     return s;
   }
 
-  // A JPS note that only points elsewhere in the book is dead on a six-page handout.
-  function isDeadRef(text) {
+  // A JPS note that only points elsewhere in the book is dead on a handout, unless the verse it
+  // points to is part of this week's reading (range: { chapter, verse, endChapter, endVerse }).
+  function isDeadRef(text, range) {
     const t = String(text == null ? "" : text).replace(/<[^>]+>/g, "").trim();
-    return /^(See|Cf\.?|Compare)\b/i.test(t) && /\b\d+\.\d+/.test(t) && !/[“"]/.test(t) && !/\bv{1,2}\./i.test(t);
+    const pointer = /^(See|Cf\.?|Compare)\b/i.test(t) && /\b\d+\.\d+/.test(t) && !/[“"]/.test(t) && !/\bv{1,2}\./i.test(t);
+    if (!pointer) return false;
+    if (!range) return true;
+    const refs = [...t.matchAll(/\b(\d{1,3})\.(\d{1,3})(?!\d)/g)].map(m => [Number(m[1]), Number(m[2])]);
+    const after = ([c, v]) => c > range.chapter || (c === range.chapter && v >= range.verse);
+    const before = ([c, v]) => c < range.endChapter || (c === range.endChapter && v <= range.endVerse);
+    return !refs.some(r => after(r) && before(r));
   }
 
   // JPS writes 19.2; the sheet writes 19:2. Years (four digits) are not refs.
@@ -62,18 +69,20 @@
   function assignKeys(verses, glosses, isVisible) {
     let i = 0;
     const sequence = [];
+    const first = verses[0], last = verses[verses.length - 1];
+    const range = first ? { chapter: first.chapter, verse: first.verse, endChapter: last.chapter, endVerse: last.verse } : null;
     const out = verses.map(v => {
       let en = String(v.en == null ? "" : v.en);
       const keys = [];
       for (const n of (v.notes || [])) {
         const sup = `<sup class="fn">${n.marker}</sup>`;
-        if (isDeadRef(n.text)) { en = en.replace(sup, ""); continue; }
+        if (isDeadRef(n.text, range)) { en = en.replace(sup, ""); continue; }
         const key = letterFor(i++);
         sequence.push(key);
         en = en.replace(sup, `<sup class="fn">@@${key}@@</sup>`);
         keys.push({ key, kind: "jps", lemma: n.lemma || "", text: normalizeRefs(n.text), verse: v.verse, chapter: v.chapter });
       }
-      const mine = (glosses || []).filter(g => g.verse === v.verse && (g.chapter == null || g.chapter === v.chapter) && (g.status ? isVisible(g) : true));
+      const mine = (glosses || []).filter(g => g.verse === v.verse && (g.chapter == null || g.chapter === v.chapter) && isVisible(g));
       for (const g of mine) {
         const key = letterFor(i++);
         sequence.push(key);

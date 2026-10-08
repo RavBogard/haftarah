@@ -323,6 +323,7 @@ html, body {
 .note .he-lemma { font-family: var(--hebrew); font-size: 1.12em; direction: rtl; unicode-bidi: isolate; }
 .note .tail { color: var(--ink-2); font-size: 0.85em; letter-spacing: 0.04em; }
 .note.proposed { background: #f3eced; outline: 2pt solid #f3eced; }
+.verse-row.synthetic { grid-column: 1 / -1; height: 0; margin: 0; }   /* anchors carried notes on a page with no verse left */
 
 /* ---- Apparatus ------------------------------------------------------------- */
 
@@ -408,6 +409,7 @@ html, body {
 }
 .glossary p { margin: 0 0 4pt; break-inside: avoid; text-indent: -10pt; padding-left: 10pt; }
 .glossary .term { font-weight: 600; }
+.glossary p.proposed { background: #f3eced; outline: 2pt solid #f3eced; }
 .glossary .term-he { font-family: var(--hebrew); font-size: 1.1em; margin-left: 4pt; direction: rtl; unicode-bidi: isolate; }
 
 .prose {

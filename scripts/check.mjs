@@ -52,10 +52,13 @@ export function analyse(dom) {
       offpage: Number(attr(t, "offpage") || 0), overflow: attr(t, "overflow") === "true", incipit: attr(t, "incipit"), voices: attr(t, "voices"),
     })),
     brInEnglish: (dom.match(/<div class="en[^"]*">[\s\S]*?<div class="gut"/g) || []).filter(s => /<br/i.test(s)).length,
+    // The keys of the margin notes actually printed on the pages (the measuring stage is not a page).
+    noteKeys: dom.split(/<section class="page/).slice(1).flatMap(pg => [...pg.matchAll(/<p class="note[^"]*"[^>]*>\s*<span class="k">([a-z]+)<\/span>/g)].map(m => m[1])),
   };
   const problems = [];
   const textPages = summary.page.filter(p => p.kind === "text");
-  const lastText = textPages[textPages.length - 1];
+  // The last page that holds a verse; pages after it carry only margin notes and the end matter.
+  const lastText = [...textPages].reverse().find(p => p.rows > 0) || textPages[textPages.length - 1];
   summary.page.forEach((p, i) => {
     const n = i + 1;
     if (p.overflow) problems.push(`page ${n}: content overflows the page`);
@@ -71,6 +74,12 @@ export function analyse(dom) {
   const expect = seq.map((_, i) => letterFor(i));
   if (seq.join() !== expect.join()) problems.push(`key series is ${seq.join("")} not ${expect.join("")}`);
   if (new Set(seq).size !== seq.length) problems.push("duplicate margin keys");
+  // Every key assigned in the English must answer to one printed margin note, and only one.
+  const printed = summary.noteKeys;
+  const missing = seq.filter(k => !printed.includes(k));
+  if (missing.length) problems.push(`margin notes assigned but not printed: ${missing.join(", ")}`);
+  const twice = [...new Set(printed.filter((k, i) => printed.indexOf(k) !== i))];
+  if (twice.length) problems.push(`margin note printed twice: ${twice.join(", ")}`);
   if (summary.page[0]?.kind !== "front") problems.push("page 1 is not the front page");
   if (summary.page[1] && summary.page[1].kind !== "text") problems.push("the text does not start on page 2");
   return { summary, problems };

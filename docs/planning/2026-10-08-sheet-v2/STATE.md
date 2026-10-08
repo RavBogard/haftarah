@@ -10,6 +10,9 @@ Plan 2 (to write after plan 1 ships): repo history without `weeks/`, Drive folde
 - GATE: the Isaiah entry "Egypt as ransom" (43:3) is set back to `proposed` during migration because its citation changes from "a common reading" to a named work — proceeded because the gate rule says nothing prints with a changed citation until Daniel has seen it; the Isaiah sheet is a draft kept in the working folder only.
 - GATE: the Isaiah entry "The Mission of Israel" (42:6) moves from register `reference` to `critical` with `works: ["Kohler 1918"]` — proceeded because rule one requires every non-critical entry to be a Sefaria text by ref, and Kohler is not on Sefaria; the diamond siglum stays available for true Sefaria reference works.
 
+- GATE: Rule 3 bounded by the spec's 0.5in band (a short verse stays and its entries follow under a page pointer rather than leaving up to 1.2in of white) — proceeded because the spec states the band and the plan's 1.2in was its own argument; Daniel can flip one constant.
+- GATE: status-less glossary terms and glosses are stamped "proposed" by migrate and blocked by the gate — proceeded because "nothing unapproved prints" is the standing rule; the Samuel glossary now needs Daniel's one-word approval.
+
 ## Progress
 
 - [x] Task 1 Shared library and test scaffold
@@ -23,8 +26,8 @@ Plan 2 (to write after plan 1 ships): repo history without `weeks/`, Drive folde
 - [x] Task 9 check.mjs
 - [x] Task 10 Schema 2 and migration
 - [x] Task 11 Bibliography and hard gate
-- [ ] Task 12 Docs and final renders (next: DESIGN.md, PRODUCT.md, README build section, SKILL.md note, final renders of both weeks, eye test)
-- [ ] Auditor pass
+- [x] Task 12 Docs and final renders (commit 6d74bce; eye test passed on both weeks; paginator duplicate-entry bug found by check.mjs and fixed)
+- [x] Auditor pass: fresh reviewer found 2 Critical (note carry lost notes; check blind to overflow) and 6 Important; all fixed in one pass with tests and a stress fixture (tests/fixtures/week-notes); minors deferred and listed in the final message
 
 ## Resume notes (2026-10-08, before a compact)
 

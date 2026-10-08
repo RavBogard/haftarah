@@ -73,14 +73,24 @@ export function chromeFlags(profile) {
   return common;
 }
 
+// Template placeholders are filled with a replacer function so "$'" or "$&" inside the data stay literal.
+export function fillTemplate(tpl, vars) {
+  return Object.entries(vars).reduce((s, [k, v]) => s.replace(`{{${k}}}`, () => v), tpl);
+}
+
 export function gate(data, biblio) {
   const problems = [];
   const open = st => st && st !== "approved" && st !== "rejected";
   const where = e => `${e.chapter ? e.chapter + ":" : ""}${e.verse} ${e.source}`;
-  for (const e of data.commentary || []) if (open(e.status)) problems.push(`commentary entry proposed: ${where(e)}`);
-  for (const g of data.glosses || []) if (open(g.status)) problems.push(`gloss proposed: ${g.verse} ${g.lemma}`);
-  for (const t of data.glossary || []) if (open(t.status)) problems.push(`glossary term proposed: ${t.term}`);
-  if (data.openingNote && open(data.openingNote.status)) problems.push("opening note proposed");
+  // Every printable item needs a status; an item with none was never put to the rabbi.
+  const check = (item, label, what) => {
+    if (item.status == null) problems.push(`${label} has no status: ${what}`);
+    else if (open(item.status)) problems.push(`${label} proposed: ${what}`);
+  };
+  for (const e of data.commentary || []) check(e, "commentary entry", where(e));
+  for (const g of data.glosses || []) check(g, "gloss", `${g.verse} ${g.lemma}`);
+  for (const t of data.glossary || []) check(t, "glossary term", t.term);
+  if (data.openingNote) check(data.openingNote, "opening note", "calendar and setting");
   if (data.nextWeek && open(data.nextWeek.status)) problems.push("next-week line proposed: approve it or set nextWeek to null");
   if (!data.haftarah?.incipit?.en) problems.push("incipit.en is empty");
   for (const e of (data.commentary || []).filter(e => e.status === "approved")) {
@@ -133,14 +143,15 @@ async function main() {
   const note = DRAFT
     ? `Draft for review. Shaded entries are proposed and awaiting approval; they will not appear in the final sheet. ${counts.approved} approved, ${counts.proposed} proposed, ${counts.rejected} rejected.`
     : `Final. ${counts.approved} approved entries.`;
-  const html = tpl
-    .replace("{{TITLE}}", title.replace(/[<>&]/g, ""))
-    .replace("{{CSS}}", toPosix(relative(weekDir, join(ROOT, "template", "sheet.css"))))
-    .replace("{{RENDER}}", toPosix(relative(weekDir, join(ROOT, "template", "render.js"))))
-    .replace("{{LIB}}", toPosix(relative(weekDir, join(ROOT, "template", "lib.js"))))
-    .replace("{{DATA}}", JSON.stringify(data).replace(/<\/script/gi, "<\\/script"))
-    .replace("{{OPTIONS}}", JSON.stringify({ draft: DRAFT, logo, voices }))
-    .replace("{{NOTE}}", note);
+  const html = fillTemplate(tpl, {
+    TITLE: title.replace(/[<>&]/g, ""),
+    CSS: toPosix(relative(weekDir, join(ROOT, "template", "sheet.css"))),
+    RENDER: toPosix(relative(weekDir, join(ROOT, "template", "render.js"))),
+    LIB: toPosix(relative(weekDir, join(ROOT, "template", "lib.js"))),
+    DATA: JSON.stringify(data).replace(/<\/script/gi, "<\\/script"),
+    OPTIONS: JSON.stringify({ draft: DRAFT, logo, voices }),
+    NOTE: note,
+  });
 
   const htmlName = DRAFT ? "sheet-draft.html" : "sheet.html";
   const htmlPath = join(weekDir, htmlName);

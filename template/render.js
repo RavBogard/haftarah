@@ -23,6 +23,7 @@
   const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const dash = s => String(s ?? "").replace(/(\d)-(\d)/g, "$1–$2");
   const paras = v => Array.isArray(v) ? v : (v ? String(v).split(/\n{2,}/) : []);
+  // No status means never approved: shown (shaded) in a draft, never in a final.
   const visible = item => DRAFT ? item.status !== "rejected" : item.status === "approved";
 
   const L = window.HaftarahLib;
@@ -236,12 +237,14 @@
     row.append(en, gut, he);
     const notes = [];
     for (const k of (v.keys || [])) {
-      const cls = "note " + k.kind + (k.status && k.status !== "approved" ? " proposed" : "");
+      const cls = "note " + k.kind + (k.kind === "gloss" && k.status !== "approved" ? " proposed" : "");
       const vn = k.kind === "gloss" ? `<span class="vn">${k.verse}</span>` : "";
       const lemma = k.lemma ? `<span class="lemma">${esc(k.lemma)}</span><span class="brk">]</span> ` : "";
       const heLemma = k.kind === "gloss" && k.he ? `<span class="he-lemma">${divineName(esc(k.he))}</span> ` : "";
       const tail = k.kind === "jps" ? ` <span class="tail">JPS</span>` : "";
-      notes.push(el("p", cls, `<span class="k">${k.key}</span>${vn}${lemma}${heLemma}${divineName(k.text)}${tail}`));
+      const note = el("p", cls, `<span class="k">${k.key}</span>${vn}${lemma}${heLemma}${divineName(k.text)}${tail}`);
+      note.dataset.verse = k.verse;
+      notes.push(note);
     }
     return { row, notes };
   }
@@ -295,11 +298,13 @@
     const en = r.node.querySelector(".en"), he = r.node.querySelector(".he");
     const enL = lineBoxes(en), heL = lineBoxes(he);
     const cut = lines => { let k = 0; while (k < lines.length && lines[k][1] <= budget) k++; return k; };
-    const kEn = cut(enL), kHe = cut(heL);
+    // The tail always carries at least one line of each language, so a reader never meets Hebrew
+    // without its English (or the reverse); a language that fits the budget whole holds back its last line.
+    const kEn = Math.min(cut(enL), enL.length - 1), kHe = Math.min(cut(heL), heL.length - 1);
     g.remove();
-    if (kEn < 2 || kHe < 2 || (kEn >= enL.length && kHe >= heL.length)) return null;
-    const hEn = kEn < enL.length ? enL[kEn][0] : enL[enL.length - 1][1];
-    const hHe = kHe < heL.length ? heL[kHe][0] : heL[heL.length - 1][1];
+    if (kEn < 2 || kHe < 2) return null;
+    const hEn = enL[kEn][0];
+    const hHe = heL[kHe][0];
 
     const head = r.node;                     // keep the original (its notes point at it)
     head.classList.add("split-head");
@@ -399,11 +404,28 @@
     const keyOf = v => `${v.chapter}:${v.verse}`;
     const PX_IN = 96, GAP_MAX = 0.5 * PX_IN, MOVE_MAX = 1.2 * PX_IN;
     let i = 0, carry = [], lastPage = null, pendingTail = null;
-    // Margin notes that did not fit beside their verse travel to the top of the next page's margin.
+    // Margin notes that do not fit beside their verse travel to the next page's margin: as many per
+    // page as fit, in key order, and a displaced note shows its verse number.
     let carryNotes = [], carryNoteH = [];
     const withNotes = (r, notes, noteH) => Object.assign({}, r, { notes, noteH });
+    const markCarried = n => {
+      if (!n.querySelector(".vn")) n.querySelector(".k").insertAdjacentHTML("afterend", `<span class="vn">${n.dataset.verse}</span>`);
+      n.classList.add("carried");
+    };
+    const unmarkCarried = n => { if (n.classList.contains("jps")) n.querySelector(".vn")?.remove(); n.classList.remove("carried"); };
+    const defer = dropped => { for (const d of dropped) { markCarried(d.node); carryNotes.push(d.node); carryNoteH.push(d.h); } };
+    // Trim a row's notes from the end until the stack clears the apparatus; the trimmed notes come back.
+    const fitNotes = (rowTops, pageRows, r, top, appH) => {
+      const notes = r.notes.slice(), noteH = r.noteH.slice(), dropped = [];
+      while (notes.length) {
+        const st = stackNotes(rowTops.concat(top), pageRows.concat(withNotes(r, notes, noteH)));
+        if (st.bottom + appH <= bodyH) break;
+        dropped.unshift({ node: notes.pop(), h: noteH.pop() });
+      }
+      return { r: withNotes(r, notes, noteH), dropped };
+    };
 
-    while (i < rows.length || carry.length || pendingTail) {
+    while (i < rows.length || carry.length || pendingTail || carryNotes.length) {
       const p = newPage("text");
       lastPage = p;
       const pageRows = [], rowTops = [];
@@ -411,41 +433,55 @@
       let textH = 0, spilling = false, deferring = false;
       let notesIn = carryNotes, noteHIn = carryNoteH; carryNotes = []; carryNoteH = [];
 
-      if (pendingTail) {
-        const t = notesIn.length ? withNotes(pendingTail, notesIn, noteHIn) : pendingTail;
-        notesIn = []; noteHIn = [];
-        pageRows.push(t); rowTops.push(0); textH = t.h; pendingTail = null;
-      }
-
       while (pageEntries.length > 1 && appHeight(pageEntries) > bodyH) carry.unshift(pageEntries.pop());
       if (carry.length) spilling = true;
 
+      if (pendingTail) {
+        let t = notesIn.length ? withNotes(pendingTail, notesIn, noteHIn) : pendingTail;
+        notesIn = []; noteHIn = [];
+        if (t.notes.length) {
+          const f = fitNotes([], [], t, 0, appHeight(pageEntries));
+          if (f.dropped.length) { defer(f.dropped); deferring = true; }
+          t = f.r;
+        }
+        pageRows.push(t); rowTops.push(0); textH = t.h; pendingTail = null;
+      }
+
       while (i < rows.length && !spilling) {
         let r = rows[i];
+        let dropped = [];   // notes this row defers; committed only once the row is placed
         // The first row on a page inherits the notes carried over from the page before.
-        if (!pageRows.length && notesIn.length) { r = withNotes(r, notesIn.concat(r.notes), noteHIn.concat(r.noteH)); notesIn = []; noteHIn = []; }
-        else if (deferring && r.notes.length) { carryNotes.push(...r.notes); carryNoteH.push(...r.noteH); r = withNotes(r, [], []); }
+        if (!pageRows.length && notesIn.length) r = withNotes(r, notesIn.concat(r.notes), noteHIn.concat(r.noteH));
+        else if (deferring && r.notes.length) { dropped = r.notes.map((n, j) => ({ node: n, h: r.noteH[j] })); r = withNotes(r, [], []); }
         const top = pageRows.length ? textH : 0;
         const rowH = pageRows.length ? r.h : r.h - r.mt;
         const tryText = textH + rowH;
         let appH = appHeight(pageEntries);
         let notes = stackNotes(rowTops.concat(top), pageRows.concat(r));
         let fits = tryText + appH <= bodyH && notes.bottom + appH <= bodyH;
-        // Rule 2: never leave one verse alone because its apparatus is fat.
-        while (!fits && pageRows.length === 1 && pageEntries.length) {
-          carry.unshift(pageEntries.pop());
-          appH = appHeight(pageEntries);
-          fits = tryText + appH <= bodyH && notes.bottom + appH <= bodyH;
+        // Rule 2: never leave one verse alone because its apparatus is fat. Only when the apparatus
+        // is what blocks; and once entries are sent on, no later verse's entries print ahead of them.
+        if (!fits && pageRows.length === 1 && pageEntries.length && tryText <= bodyH && notes.bottom <= bodyH) {
+          while (!fits && pageEntries.length) {
+            carry.unshift(pageEntries.pop());
+            appH = appHeight(pageEntries);
+            fits = tryText + appH <= bodyH && notes.bottom + appH <= bodyH;
+          }
+          spilling = true;
         }
-        // Rule 5: the text fits but its margin notes do not: place the verse, carry the notes forward.
+        // Rule 5: the text fits but its margin notes do not: place the verse with as many notes as
+        // fit beside it and carry the rest forward.
         if (!fits && tryText + appH <= bodyH && r.notes.length) {
-          carryNotes.push(...r.notes); carryNoteH.push(...r.noteH);
-          r = withNotes(r, [], []);
+          const f = fitNotes(rowTops, pageRows, r, top, appH);
+          dropped = dropped.concat(f.dropped); r = f.r;
           notes = stackNotes(rowTops.concat(top), pageRows.concat(r));
           fits = tryText + appH <= bodyH && notes.bottom + appH <= bodyH;
           deferring = true;
         }
         if (!fits && pageRows.length) break;
+        if (!pageRows.length) { notesIn = []; noteHIn = []; }
+        r.deferred = dropped.length;
+        defer(dropped);
         pageRows.push(r); rowTops.push(top); textH = tryText; i++;
         versePage[keyOf(r.v)] = pageCount;
         for (const x of entriesFor(r.v)) {
@@ -460,25 +496,38 @@
         }
       }
 
-      // Taking a row back off the page also takes back any notes it deferred.
+      // Notes still waiting after the last verse get a page whose margin is theirs.
+      if (!pageRows.length && notesIn.length) {
+        const anchor = { v: null, synthetic: true, node: el("div", "verse-row synthetic"), notes: notesIn, noteH: noteHIn, h: 0, mt: 0 };
+        const f = fitNotes([], [], anchor, 0, appHeight(pageEntries));
+        defer(f.dropped);
+        pageRows.push(f.r); rowTops.push(0);
+        notesIn = []; noteHIn = [];
+      }
+
+      // Taking a row back off the page also takes back the notes it deferred (they are the last ones).
       const unplace = () => {
         const r = pageRows.pop(); rowTops.pop(); i--; delete versePage[keyOf(r.v)];
-        const orig = rows[i];
-        if (r !== orig && r.notes.length < orig.notes.length) {
-          const n = orig.notes.length - r.notes.length;
-          carryNotes.splice(-n, n); carryNoteH.splice(-n, n);
+        if (r.deferred) {
+          carryNotes.splice(-r.deferred, r.deferred).forEach(unmarkCarried);
+          carryNoteH.splice(-r.deferred, r.deferred);
         }
         return r;
       };
 
-      // Rule 3: a short last row that lost all its entries goes with them.
+      // Rule 3: a short last row that lost all its entries goes with them, but only when the move
+      // leaves no more than the half-inch band the spec allows; otherwise the verse stays and its
+      // entries follow on the next page under a page pointer.
       if (pageRows.length > 1) {
         const last = pageRows[pageRows.length - 1];
-        const own = entriesFor(last.v);
+        const own = last.v ? entriesFor(last.v) : [];
         if (own.length && own.every(x => carry.includes(x)) && last.h < MOVE_MAX && !last.splitTail) {
-          unplace();
-          carry = own.concat(carry.filter(x => !own.includes(x)));
-          textH -= last.h;
+          const slack = bodyH - (textH - last.h) - appHeight(pageEntries);
+          if (slack <= GAP_MAX) {
+            unplace();
+            carry = own.concat(carry.filter(x => !own.includes(x)));
+            textH -= last.h;
+          }
         }
       }
 
@@ -553,7 +602,8 @@
       p.body.append(col);
     }
 
-    const here = new Set(pageRows.map(r => `${r.v.chapter}:${r.v.verse}`));
+    const real = pageRows.filter(r => r.v);
+    const here = new Set(real.map(r => `${r.v.chapter}:${r.v.verse}`));
     let appTop = bodyH, offpage = 0;
     if (pageEntries.length) {
       const app = el("div", "apparatus");
@@ -570,12 +620,13 @@
     const overflow = contentBottom + (pageEntries.length ? RULE_GAP : 0) - appTop;
     const gap = pageEntries.length ? appTop - contentBottom : bodyH - contentBottom;
 
-    const first = pageRows[0]?.v, last = pageRows[pageRows.length - 1]?.v;
+    const first = real[0]?.v, last = real[real.length - 1]?.v;
     const range = first ? (first === last ? `${first.chapter}:${first.verse}` : first.chapter === last.chapter ? `${first.chapter}:${first.verse}–${last.verse}` : `${first.chapter}:${first.verse}–${last.chapter}:${last.verse}`) : "";
     setHead(p, shabbatName(), range ? `${data.haftarah.book} ${range}` : "Commentary, continued");
     setFoot(p, { legend: microLegend() });
 
-    p.page.dataset.rows = String(pageRows.length);
+    p.page.dataset.rows = String(real.length);
+    p.page.dataset.overflow = String(overflow > 1);
     p.page.dataset.gap = String(Math.round(pageEntries.length ? gap : -1));
     p.page.dataset.fill = String(Math.round(100 * (contentBottom + (pageEntries.length ? bodyH - appTop : 0)) / bodyH));
     const hasHead = pageRows.some(r => r.splitHead), hasTail = pageRows.some(r => r.splitTail);
@@ -590,12 +641,12 @@
 
   function endBlocks() {
     const blocks = [];
-    const terms = (data.glossary || []).filter(t => !t.status || visible(t));
+    const terms = (data.glossary || []).filter(visible);
     if (terms.length) {
       const b = el("div", "block");
       b.append(el("h2", null, "Names and places"));
       const g = el("div", "glossary");
-      for (const t of terms) g.append(el("p", null, `<span class="term">${esc(t.term)}</span>${t.he ? `<span class="term-he">${divineName(esc(t.he))}</span>` : ""} ${divineName(t.text)}`));
+      for (const t of terms) g.append(el("p", t.status !== "approved" ? "proposed" : null, `<span class="term">${esc(t.term)}</span>${t.he ? `<span class="term-he">${divineName(esc(t.he))}</span>` : ""} ${divineName(t.text)}`));
       b.append(g); blocks.push(b);
     }
     // Discussion questions are never printed (decision of 2026-10-07).

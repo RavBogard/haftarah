@@ -54,3 +54,22 @@ test("gate names missing work and missing bibliography file", () => {
   d.commentary[1].works = ["McCarter 1980"];
   assert.ok(gate(d, null).some(x => /bibliography\/I Samuel\.md is missing/.test(x)));
 });
+
+test("gate names printable items that have no status at all", () => {
+  const d = structuredClone(fixture);
+  delete d.glossary[0].status;
+  delete d.glosses[0].status;
+  delete d.commentary[0].status;
+  const p = gate(d, biblio);
+  assert.ok(p.some(x => /glossary term has no status: Ezel/.test(x)), p.join("\n"));
+  assert.ok(p.some(x => /gloss has no status: 18/.test(x)), p.join("\n"));
+  assert.ok(p.some(x => /commentary entry has no status: 18 Rashi/.test(x)), p.join("\n"));
+});
+
+import { fillTemplate } from "../scripts/build.mjs";
+
+test("fillTemplate leaves dollar patterns in the data alone", () => {
+  const data = `{"t":"costs $5 and $' more $& $\`"}`;
+  const out = fillTemplate("<s>{{DATA}}</s>{{NOTE}}", { DATA: data, NOTE: "n" });
+  assert.equal(out, `<s>${data}</s>n`);
+});
