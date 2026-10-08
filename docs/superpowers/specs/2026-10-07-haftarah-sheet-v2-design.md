@@ -64,7 +64,9 @@ Standing rules carry over: nothing prints unapproved; show translations and summ
 
 ### 4.1 Historical-critical sources
 
-A `bibliography/` directory in the repo holds one short file per biblical book listing the scholarship critical summaries may rest on (author, title, year, what it is good for). Summaries cite only works in that file; adding a work is an explicit edit Daniel sees. Seeded for Samuel, Kings, Isaiah, Jeremiah, Ezekiel, the Twelve from the names already in the v1 runbook.
+Rule one, enforced in code: every traditional, modern and reference entry is a text fetched from Sefaria by reference, quoted or abridged, with that reference printed in the tail. No Sefaria ref, no entry.
+
+Rule two, for the historical-critical register only (approved 2026-10-07): summaries are drafted and may name only works on a closed list, `bibliography/<book>.md`, one line per work (author, title, year, what it is good for). Daniel does not manage this list. Claude seeds it from standard reference scholarship (Anchor Bible, Hermeneia, Old Testament Library, Alter, The Jewish Study Bible, and the like) and maintains it; when a week needs a work not yet listed, Claude adds the line, verifies the work exists (publisher catalogue or WorldCat), and mentions the addition in the delivery line. Nothing is ever cited that is not on the list, and nothing goes on the list unverified.
 
 ## 5. Data file (schema 2)
 
@@ -110,6 +112,7 @@ Not in v2: a one-color line extraction of the mural, HTML or phone export, bookl
 
 ## 8. Migration and rollout
 
+0. **Full design review first (Daniel, 2026-10-07).** Before any implementation planning: a complete `/impeccable critique` of the whole sheet, every page and every component, not only the cover and branding, plus an outside critique with fresh eyes. The bar Daniel set: usable, gorgeous, enjoyable, intuitive at a glance, a pleasure to hold, graphic form serving the class's use at the table. Findings fold into section 6 before the plan is written. The 2026-10-08 critique snapshot in `.impeccable/critique/` covered branding and the cover; it is an input, not the review.
 1. Template, renderer, schema, bibliography, build gate, tests (local, from this machine).
 2. Repo history recreated without `weeks/`; force-push; `.gitignore` updated.
 3. Drive folders created; the two existing weeks uploaded (Machar Chodesh as 5787 · No. 3 after a rebuild; the Isaiah draft kept in working only).
