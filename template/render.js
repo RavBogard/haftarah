@@ -82,39 +82,56 @@
   let pageCount = 0;
   function newPage(kind) {
     pageCount++;
-    const page = el("section", `page ${kind || ""}${pageCount % 2 === 0 ? " verso" : " recto"}`);
+    const recto = pageCount % 2 === 1;
+    const page = el("section", `page ${kind || ""} ${recto ? "recto" : "verso"}`);
+    page.dataset.kind = kind || "";
     const head = el("header", "frame-head");
     const left = el("span", "head-left");
     const right = el("span", "head-right");
     head.append(left, right);
     const body = el("div", "page-body");
     const foot = el("footer", "frame-foot");
-    const fl = el("span", "foot-left", `<span class="wm">${WORDMARK}</span><span class="sep">·</span>${esc(series.name)} · ${esc(seriesLabel)}`);
-    const fr = el("span", "folio", String(pageCount));
-    if (pageCount % 2 === 0) foot.append(fr, fl); else foot.append(fl, fr);
     page.append(head, body, foot);
     root.append(page);
-    return { page, head, left, right, body, foot };
-  }
-  function setHead(p, leftText, rightText) {
-    p.left.innerHTML = esc(leftText) + (DRAFT ? '<span class="draft-flag">draft for review</span>' : "");
-    p.right.textContent = rightText || "";
+    const p = { page, head, left, right, body, foot, recto };
+    setFoot(p, {});
+    return p;
   }
 
-  // ---- cover ----------------------------------------------------------------
+  // The staple corner is top right on a recto, top left on a verso. The verse range goes in the
+  // free corner; the Shabbat name sits under the staple, where losing it costs nothing.
+  function setHead(p, shabbat, range) {
+    const flag = DRAFT ? '<span class="draft-flag">draft for review</span>' : "";
+    const name = `<span class="shabbat">${esc(shabbat)}</span>`;
+    const rng = `<span class="range">${esc(range || "")}</span>`;
+    p.left.innerHTML = (p.recto ? rng : name) + (p.recto ? "" : flag);
+    p.right.innerHTML = (p.recto ? name : rng) + (p.recto ? flag : "");
+  }
+
+  // Folio away from the staple (recto bottom left, verso bottom right); the other side carries
+  // either the micro-legend (text pages) or the wordmark and tagline (front page).
+  function setFoot(p, { legend, wordmark }) {
+    const folio = `<span class="folio">${pageCount}</span>`;
+    let other = "";
+    if (wordmark) other = `<span class="wm-block"><span class="wm">${WORDMARK}</span><span class="tagline">${TAGLINE}</span></span>`;
+    else if (legend) other = `<span class="micro-legend">${legend}</span>`;
+    p.foot.innerHTML = p.recto ? folio + other : other + folio;
+  }
 
   function usedRegisters() {
     const used = new Set((data.commentary || []).filter(visible).map(e => (SIGLA[e.register] ? e.register : "traditional")));
     return ["traditional", "modern", "critical", "reference"].filter(k => used.has(k));
   }
+  function microLegend() {
+    return usedRegisters().map(k => `<span>${SIGLA[k]}${REGISTER_NAMES[k]}</span>`).join("");
+  }
+
+  // ---- cover ----------------------------------------------------------------
 
   function buildCover() {
     const p = newPage("cover");
     setHead(p, series.name, `Haftarah · ${seriesLabel}`);
-    // The cover's foot carries the full wordmark and tagline; text pages carry the short form.
-    p.foot.innerHTML =
-      `<span class="foot-left"><span class="wm">${WORDMARK}</span><span class="tagline">${TAGLINE}</span></span>` +
-      `<span class="foot-right">${esc(series.name)} · ${esc(seriesLabel)}</span>`;
+    setFoot(p, { wordmark: true });
 
     // Hero: the mural beside the incipit, both sitting on the reading line.
     const hero = el("div", "hero" + (opts.logo ? "" : " no-mark"));
@@ -384,7 +401,8 @@
 
     const first = pageRows[0]?.v, last = pageRows[pageRows.length - 1]?.v;
     const range = first ? (first === last ? `${first.chapter}:${first.verse}` : first.chapter === last.chapter ? `${first.chapter}:${first.verse}–${last.verse}` : `${first.chapter}:${first.verse}–${last.chapter}:${last.verse}`) : "";
-    setHead(p, shabbatName(), range ? `${data.haftarah.book} ${range}` : "Apparatus, continued");
+    setHead(p, shabbatName(), range ? `${data.haftarah.book} ${range}` : "Commentary, continued");
+    setFoot(p, { legend: microLegend() });
     const leftover = -overflow;
     p.page.dataset.leftover = String(Math.round(leftover));
     return { overflow, leftover, grid };
@@ -443,6 +461,7 @@
       if (!p || h > remaining) {
         p = newPage("end");
         setHead(p, shabbatName(), dash(data.haftarah.ref));
+        setFoot(p, { legend: microLegend() });
         p.wrap = el("div", "endmatter");
         p.body.append(p.wrap);
         remaining = p.body.getBoundingClientRect().height;

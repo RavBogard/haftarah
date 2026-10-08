@@ -93,14 +93,14 @@ html, body {
   width: var(--page-w);
   height: var(--page-h);
   box-sizing: border-box;
-  padding: var(--m-top) var(--m-outer) var(--m-bottom) var(--m-inner);
+  padding: var(--m-top) var(--m-inner) var(--m-bottom) var(--m-outer);   /* recto: staple side right */
   overflow: hidden;
   break-after: page;
   page-break-after: always;
   background: var(--paper);
 }
 .page:last-child { break-after: auto; page-break-after: auto; }
-.page.verso { padding-left: var(--m-outer); padding-right: var(--m-inner); }
+.page.verso { padding-left: var(--m-inner); padding-right: var(--m-outer); }
 
 @media screen {
   body { background: #c9ccd1; padding: 24px 0; }
@@ -123,8 +123,8 @@ html, body {
   letter-spacing: 0.01em;
   padding-bottom: 5pt;
 }
-.frame-head .head-left { font-style: italic; }
-.frame-head .head-right { font-variant-numeric: lining-nums; }
+.frame-head .shabbat { font-style: italic; }
+.frame-head .range { font-variant-numeric: lining-nums; }
 .frame-head .draft-flag {
   color: var(--paper);
   background: var(--rubric);
@@ -135,8 +135,8 @@ html, body {
 
 .frame-foot {
   position: absolute;
-  left: var(--m-inner);
-  right: var(--m-outer);
+  left: var(--m-outer);
+  right: var(--m-inner);
   bottom: calc(var(--m-bottom) - var(--foot-h));
   height: var(--foot-h);
   display: flex;
@@ -147,7 +147,7 @@ html, body {
   color: var(--frame);
   font-variant-numeric: lining-nums;
 }
-.page.verso .frame-foot { left: var(--m-outer); right: var(--m-inner); }
+.page.verso .frame-foot { left: var(--m-inner); right: var(--m-outer); }
 .frame-foot .folio { color: var(--ink); }
 
 .page-body {
@@ -253,13 +253,13 @@ html, body {
 }
 .provenance .signature { color: var(--ink); font-style: italic; white-space: nowrap; }
 
-/* Footer: wordmark everywhere; the tagline on the cover only. */
-.frame-foot .wm { color: var(--ink); letter-spacing: 0.01em; }
-.frame-foot .sep { margin: 0 5pt; }
-.cover .frame-foot { align-items: flex-end; line-height: 1.35; }
-.cover .frame-foot .foot-left { display: flex; flex-direction: column; }
-.cover .frame-foot .wm { font-size: var(--size-text); }
-.cover .frame-foot .tagline { color: var(--ink-2); }
+/* Footer: folio away from the staple; micro-legend on text pages, wordmark and tagline on the front page. */
+.frame-foot .folio { color: var(--ink); }
+.frame-foot .micro-legend { display: inline-flex; gap: 10pt; }
+.frame-foot .micro-legend svg { width: 6pt; height: 6pt; vertical-align: -0.3pt; margin-right: 3pt; color: var(--rubric); }
+.frame-foot .wm-block { display: flex; flex-direction: column; line-height: 1.35; }
+.frame-foot .wm { color: var(--ink); font-size: var(--size-text); letter-spacing: 0.01em; }
+.frame-foot .tagline { color: var(--ink-2); }
 
 /* ---- Text pages ------------------------------------------------------------ */
 
@@ -474,7 +474,7 @@ html, body {
   top: 0;
   width: var(--page-w);
   box-sizing: border-box;
-  padding: 0 var(--m-outer) 0 var(--m-inner);
+  padding: 0 var(--m-inner) 0 var(--m-outer);
   visibility: hidden;
 }
 
