@@ -80,6 +80,49 @@ Changes to `sheet.json`:
 
 ## 6. The sheet (template changes)
 
+### 6.0 Status and the design review (2026-10-07)
+
+A prototype of the template changes below was built (commit d19894b) and both weeks rendered, so that the review judged the real v2 and not v1. The review ran as four independent passes on those renders: the `/impeccable critique` pair (design review; detector plus browser geometry) and two outside critiques (a book typographer; a usability walkthrough at the table with three personas). Score 21/32. Snapshot: `.impeccable/critique/2026-10-08T02-53-06Z__template-render-js.md`. Everything in 6.1 to 6.4 is the result; items marked **Needs Daniel** are the user-visible convention changes still open. Everything else is decided.
+
+### 6.1 Fixes the review found (all decided)
+
+Renderer:
+
+- **Poetry lineation.** Split JPS verse on its line breaks; each line is a block with a 1.1em hanging indent so a turnover reads as a turnover. A footnote key and the punctuation after it never break from their word; an em dash never starts a line.
+- **End matter.** A section with no visible items is not emitted (the empty "Names and places" heading). The colophon never stands alone on a page: it flows under the last apparatus if room remains, else it joins the glossary. A page whose body is under about 15 percent full is a build error.
+- **The verse-30 problem.** "(cont.)" is reserved for an entry split mid-text. An entry whose verse is on an earlier page is labelled with that page: "30 · p. 3", in the tail's grey. When the last verse on a page spills all of its entries, the verse moves with them to the next page if the slack left behind is under 1.2in.
+- **Dead bands.** A verse row may break across pages when the gap between the text and the apparatus rule would otherwise exceed 0.5in (JPS and every Bible split verses across pages). A page never holds a single verse unless the reading has only one left.
+- **Margin keys.** JPS footnote letters are re-lettered per sheet from "a" and the superscripts in the English rewritten to match (the duplicate "p" and the "h" start disappear). JPS cross-references to passages not on the sheet ("See note at 10.11", "See 49.6 and note") are dropped; "19.2" becomes "19:2". Every margin note uses the apparatus grammar: italic lemma, grey "]", then the note. Gloss notes carry their verse number.
+- **Hebrew cleanliness.** `text-wrap: pretty` on both text columns to kill one-word last lines; the gloss key sits after the sof pasuq without a space; the English first baseline is seated level with the Hebrew's.
+- **Build browser pinned.** Pagination differed between headless Chrome and Playwright's Chromium (8 vs 9 pages). The build names its browser in the log and the tests run on the same binary.
+
+Type and colour:
+
+- Apparatus 9.2pt, margin and tails 9pt, tails at 65 percent black (#595959), superscript keys 0.72em. Four Sizes Rule keeps: 60 / 10.5 / 9.2 / 9.
+- Red means a source or a key. Red stays on: the cover reading line, chapter tags, apparatus source names, margin keys, sigla. Red leaves: running heads and footer (70 percent black), in-text superscript letters (ink).
+- Sigla become one family at one weight: all filled (square, circle, triangle, diamond) at 75 percent of x-height, so no register shouts.
+- Verse numbers semibold 10pt rather than bold.
+- Outer margin 0.75in so thumbs clear the glosses; 0.25in clear between the Hebrew's right edge and the margin column.
+
+Cover and frame:
+
+- Series line once on the cover, in the footer. The cover's running head is removed; the reading line carries the identity.
+- The mural's top is fixed at 1.6in from the trim; the incipit block centres on the mural rather than the mural sliding to meet a two-line incipit. Incipit sized to a 3.5in box, 64pt maximum, one line; two lines only at 54pt with a 1.3em pitch.
+- Provenance appears once. The cover keeps the signed sentence; the colophon keeps editions and credits.
+- Text-page footer: folio outside, and in place of the wordmark a micro-legend of the sigla with their names at gloss size, so a reader on page 4 never has to turn back to the cover for the triangle. The wordmark and tagline live on the cover only.
+- Legend on the cover is stable: the same four sigla in the same order every week (unused ones in grey), plus "a–z translators' notes (JPS)" and, when the week has one, a one-line key to the qere/ketiv brackets.
+- Chapter shown on the first verse of every page as "42:7" in the gutter, not only at chapter changes.
+
+### 6.2 Needs Daniel (user-visible conventions)
+
+1. **Where the setting paragraphs live.** The typographer's strongest note: the cover reads as page one of an article because the opening note is forty percent of its ink, and the newcomer persona is lost by its second paragraph. Recommendation: the calendar paragraph stays on the cover (at most seven lines); the historical-critical setting moves to the head of page 2 as a full-measure headnote above the first verse. One opening note still, in two places.
+2. **The gloss key.** Three reviewers took telisha marks for stray ° keys; the detector confirmed they are cantillation. Recommendation: retire ° and key the rabbi's glosses with the same letter series as the JPS notes, placed in both the English and the Hebrew, so a reader with no Hebrew can find the word from the English. The margin then has one system; JPS notes end with a small grey "JPS".
+3. **Plain names for the registers.** Recommendation: "classical commentators / modern commentators / what historians say / reference" in the legend, with the shape, in place of "traditional / modern / historical-critical / reference".
+4. **Voices on this sheet.** A one-line introduction per commentator used that week ("Rashi, France, 1040–1105"), generated from a small table in the template, printed under "Names and places". Recommendation: yes; and drafted titles ("Saul's concession") set in red italic so they are never read as a commentator's name.
+5. **The last line.** A "Next week: Noach · Isaiah 54:1–55:5" line in rubric at the foot of the last page, from Hebcal at fetch time. Recommendation: yes.
+
+### 6.3 Original cover and template decisions (approved before the review; superseded only where 6.1 says so)
+
 Cover, per mockup A:
 
 - Running head: left "Torah from Scratch" italic; right "Haftarah · 5787 · No. 3". Text pages keep Shabbat name left, verse range right.
@@ -105,6 +148,7 @@ Not in v2: a one-color line extraction of the mural, HTML or phone export, bookl
 ## 7. Testing
 
 - Both existing weeks rebuild under the new template; page images reviewed; no sidenote crosses the apparatus rule; cover fits on one page with the longest opening note we have.
+- Review regressions, each a check in the test script: no empty end-matter heading; no page under 15 percent full; no "(cont.)" on an entry that did not split; margin letters per sheet start at "a" with no duplicates; no poetic line without its hanging indent; no gap over 0.5in between text and apparatus rule unless the page ends the reading; red count per text page under a stated ceiling; pagination identical across two runs on the pinned browser.
 - Divine-name check: count of יי in the rendered Hebrew equals the count of the Tetragrammaton in the source verses; a unit test on the replacement function covers pointed and unpointed forms and the mark-carrying case.
 - Final build with one `proposed` entry exits non-zero and names the entry.
 - Schema migration: both v1 files convert and rebuild identically apart from the intended changes.
@@ -112,7 +156,7 @@ Not in v2: a one-color line extraction of the mural, HTML or phone export, bookl
 
 ## 8. Migration and rollout
 
-0. **Full design review first (Daniel, 2026-10-07).** Before any implementation planning: a complete `/impeccable critique` of the whole sheet, every page and every component, not only the cover and branding, plus an outside critique with fresh eyes. The bar Daniel set: usable, gorgeous, enjoyable, intuitive at a glance, a pleasure to hold, graphic form serving the class's use at the table. Findings fold into section 6 before the plan is written. The 2026-10-08 critique snapshot in `.impeccable/critique/` covered branding and the cover; it is an input, not the review.
+0. **Full design review first (Daniel, 2026-10-07). Done 2026-10-08** on the v2 prototype; findings are in 6.1 and the open conventions in 6.2. Daniel rules on 6.2, then the plan is written.
 1. Template, renderer, schema, bibliography, build gate, tests (local, from this machine).
 2. Repo history recreated without `weeks/`; force-push; `.gitignore` updated.
 3. Drive folders created; the two existing weeks uploaded (Machar Chodesh as 5787 · No. 3 after a rebuild; the Isaiah draft kept in working only).
