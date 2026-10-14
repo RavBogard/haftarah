@@ -21,6 +21,9 @@ scripts/
   deliver.mjs               week files -> Google Drive through the drop box, byte-exact (sha256-checked)
   check.mjs                 renders twice and asserts the layout rules (no lone verse, no gap over the rule, keys in series, same output both times)
   migrate.mjs               schema 1 -> schema 2
+  web-build.mjs             assembles site/dist for Vercel
+  publish.mjs               puts a week on the web (Blob store + index)
+  web-check.mjs             headless check of the built site at desktop and phone widths; --serve to look
 tools/dropbox/
   Code.gs, SETUP.md         the Google Apps Script drop box deliver.mjs posts to; one-time setup
 docs/prompts/

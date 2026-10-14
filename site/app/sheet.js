@@ -236,6 +236,7 @@ function runCheck(api, L) {
   h.dataset.checkDetails = String(document.querySelectorAll("#text details.vapp:not(.empty)").length);
   h.dataset.checkEmptySummaries = String(document.querySelectorAll(".vapp.empty summary").length);
   h.dataset.checkWide = String(wide);
+  h.dataset.checkWidth = String(innerWidth);
   const target = rows[Math.min(5, rows.length - 1)];
   target.row.scrollIntoView({ block: "start" });
   api.sync({ behavior: "auto" });   // instant, so the rail has moved before it is measured
