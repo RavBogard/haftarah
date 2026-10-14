@@ -57,11 +57,14 @@ beside the study sheet. The study sheet itself does not change.
 - **Verse HTML is preserved.** Wrapping a verse in phrase spans must not add, drop or reorder a
   single character of its text content; existing tags (the `<b>׀</b>` paseq, `.pisqa`, `.mam-kq-k`
   ketiv spans, footnote `.fn`, keying circles) stay intact and are never split by a span boundary.
-- Tokens: a verse is split into words on whitespace that is outside tags (`<…>` is atomic; a tag
-  may contain spaces). A token with no Hebrew letter: if it is the paseq `׀` (bare or wrapped in a
-  tag) it joins the current block; any other letterless token (e.g. `<span class="pisqa"></span>`)
-  is emitted between blocks, unwrapped. A token with Hebrew letters but no accent (a ketiv in
-  parentheses, a maqaf-joined word is already one token) joins the current block.
+- Tokens: a verse is split into words on whitespace at element-nesting depth zero only: a `<…>`
+  tag is atomic (it may contain spaces), and whitespace inside an open element does not split.
+  Sefaria's ketiv/qere markup is one such element and is one token:
+  `אֶת־<span class="mam-kq"><span class="mam-kq-q">[הַ֣חִצִּ֔ים]</span> <span class="mam-kq-k">(החצי)</span></span>`.
+  A token with no Hebrew letter: if it is the paseq `׀` (bare or wrapped in a tag) it joins the
+  current block; any other letterless token (e.g. `<span class="pisqa"></span>`) is emitted
+  between blocks, unwrapped. A token with Hebrew letters but no accent (a ketiv standing alone,
+  a maqaf-joined word is already one token) joins the current block.
 - Repo conventions: Node 18+, no dependencies, no `npm install`. `template/lib.js` is UMD and
   DOM-free; `template/render.js` runs in the browser; tests are `node --test` in `tests/`
   (`npm test`). Follow the existing comment style (short prose comments explaining why).
@@ -107,9 +110,11 @@ Requirements:
   4. `final: true` → last block is `sof-haftarah`; `final` omitted → `sof-pasuk`.
   5. Zarka in both encodings folds: a word carrying U+05AE and one carrying U+0598 each stay in
      the block that ends at the following segol (U+0592).
-  6. A ketiv span joins the block: `אֶת־<span class="mam-kq-k">(החצי)</span> [הַ֣חִצִּ֔ים]` — the
-     letterless-accent token `(החצי)` (wrapped) has letters but no accent and stays in the zakef
-     block; no span boundary falls inside the tag.
+  6. Ketiv/qere is one token and is never split: in
+     `וַיֹּ֤אמֶר הַנַּ֙עַר֙ אֶת־<span class="mam-kq"><span class="mam-kq-q">[הַ֣חִצִּ֔ים]</span> <span class="mam-kq-k">(החצי)</span></span> וְאֶת־קְשַׁתּ֖וֹ`
+     (the space inside the outer span is at depth 1), the block that ends at the qere's zakef
+     katon is `zakef` and its html contains the whole `<span class="mam-kq">…</span>` element with
+     its space intact; the following `וְאֶת־קְשַׁתּ֖וֹ` (tipcha) starts the next block.
   7. Pisqa separator: `… ׃ <span class="pisqa"></span>` is impossible mid-verse in our data, but a
      letterless token such as `<span class="pisqa"></span>` between words is returned as
      `{ family: null, html: '<span class="pisqa"></span>' }`, not inside a block.
