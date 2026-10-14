@@ -365,3 +365,133 @@ test("tropeFamiliesUsed names the families a haftarah uses, the last verse final
   assert.deepEqual(lib.tropeFamiliesUsed([{ he: is547 }]), new Set(["etnachta", "sof-haftarah"]));
   assert.deepEqual(lib.tropeFamiliesUsed([{ he: is547 }, { he: "כִּ֥י יִפָּקֵ֖ד מוֹשָׁבֶֽךָ׃" }]), new Set(["etnachta", "sof-pasuk", "sof-haftarah"]));
 });
+
+const notes = JSON.parse(readFileSync(new URL("./fixtures/week-notes/sheet.json", import.meta.url), "utf8"));
+const min = JSON.parse(readFileSync(new URL("./fixtures/week-min/sheet.json", import.meta.url), "utf8"));
+const visible = i => i.status !== "rejected";
+
+test("escapeHtml, enDash, shabbatName", () => {
+  assert.equal(lib.escapeHtml('a<b>&"'), "a&lt;b&gt;&amp;&quot;");
+  assert.equal(lib.enDash("Isaiah 54:1-55:5"), "Isaiah 54:1–55:5");
+  assert.equal(lib.shabbatName(notes), "Shabbat Bereshit, Machar Chodesh");
+  assert.equal(lib.shabbatName({ shabbat: { parashah: { en: "Noach" } } }), "Shabbat Noach");
+});
+
+test("sheetModel: verses, keys and entries match the paginator's rules", () => {
+  for (const data of [notes, min]) {
+    const before = structuredClone(data);
+    const m = lib.sheetModel(data, { voices: {} });
+    assert.deepEqual(data, before, "input is not mutated");
+    assert.equal(m.verses.length, data.verses.length);
+    const keyed = lib.assignKeys(data.verses, data.glosses || [], visible);
+    assert.deepEqual(m.sequence, keyed.sequence);
+    m.verses.forEach((v, i) => assert.deepEqual(v.keys.map(k => k.key), keyed.verses[i].keys.map(k => k.key)));
+    const shown = data.commentary.filter(visible).length;
+    assert.equal(m.entries.length, shown);
+    assert.equal(m.verses.reduce((n, v) => n + v.entries.length, 0), shown);
+    for (const v of m.verses) {
+      const orders = v.entries.map(e => e.order);
+      assert.deepEqual(orders, [...orders].sort((a, b) => a - b), `entries of ${v.ref} sorted by order`);
+      assert.ok(v.heHtml.includes('class="tr tr-'), "trope spans present");
+      assert.ok(v.enLines.length >= 1);
+    }
+    assert.equal(m.verses[0].showChapter, true);
+    assert.equal(m.verses.at(-1).final, true);
+    assert.ok(m.verses.at(-1).heHtml.includes("tr-sof-haftarah"));
+  }
+});
+
+test("sheetModel: rejected items are absent; statuses never matter otherwise", () => {
+  const d = structuredClone(notes);
+  d.commentary[0].status = "rejected";
+  d.glosses[0].status = "rejected";
+  d.glossary[0].status = "rejected";
+  d.nextWeek = { shabbat: "Noach", ref: "Isaiah 54:1-55:5", civilDisplay: "October 17, 2026", status: "rejected" };
+  const m = lib.sheetModel(d);
+  assert.equal(m.entries.length, notes.commentary.length - 1);
+  assert.equal(m.sequence.length, lib.assignKeys(notes.verses, notes.glosses, visible).sequence.length - 1);
+  assert.equal(m.glossary.length, notes.glossary.length - 1);
+  assert.equal(m.nextWeek, null);
+  d.nextWeek.status = "proposed";
+  assert.equal(lib.sheetModel(d).nextWeek.line, "Next week: Noach · Isaiah 54:1–55:5 · October 17, 2026");
+});
+
+test("sheetModel: entry tails follow buildEntry's rules for the four registers", () => {
+  const base = { verses: [{ ref: "Isaiah 54:1", chapter: 54, verse: 1, he: "רׇנִּ֥י עֲקָרָ֖ה", en: "Shout" }], shabbat: { parashah: { en: "Noach" } }, haftarah: { ref: "Isaiah 54:1-55:5", book: "Isaiah", incipit: { he: "רׇנִּ֥י", en: "Shout" }, versions: { he: "M", en: "J" } } };
+  const d = { ...base, commentary: [
+    { verse: 1, register: "traditional", source: "Radak", sourceRef: "Radak on Isaiah 54:1", translation: "claude", text: "t", order: 2 },
+    { verse: 1, register: "modern", source: "Hertz", sourceRef: "Hertz on Isaiah 54:1", translation: "Hertz, adapted", text: "t", order: 1 },
+    { verse: 1, register: "critical", source: "Date and setting", works: ["Blenkinsopp 2002"], cites: "see Blenkinsopp", text: "t", order: 3 },
+    { verse: 1, register: "critical", kind: "quotation", source: "Blenkinsopp", cites: "Blenkinsopp 2002, 361", text: "t", order: 4 },
+    { verse: 1, verseEnd: 3, register: "reference", source: "Jewish Encyclopedia", sourceRef: "Jewish Encyclopedia, Isaiah", text: "t", order: 5 },
+  ] };
+  const [hertz, radak, crit, quote, ref] = lib.sheetModel(d).verses[0].entries;
+  assert.deepEqual(radak.tail, ["Radak on Isaiah 54:1", "translated for this sheet"]);
+  assert.equal(radak.drafted, false);
+  assert.deepEqual(hertz.tail, ["Hertz on Isaiah 54:1", "Hertz, adapted"]);
+  assert.deepEqual(crit.tail, ["summary drafted for this sheet", "see Blenkinsopp"]);
+  assert.equal(crit.drafted, true);
+  assert.deepEqual(quote.tail, ["Blenkinsopp 2002, 361"]);
+  assert.deepEqual(ref.tail, ["Jewish Encyclopedia, Isaiah"]);
+  assert.equal(ref.verseLabel, "1–3");
+  assert.equal(ref.drafted, true);
+});
+
+test("sheetModel: divine name, gloss keys in the Hebrew, title and front matter", () => {
+  const d = {
+    shabbat: { civil: "2026-10-17", civilDisplay: "October 17, 2026", hebrew: "ו׳ בְּחֶשְׁוָן תשפ״ז", hebrewEn: "6 Cheshvan 5787", parashah: { en: "Noach" } },
+    haftarah: { ref: "Isaiah 54:1-55:5", heRef: "ישעיהו נ״ד:א׳-נ״ה:ה׳", book: "Isaiah", title: { en: "Noach" }, incipit: { he: "רׇנִּ֥י עֲקָרָ֖ה", en: "Shout, O infertile one" }, versions: { he: "Miqra", en: "JPS" } },
+    verses: [
+      { ref: "Isaiah 54:1", chapter: 54, verse: 1, he: "אָמַ֥ר יְהֹוָֽה׃", en: "said G<small>OD</small>." },
+      { ref: "Isaiah 55:1", chapter: 55, verse: 1, he: "ה֤וֹי כׇּל־צָמֵא֙ לְכ֣וּ לַמַּ֔יִם", en: "Ho, all who are thirsty,<br>Come for water" },
+    ],
+    glosses: [{ verse: 1, chapter: 55, lemma: "צָמֵא֙", en: "thirsty", text: "<i>tsame</i>, thirsty." }],
+    commentary: [{ verse: 1, register: "traditional", source: "Rashi", sourceRef: "Rashi on Isaiah 54:1", text: "a", order: 1 }],
+    openingNote: { calendar: "Cal.", setting: ["S1", "S2"] },
+    credits: { signoff: "I chose every entry.", editor: "Rabbi Daniel Bogard" },
+    series: { name: "Torah from Scratch", year: "5787" },
+  };
+  const m = lib.sheetModel(d, { voices: { Rashi: "R. Shlomo Yitzchaki" } });
+  assert.equal(m.title, "Haftarat Noach · Isaiah 54:1–55:5");
+  assert.equal(m.shabbatName, "Shabbat Noach");
+  assert.equal(m.seriesLabel, "6 Cheshvan 5787");
+  assert.equal(m.ref, "Isaiah 54:1–55:5");
+  assert.ok(m.verses[0].heHtml.includes("יי"));
+  assert.equal(m.yyCount, 1);
+  assert.equal(m.verses[1].showChapter, true);
+  assert.equal(m.verses[1].poetry, true);
+  assert.equal(m.verses[1].enLines.length, 2);
+  assert.match(m.verses[1].heHtml, /צָמֵא֙<sup class="fn he">a<\/sup>/);
+  assert.match(m.verses[1].enLines[0], /thirsty<sup class="fn">a<\/sup>/);
+  assert.deepEqual(m.verses[1].keys.map(k => [k.key, k.kind, k.lemma]), [["a", "gloss", "thirsty"]]);
+  assert.equal(m.verses[1].keys[0].tail, "");
+  assert.deepEqual(m.front.legend, { used: ["traditional"], hasKeys: true, hasKetiv: false });
+  assert.deepEqual(m.front.openingNote, { calendar: ["Cal."], setting: ["S1", "S2"] });
+  assert.deepEqual(m.front.voices, [{ name: "Rashi", refs: [], line: "R. Shlomo Yitzchaki" }]);
+  assert.equal(m.front.provenance.signed, true);
+  assert.equal(m.front.provenance.editor, "Rabbi Daniel Bogard");
+  assert.ok(m.front.families.every(f => f.key && f.name));
+  assert.ok(m.front.families.some(f => f.key === "sof-haftarah"));
+  // no title.en: the Shabbat name carries the <title>
+  delete d.haftarah.title;
+  assert.equal(lib.sheetModel(d).title, "Shabbat Noach · Isaiah 54:1–55:5");
+});
+
+test("sheetModel keys a gloss whose lemma is not found by appending", () => {
+  const d = { shabbat: { parashah: { en: "X" } }, haftarah: { ref: "Isaiah 54:1", book: "Isaiah", incipit: { he: "א", en: "a" }, versions: {} },
+    verses: [{ ref: "Isaiah 54:1", chapter: 54, verse: 1, he: "רׇנִּ֥י עֲקָרָ֖ה", en: "Shout, O infertile one" }],
+    glosses: [{ verse: 1, lemma: "שָׁלוֹם", en: "infertile", text: "nowhere" }], commentary: [] };
+  const v = lib.sheetModel(d).verses[0];
+  assert.ok(v.heHtml.includes('<sup class="fn he">a</sup>'), "the key is still there");
+  assert.equal((v.heHtml.match(/<sup/g) || []).length, 1);
+  assert.deepEqual(v.keys.map(k => k.key), ["a"]);
+});
+
+test("sheetModel attaches a chapter-less entry to the first verse with that number", () => {
+  const d = { shabbat: { parashah: { en: "X" } }, haftarah: { ref: "Isaiah 54:1-55:1", book: "Isaiah", incipit: { he: "א", en: "a" }, versions: {} },
+    verses: [{ ref: "Isaiah 54:1", chapter: 54, verse: 1, he: "א", en: "a" }, { ref: "Isaiah 55:1", chapter: 55, verse: 1, he: "ב", en: "b" }],
+    glosses: [], commentary: [{ verse: 1, register: "traditional", source: "Rashi", sourceRef: "Rashi on Isaiah 54:1", text: "t", order: 1 }] };
+  const m = lib.sheetModel(d);
+  assert.equal(m.verses[0].entries.length, 1);
+  assert.equal(m.verses[1].entries.length, 0);
+});

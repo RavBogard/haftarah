@@ -252,6 +252,116 @@
     return [...seen.values()];
   }
 
+  // ---- the sheet model: what any renderer (the paginator later, the web page now) draws ----
+
+  function escapeHtml(s) {
+    return String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  }
+  // "54:1-55:5" prints "54:1–55:5"; only a dash between digits is a range.
+  function enDash(s) { return String(s == null ? "" : s).replace(/(\d)-(\d)/g, "$1–$2"); }
+  const paragraphs = v => Array.isArray(v) ? v.slice() : (v ? String(v).split(/\n{2,}/) : []);
+
+  function shabbatName(data) {
+    const p = (data.shabbat && data.shabbat.parashah) || {};
+    const special = data.shabbat && data.shabbat.special ? `, ${String(data.shabbat.special).replace(/^Shabbat\s+/i, "")}` : "";
+    return `Shabbat ${p.en || ""}${special}`;
+  }
+
+  // Everything a page draws, prepared once and DOM-free: keys assigned, the divine name set as יי,
+  // gloss keys inside the Hebrew, trope phrases wrapped, entries sorted and attached to their
+  // verses, the entry tails as render.js's buildEntry writes them. Status is optional; only a
+  // rejected item stays off the page. The input is not changed.
+  function sheetModel(data, { voices = {} } = {}) {
+    const visible = item => !item || item.status !== "rejected";
+    let yyCount = 0;
+    const dn = html => { const r = divineName(html); yyCount += r.count; return r.html; };
+    const verses = data.verses || [];
+    const last = verses.length - 1;
+    const keyed = assignKeys(verses, data.glosses || [], visible);
+
+    const keyHebrew = (html, lemma, key) => {
+      if (!lemma) return html;
+      const mark = `<sup class="fn he">${key}</sup>`;
+      const hit = findHebrew(html, divineName(lemma).html);
+      return hit ? html.slice(0, hit.end) + mark + html.slice(hit.end) : html + mark;
+    };
+
+    const entryModel = e => {
+      const register = SIGLA[e.register] ? e.register : "traditional";
+      const tail = [];
+      if (e.sourceRef) tail.push(escapeHtml(enDash(e.sourceRef)));
+      if (e.translation === "claude") tail.push("translated for this sheet");
+      else if (e.translation) tail.push(escapeHtml(e.translation));
+      if (e.register === "critical" && e.kind !== "quotation") tail.push("summary drafted for this sheet");
+      if (e.cites) tail.push(e.cites);
+      return {
+        register, chapter: e.chapter != null ? e.chapter : null, verse: e.verse, verseEnd: e.verseEnd || null,
+        verseLabel: e.verseEnd ? `${e.verse}–${e.verseEnd}` : String(e.verse),
+        lemma: e.lemma || "", lemmaLang: e.lemmaLang || "en", source: e.source || "", sourceRef: e.sourceRef || "",
+        bodyHtml: dn(e.text || ""), tail, drafted: e.register === "critical" || e.register === "reference",
+        order: e.order != null ? e.order : 0,
+      };
+    };
+    // Sorted as the paginator sorts; a chapter-less entry belongs to the first verse with its number.
+    const entries = (data.commentary || []).filter(visible).map(entryModel)
+      .sort((a, b) => (a.chapter || 0) - (b.chapter || 0) || a.verse - b.verse || a.order - b.order);
+    entries.forEach(x => { if (x.chapter == null) { const v = verses.find(v => v.verse === x.verse); x.chapter = v ? v.chapter : null; } });
+    const entriesFor = v => entries.filter(x => x.verse === v.verse && x.chapter === v.chapter);
+
+    const vm = verses.map((v, i) => {
+      const kv = keyed.verses[i];
+      const prev = verses[i - 1];
+      let heHtml = dn(String(v.he == null ? "" : v.he).replace(/&thinsp;| /g, " "));
+      for (const k of kv.keys) if (k.kind === "gloss") heHtml = keyHebrew(heHtml, k.he, k.key);
+      heHtml = tropeHtml(heHtml, { final: i === last });
+      const lines = splitPoetry(kv.en);
+      return {
+        chapter: v.chapter, verse: v.verse, ref: v.ref, break: v.break || null, prevBreak: (prev && prev.break) || null,
+        showChapter: i === 0 || v.chapter !== prev.chapter, final: i === last, poetry: lines.length > 1,
+        enLines: (lines.length ? lines : [""]).map(nowrapKeys), heHtml,
+        keys: kv.keys.map(k => ({
+          key: k.key, kind: k.kind, lemma: k.lemma || "", heHtml: k.kind === "gloss" && k.he ? dn(escapeHtml(k.he)) : "",
+          textHtml: dn(k.text), tail: k.kind === "jps" ? "JPS" : "", verse: k.verse, chapter: k.chapter,
+        })),
+        entries: entriesFor(v),
+      };
+    });
+
+    const h = data.haftarah || {};
+    const series = Object.assign({ name: "Torah from Scratch", year: ((data.shabbat || {}).hebrewEn || "").split(/\s+/).pop() || "" }, data.series || {});
+    const name = shabbatName(data);
+    const used = REGISTER_ORDER.filter(k => entries.some(e => e.register === k));
+    const fams = tropeFamiliesUsed(verses);
+    const credits = data.credits || {};
+    const signoffHtml = credits.signoff ||
+      (credits.editor ? `Commentary selected and approved by ${escapeHtml(credits.editor)}. ${escapeHtml(credits.note || "")}` : escapeHtml(credits.note || ""));
+    const on = data.openingNote || {};
+    const nw = data.nextWeek;
+    return {
+      shabbatName: name, seriesName: series.name, seriesLabel: (data.shabbat || {}).hebrewEn || series.year,
+      title: `${h.title && h.title.en ? `Haftarat ${h.title.en}` : name} · ${enDash(h.ref || "")}`,
+      book: h.book || "", ref: enDash(h.ref || ""), heRef: h.heRef || "",
+      shabbat: { civil: (data.shabbat || {}).civil || "", civilDisplay: (data.shabbat || {}).civilDisplay || "", hebrew: (data.shabbat || {}).hebrew || "", hebrewEn: (data.shabbat || {}).hebrewEn || "" },
+      front: {
+        incipit: { heHtml: dn((h.incipit && h.incipit.he) || ""), en: (h.incipit && h.incipit.en) || "" },
+        openingNote: { calendar: paragraphs(on.calendar), setting: paragraphs(on.setting) },
+        legend: {
+          used, hasKeys: keyed.sequence.length > 0,
+          hasKetiv: verses.some(v => /\[[^\]]*\]\s*\([^)]*\)|\([^)]*\)\s*\[[^\]]*\]/.test(String(v.he || ""))),
+        },
+        families: TROPE_FAMILIES.filter(([k]) => fams.has(k)).map(([key, label]) => ({ key, name: label })),
+        voices: voicesFor(data.commentary || [], voices || {}, visible),
+        provenance: { he: (h.versions || {}).he || "", en: (h.versions || {}).en || "", signoffHtml, editor: credits.editor || "", signed: !!(credits.editor && credits.signoff) },
+      },
+      verses: vm, entries,
+      glossary: (data.glossary || []).filter(visible).map(t => ({ term: t.term || "", heHtml: t.he ? dn(escapeHtml(t.he)) : "", textHtml: dn(t.text || "") })),
+      nextWeek: nw && visible(nw)
+        ? { line: `Next week: ${escapeHtml(nw.shabbat)}${nw.special ? `, ${escapeHtml(String(nw.special).replace(/^Shabbat\s+/i, ""))}` : ""} · ${escapeHtml(enDash(nw.ref))}${nw.civilDisplay ? ` · ${escapeHtml(nw.civilDisplay)}` : ""}` }
+        : null,
+      sequence: keyed.sequence, yyCount,
+    };
+  }
+
   // The incipit fits a 3.5in box beside the 1.6in mural: 54pt at most, 40pt at least on one line; otherwise two lines at 44pt.
   function fitIncipitSize(widthAt60pt, boxWidth) {
     const size = Math.floor(60 * boxWidth / widthAt60pt);
@@ -362,5 +472,5 @@
     return map;
   }
 
-  return { TETRA, divineName, stripMarks, splitPoetry, nowrapKeys, letterFor, isDeadRef, normalizeRefs, assignKeys, SIGLA, REGISTER_ORDER, REGISTER_NAMES, voicesFor, voiceKey, hebrewKey, hebrewWords, findHebrew, plainText, findEnglish, fitIncipitSize, parseBibliography, tropePhrases, tropeHtml, tropeFamiliesUsed, TROPE_FAMILIES };
+  return { TETRA, divineName, stripMarks, splitPoetry, nowrapKeys, letterFor, isDeadRef, normalizeRefs, assignKeys, SIGLA, REGISTER_ORDER, REGISTER_NAMES, voicesFor, voiceKey, hebrewKey, hebrewWords, findHebrew, plainText, findEnglish, fitIncipitSize, parseBibliography, tropePhrases, tropeHtml, tropeFamiliesUsed, TROPE_FAMILIES, escapeHtml, enDash, shabbatName, sheetModel };
 });
