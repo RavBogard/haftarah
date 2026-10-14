@@ -28,7 +28,8 @@ test("divineName leaves sof pasuq, maqaf and paseq outside the Name", () => {
   // silluq/meteg U+05BD is not an accent carried onto the yud; the ׃ must survive
   assert.equal(lib.divineName("אָמַ֥ר יְהֹוָֽה׃").html, "אָמַ֥ר יי׃");
   assert.equal(lib.divineName("יְהוָ֖ה־").html, "יי֖־");
-  assert.equal(lib.divineName("יְהוָ֣ה ׀").html, "יי֣ ׀");
+  // the paseq attached to the Name, not after a space, so the pattern itself must stop before it
+  assert.equal(lib.divineName("יְהוָ֣ה׀").html, "יי֣׀");
 });
 
 test("stripMarks removes vowels and accents", () => {
@@ -306,6 +307,15 @@ test("tropePhrases returns a letterless token between blocks, unwrapped", () => 
     { family: null, html: pisqa },
     { family: "sof-pasuk", html: "כִּ֥י יִפָּקֵ֖ד מוֹשָׁבֶֽךָ׃" },
   ]);
+});
+
+test("tropePhrases splits a block around a letterless token inside it", () => {
+  const pisqa = '<span class="pisqa"></span>';
+  const he = `לֹ֣א ${pisqa} יָלָ֑דָה כִּ֥י יִפָּקֵ֖ד מוֹשָׁבֶֽךָ׃`;
+  const ps = lib.tropePhrases(he);
+  assert.deepEqual(fam(ps), ["etnachta", null, "etnachta", "sof-pasuk"]);
+  assert.equal(ps[1].html, pisqa);
+  assert.equal(ps.map(p => p.html).join(" "), he);
 });
 
 test("tropePhrases round-trips every fixture verse", () => {

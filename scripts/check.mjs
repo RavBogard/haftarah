@@ -6,7 +6,7 @@
  *   node scripts/check.mjs weeks/<slug>
  *   node scripts/check.mjs weeks/<slug> --trope   # check the chanter's copy, sheet-trope.html
  */
-import { readFile, mkdir, rm } from "node:fs/promises";
+import { readFile, mkdir, rm, access } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawn } from "node:child_process";
@@ -123,7 +123,13 @@ async function main() {
   const dirArg = process.argv.slice(2).find(a => !a.startsWith("--"));
   if (!dirArg) { console.error("usage: node scripts/check.mjs weeks/<slug> [--trope]"); process.exit(1); }
   const weekDir = resolve(dirArg);
-  const html = join(weekDir, process.argv.includes("--trope") ? "sheet-trope.html" : "sheet.html");
+  const trope = process.argv.includes("--trope");
+  const html = join(weekDir, trope ? "sheet-trope.html" : "sheet.html");
+  // A missing chanter's copy would render as Chrome's error page and surface as a page-count mismatch.
+  if (trope && !(await access(html).then(() => true, () => false))) {
+    console.error(`${dirArg.replace(/[\\/]+$/, "")}/sheet-trope.html is missing; run node scripts/build.mjs ${dirArg} --trope first`);
+    process.exit(1);
+  }
   const browser = findBrowser();
   if (!browser) { console.error("No Chrome or Edge found."); process.exit(1); }
   const url = pathToFileURL(html).href;

@@ -154,6 +154,9 @@ async function main() {
   if (WANT_TROPE) {
     await writeFile(tropePath, pageHtml({ logo, voices, trope: true }, `${title} (chanter’s copy)`), "utf8");
     console.log(`Wrote ${relative(ROOT, tropePath)}`);
+  } else if (existsSync(join(weekDir, "sheet-trope.pdf"))) {
+    // A chanter's copy left from an earlier build no longer matches this sheet; say so rather than delete it.
+    console.warn(`${relative(ROOT, join(weekDir, "sheet-trope.pdf"))} is from an earlier build; --trope rebuilds it`);
   }
 
   if (!WANT_PDF && !WANT_PNG) return;

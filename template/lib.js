@@ -305,7 +305,8 @@
   // Trope phrases for the chanter's copy: the verse HTML cut into blocks, each ending at a
   // block-ending accent (TropeTrainer's grouping: tipcha, pashta, yetiv and zarka fold into the
   // block after them). Returns [{ family, html }] in verse order, plus separators for letterless
-  // tokens as { family: null, html }. Joining every html with " " gives the input back.
+  // tokens as { family: null, html }. Joining every html with " " gives the input back up to
+  // whitespace: &thinsp;, &nbsp; and runs of whitespace come back as one space.
   function tropePhrases(html, { final = false } = {}) {
     const words = tropeTokens(String(html == null ? "" : html)).map(t => {
       const text = t.replace(/<[^>]*>/g, "");
