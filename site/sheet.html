@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en" data-theme="auto">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Haftarah · Torah from Scratch</title>
+<meta name="description" content="The weekly haftarah study sheet for Torah from Scratch at Central Reform Congregation: Hebrew with cantillation, the JPS translation, and commentary.">
+<link rel="stylesheet" href="/trope.css">
+<link rel="stylesheet" href="/web.css">
+<script src="/lib.js"></script>
+<script type="module">import { run } from "/app/sheet.js"; run();</script>
+</head>
+<body>
+<header class="mast" id="mast">
+  <a class="shabbat" href="#top" id="mastLeft">Haftarah</a>
+  <span class="range" id="mastRange">Torah from Scratch</span>
+  <span class="tools">
+    <a class="all" href="/">All sheets</a>
+    <button class="aa" id="aaBtn" aria-expanded="false" aria-controls="settings" title="Text size, theme, trope colors">Aa</button>
+  </span>
+</header>
+<div class="settings" id="settings" role="dialog" aria-label="Reading settings"></div>
+<main class="wrap" id="top">
+  <noscript><p class="status">This page needs JavaScript to show the sheet. The printed sheets are on <a href="https://drive.google.com/drive/folders/1TbSmoeBaCSLciL_-_HSCuKWkJMSZvGwd">Google Drive</a>.</p></noscript>
+  <p class="status" id="status" hidden></p>
+  <section class="front" id="front"></section>
+  <div class="reading-grid" id="reading" hidden>
+    <div class="text" id="text"></div>
+    <aside class="rail" id="rail" aria-label="Commentary"></aside>
+  </div>
+  <section class="end" id="end" hidden></section>
+  <footer class="foot" id="foot" hidden>
+    <span id="footAttr"></span>
+    <span><span class="wm">central reform congregation</span>A Jewish Presence in the City of St. Louis</span>
+  </footer>
+</main>
+<aside class="panel" id="panel" aria-label="Source" aria-hidden="true">
+  <div class="ph"><span class="kind" id="panelKind"></span><button id="panelClose" aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+  <div class="pb" id="panelBody"></div>
+</aside>
+</body>
+</html>

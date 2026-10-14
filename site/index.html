@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en" data-theme="auto">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Haftarah · Torah from Scratch</title>
+<meta name="description" content="The weekly haftarah study sheets for Torah from Scratch at Central Reform Congregation: Hebrew with cantillation, the JPS translation, and commentary in three registers.">
+<link rel="stylesheet" href="/web.css">
+<script src="/lib.js"></script>
+<script type="module">import { run } from "/app/landing.js"; run();</script>
+</head>
+<body>
+<header class="mast" id="mast">
+  <a class="shabbat" href="/">Torah from Scratch</a>
+  <span class="range" id="mastYear"></span>
+  <span class="tools"><button class="aa" id="aaBtn" aria-expanded="false" aria-controls="settings" title="Text size and theme">Aa</button></span>
+</header>
+<div class="settings" id="settings" role="dialog" aria-label="Reading settings"></div>
+<main class="wrap" id="top">
+  <section class="front">
+    <div class="welcome">
+      <img class="mural" src="/mural.png" alt="The Siona Benjamin floor mural at Central Reform Congregation">
+      <div>
+        <h1>Haftarah</h1>
+        <p>Every week at Torah from Scratch we read the haftarah, the passage from the Prophets that follows the Torah reading. These sheets are how we study it: the Hebrew with its cantillation, the JPS translation beside it, and commentary in three registers: the classical commentators, modern ones, and what historians say. Open any Hebrew word for its root, or any source to read it in full on Sefaria.</p>
+        <p class="sig">Rabbi Daniel Bogard, Central Reform Congregation</p>
+      </div>
+    </div>
+    <noscript><p class="status">This page needs JavaScript to list the sheets. The printed sheets are on <a href="https://drive.google.com/drive/folders/1TbSmoeBaCSLciL_-_HSCuKWkJMSZvGwd">Google Drive</a>.</p></noscript>
+    <p class="status" id="status" hidden></p>
+    <section class="thisweek" id="thisweek" hidden></section>
+    <section class="index" id="index" hidden><h2>All sheets</h2><ol id="weeks"></ol></section>
+  </section>
+  <footer class="foot">
+    <span>Hebrew: Miqra according to the Masorah. English: THE JPS TANAKH: Gender-Sensitive Edition (JPS, 2023). Sources from Sefaria.</span>
+    <span><span class="wm">central reform congregation</span>A Jewish Presence in the City of St. Louis</span>
+  </footer>
+</main>
+</body>
+</html>

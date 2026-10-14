@@ -3,6 +3,8 @@
   "private": true,
   "scripts": {
     "test": "node --test \"tests/**/*.test.mjs\"",
-    "check": "node scripts/check.mjs"
+    "check": "node scripts/check.mjs",
+    "web": "node scripts/web-build.mjs",
+    "web-check": "node scripts/web-check.mjs"
   }
 }
