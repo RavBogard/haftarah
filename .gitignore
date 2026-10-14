@@ -10,3 +10,4 @@ weeks/
 tests/fixtures/*/*.pdf
 package-lock.json
 site/dist/
+.playwright-mcp/
