@@ -30,7 +30,11 @@ export async function run() {
     const res = await fetch("/data/index.json");
     if (res.status === 404) index = { schema: 1, weeks: [] };
     else if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    else index = await res.json();
+    else {
+      index = await res.json();
+      index = index && typeof index === "object" ? index : {};
+      index.weeks = Array.isArray(index.weeks) ? index.weeks : [];
+    }
   } catch {
     status("The sheets could not be loaded; try again in a minute.");
     if (check) { html.dataset.checkErrors = "1: load"; html.dataset.checkDone = "1"; }
@@ -39,12 +43,12 @@ export async function run() {
   const hero = pickHero(index);
   if (!hero) status("The first sheet is on its way.");
   else {
-    const w = hero.entry;
+    const w = hero.entry, inc = w.incipit || {};
     $("mastYear").textContent = (w.hebrewEn || "").split(/\s+/).pop() || "";
     $("thisweek").innerHTML = `<h2>${hero.heading}</h2>
       <div class="hero"><div class="incipit-block">
-        <p class="incipit" lang="he" dir="rtl">${L.divineName(esc((w.incipit && w.incipit.he) || "")).html}</p>
-        <p class="incipit-en">${esc((w.incipit && w.incipit.en) || "")}</p>
+        ${inc.he ? `<p class="incipit" lang="he" dir="rtl">${L.divineName(esc(inc.he)).html}</p>` : ""}
+        ${inc.en ? `<p class="incipit-en">${esc(inc.en)}</p>` : ""}
         <p class="reading"><span class="ref">${esc(w.ref || "")}</span><br>${esc(w.shabbat || "")}<br>
           <span class="dates"><span class="he-date" lang="he" dir="rtl">${esc(w.hebrew || "")}</span> · ${esc(w.civilDisplay || "")}</span></p>
         <a class="cta" href="/${esc(w.slug)}">Read this week's sheet</a>

@@ -63,12 +63,14 @@ import { pickHero, rowHtml } from "../site/app/landing.js";
 
 test("pickHero: the newest week is 'This week' until seven days after its Shabbat", () => {
   const idx = { schema: 1, weeks: [{ slug: "2026-10-17-noach", civil: "2026-10-17", shabbat: "Shabbat Noach", ref: "Isaiah 54:1–55:5" }, { slug: "2026-10-10-bereshit", civil: "2026-10-10" }] };
-  assert.deepEqual(pickHero(idx, new Date("2026-10-14T12:00:00Z")).heading, "This week");
+  assert.equal(pickHero(idx, new Date("2026-10-14T12:00:00Z")).heading, "This week");
   assert.equal(pickHero(idx, new Date("2026-10-24T12:00:00Z")).heading, "This week");
   assert.equal(pickHero(idx, new Date("2026-10-25T12:00:00Z")).heading, "The latest sheet");
   assert.equal(pickHero(idx, new Date("2026-10-25T12:00:00Z")).current, false);
   assert.equal(pickHero(idx, new Date("2026-10-14T12:00:00Z")).entry.slug, "2026-10-17-noach");
   assert.equal(pickHero({ schema: 1, weeks: [] }, new Date()), null);
+  assert.equal(pickHero({}, new Date()), null);
+  assert.equal(pickHero(null, new Date()), null);
 });
 
 test("rowHtml survives an entry with missing fields", () => {

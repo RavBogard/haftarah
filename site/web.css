@@ -243,6 +243,7 @@ sup.fn button:hover, sup.fn button[aria-expanded="true"] { background: var(--hov
 .thisweek .cta { display: inline-block; margin-top: 1rem; color: var(--rubric); font-weight: 500; text-decoration: none; border-bottom: 1px solid currentColor; padding-bottom: .1em; }
 .thisweek .cta:hover { color: var(--ink); }
 .thisweek .hero { grid-template-columns: 1fr; }
+.thisweek .hero .incipit-block { text-align: left; direction: ltr; }
 .index { margin-top: 2.5rem; border-top: .5px solid var(--rule); padding-top: 1.25rem; max-width: 60rem; }
 .index ol { list-style: none; margin: 0; padding: 0; }
 .index li { display: grid; grid-template-columns: 10rem 1fr auto auto; gap: 1rem; padding: .5rem 0; border-bottom: .5px solid var(--legend-unused); font-size: .95rem; align-items: baseline; }
