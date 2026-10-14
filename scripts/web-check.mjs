@@ -84,8 +84,9 @@ async function main() {
       if (wide) { expect("rail holds every verse", Number(a.rail) === sheet.verses.length, a.rail); expect("no inline details", Number(a.details) === 0, a.details); }
       else { expect("rail empty", Number(a.rail) === 0, a.rail); expect("inline details for verses with commentary", Number(a.details) > 0, a.details); }
       expect("rail holds the current verse", a["rail-current"] === (wide ? "true" : "n/a"), a["rail-current"]);
+      if (wide) expect("rail scrolled to the current verse", Math.abs(Number(a["rail-offset"])) < 3, a["rail-offset"]);
       expect("empty verses show no summary", a["empty-summaries"] === "0", a["empty-summaries"]);
-      const v = sheet.verses[Math.min(5, sheet.verses.length - 1)];
+      const v = sheet.verses[Math.floor(sheet.verses.length * 2 / 3)];   // the row sheet.js runCheck scrolls to
       expect("masthead range after scrolling", (a.range || "").startsWith(`${sheet.haftarah.book} ${v.chapter}:${v.verse}`), a.range);
       expect("current verse marked", a.current === v.ref, a.current);
       expect("dark paper", a.paper === "rgb(18, 17, 16)", a.paper);

@@ -140,6 +140,9 @@ sup.fn { font-family: var(--serif); font-size: .72em; font-style: italic; color:
 .he sup.fn { font-size: .6em; }
 sup.fn button { font: inherit; color: inherit; padding: 0 .15em; margin: 0 -.05em; }
 sup.fn button:hover, sup.fn button[aria-expanded="true"] { background: var(--hover); }
+/* line-height: 0 above leaves the key's box ~0px tall: an invisible overlay gives a finger something to hit without moving a line. */
+sup.fn button { position: relative; }
+sup.fn button::after { content: ""; position: absolute; inset: -.7em -.35em; }
 .row.current .gut button { color: var(--rubric); }
 
 /* note popover (margin notes answered in place) */

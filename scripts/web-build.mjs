@@ -7,13 +7,28 @@
  *   node scripts/web-build.mjs [--out DIR]     # default site/dist
  */
 import { cp, mkdir, rm, readdir, copyFile } from "node:fs/promises";
-import { join, resolve, dirname, relative } from "node:path";
+import { join, resolve, dirname, relative, isAbsolute } from "node:path";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
+// relative() is case-insensitive on Windows, so these hold there too.
+const same = (a, b) => relative(a, b) === "";
+const inside = (p, dir) => { const r = relative(dir, p); return r !== "" && !r.startsWith("..") && !isAbsolute(r); };
+
+/** The output folder is wiped first: refuse any --out whose wipe would take the repo or site/ with it. */
+export function checkOut(out) {
+  const site = join(ROOT, "site"), dist = join(site, "dist");
+  const ok = same(out, dist) || inside(out, dist) ||
+    (inside(out, ROOT) && !same(out, site) && !inside(out, site)) ||
+    (!same(out, ROOT) && !inside(out, ROOT) && !inside(ROOT, out) && inside(out, tmpdir()));
+  if (!ok) throw new Error(`refusing to build into ${out}: it is emptied first, so it must be site/dist, a folder in the repo outside site/, or a folder under ${tmpdir()}`);
+  return out;
+}
+
 export async function buildSite({ out = join(ROOT, "site", "dist") } = {}) {
-  out = resolve(out);
+  out = checkOut(resolve(out));
   await rm(out, { recursive: true, force: true });
   await mkdir(join(out, "app"), { recursive: true });
   await mkdir(join(out, "fonts"), { recursive: true });

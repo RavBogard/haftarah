@@ -1,9 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, rm, stat, readFile } from "node:fs/promises";
+import { mkdtemp, rm, stat, readFile, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildSite } from "../scripts/web-build.mjs";
+import { fileURLToPath } from "node:url";
+import { buildSite, checkOut } from "../scripts/web-build.mjs";
 
 test("buildSite copies the site, lib, trope.css, voices, fonts and the mural", async () => {
   const out = await mkdtemp(join(tmpdir(), "site-"));
@@ -14,4 +15,15 @@ test("buildSite copies the site, lib, trope.css, voices, fonts and the mural", a
   }
   assert.equal((await readFile(join(out, "lib.js"), "utf8")), await readFile(new URL("../template/lib.js", import.meta.url), "utf8"));
   await rm(out, { recursive: true, force: true });
+});
+
+test("buildSite refuses an --out whose wipe would take the repo or site/ with it", async () => {
+  const root = fileURLToPath(new URL("..", import.meta.url));
+  const before = await readdir(root);
+  for (const out of [root, join(root, "site"), join(root, "site", "app"), join(root, ".."), join(root, "..", "elsewhere")]) {
+    await assert.rejects(buildSite({ out }), /refusing to build into/, out);
+  }
+  assert.deepEqual(await readdir(root), before, "nothing deleted");
+  assert.ok((await stat(join(root, "site", "app", "sheet.js"))).isFile());
+  assert.doesNotThrow(() => checkOut(join(root, "site", "dist")));
 });

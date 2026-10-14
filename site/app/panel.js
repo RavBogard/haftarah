@@ -3,6 +3,21 @@
 import { fetchText, lookupWord } from "./sefaria.js";
 import { noteHtml } from "./sheet.js";
 
+// Sefaria's text and dictionary markup is trusted but not ours: keep inline text tags only, strip
+// scripts, frames, handlers and non-http links before it reaches the live document.
+const KEEP = /^(P|B|I|EM|STRONG|BR|SPAN|SUP|SUB|SMALL|BIG|A|OL|UL|LI|DIV|ABBR)$/;
+const DROP = /^(SCRIPT|STYLE|IFRAME|OBJECT|EMBED|TEMPLATE|META|LINK|BASE|SVG|MATH)$/;
+export function clean(html) {
+  const t = document.createElement("template");
+  t.innerHTML = String(html == null ? "" : html);
+  for (const n of [...t.content.querySelectorAll("*")]) {
+    if (!KEEP.test(n.tagName)) { n.replaceWith(...(DROP.test(n.tagName) ? [] : n.childNodes)); continue; }
+    for (const a of [...n.attributes]) if (!["class", "lang", "dir", "title", "href"].includes(a.name)) n.removeAttribute(a.name);
+    if (n.hasAttribute("href") && !/^(https?:|\/)/i.test(n.getAttribute("href").trim())) n.removeAttribute("href");
+  }
+  return t.innerHTML;
+}
+
 export function initPanel({ page, L, sefariaUrl }) {
   const esc = L.escapeHtml, dash = L.enDash, SIG = L.SIGLA, NAMES = L.REGISTER_NAMES;
   const $ = id => document.getElementById(id);
@@ -57,9 +72,7 @@ export function initPanel({ page, L, sefariaUrl }) {
   pClose.addEventListener("click", closePanel);
   addEventListener("keydown", e => {
     if (e.key !== "Escape") return;
-    closePop(); closePanel();
-    const st = $("settings");
-    if (st && st.hasAttribute("data-open")) { st.removeAttribute("data-open"); const aa = $("aaBtn"); if (aa) aa.setAttribute("aria-expanded", "false"); }
+    closePop(); closePanel();   // the Aa settings panel handles its own Escape (settings.js)
   });
   const openLink = (href, label) => `<a class="open" href="${href}" target="_blank" rel="noopener">${label}<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M18 13v6H5V6h6"/></svg></a>`;
 
@@ -72,17 +85,17 @@ export function initPanel({ page, L, sefariaUrl }) {
     try {
       const t = await fetchText(ref);
       fill(token, `${head(t.ref || ref)}${t.heRef ? ` · <span lang="he" dir="rtl" class="hebrew">${esc(t.heRef)}</span>` : ""}</p>` +
-        (t.he ? `<div class="src-he" lang="he" dir="rtl">${t.he.html}</div><p class="vt">${esc(t.he.versionTitle)}</p>` : "") +
-        (t.en ? `<div class="src-en">${t.en.html}</div><p class="vt">${esc(t.en.versionTitle)}</p>` : `<p class="inverse">No English on Sefaria for this passage.</p>`) +
-        openLink(sefariaUrl(ref), "Open on Sefaria"));
+        (t.he ? `<div class="src-he" lang="he" dir="rtl">${clean(t.he.html)}</div><p class="vt">${esc(t.he.versionTitle)}</p>` : "") +
+        (t.en ? `<div class="src-en">${clean(t.en.html)}</div><p class="vt">${esc(t.en.versionTitle)}</p>` : `<p class="inverse">No English on Sefaria for this passage.</p>`) +
+        openLink(esc(sefariaUrl(ref)), "Open on Sefaria"));
     } catch (err) {
-      fill(token, `${head(ref)}</p><p class="err">Sefaria did not answer (${esc(err.message)}).</p>` + openLink(sefariaUrl(ref), "Open on Sefaria"));
+      fill(token, `${head(ref)}</p><p class="err">Sefaria did not answer (${esc(err.message)}).</p>` + openLink(esc(sefariaUrl(ref)), "Open on Sefaria"));
     }
   }
   rail.addEventListener("click", onSrc); text.addEventListener("click", onSrc);
 
   // ---- a Hebrew word: the root, the short gloss first, the full BDB article folded ----
-  const senses = arr => !arr || !arr.length ? "" : `<ol>${arr.map(s => `<li>${(s && s.definition) || ""}${senses(s && s.senses)}</li>`).join("")}</ol>`;
+  const senses = arr => !arr || !arr.length ? "" : `<ol>${arr.map(s => `<li>${clean(s && s.definition)}${senses(s && s.senses)}</li>`).join("")}</ol>`;
   const lexBlock = x => `<span class="hw" lang="he" dir="rtl">${esc(x.headword)}</span><span class="lexname">${esc(x.lexicon)}${x.morphology ? " · " + esc(x.morphology) : ""}</span>${senses(x.senses)}`;
   async function openWord(w) {
     const ref = w.closest(".row").dataset.ref, word = w.textContent;
@@ -99,9 +112,9 @@ export function initPanel({ page, L, sefariaUrl }) {
         if (x.short.length) { if (x.full.length) body += `<details class="lex"><summary>Full entry</summary>${x.full.map(e => `<div class="full">${lexBlock(e)}</div>`).join("")}</details>`; }
         else body += x.full.map(e => `<div class="lex">${lexBlock(e)}</div>`).join("");
       }
-      fill(token, body + openLink(sefariaUrl(ref), "Open the verse on Sefaria"));
+      fill(token, body + openLink(esc(sefariaUrl(ref)), "Open the verse on Sefaria"));
     } catch (err) {
-      fill(token, `${head}<p class="err">Sefaria did not answer (${esc(err.message)}).</p>` + openLink(sefariaUrl(ref), "Open the verse on Sefaria"));
+      fill(token, `${head}<p class="err">Sefaria did not answer (${esc(err.message)}).</p>` + openLink(esc(sefariaUrl(ref)), "Open the verse on Sefaria"));
     }
   }
   text.addEventListener("click", e => { const w = e.target.closest(".he .w"); if (w) openWord(w); });

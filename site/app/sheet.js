@@ -139,7 +139,7 @@ export async function run() {
     // A verse with nothing gets a div: a <details> without a summary shows the browser's own "Details".
     const app = el(count ? "details" : "div", "vapp"); app.dataset.verse = cv;
     app.innerHTML = (count ? `<summary><span class="count">${count}</span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></summary>` : "") +
-      `<p class="vh"><span>${cv}</span><a href="${sefariaUrl(v.ref)}" target="_blank" rel="noopener">on Sefaria</a></p>` +
+      `<p class="vh"><span>${cv}</span><a href="${esc(sefariaUrl(v.ref))}" target="_blank" rel="noopener">on Sefaria</a></p>` +
       v.keys.map(k => `<p class="note ${k.kind}">${noteHtml(k, L)}</p>`).join("") +
       v.entries.map(e => `<p class="entry reg-${e.register}">${entryHtml(e)}</p>`).join("");
     if (!count) app.classList.add("empty");
@@ -237,7 +237,8 @@ function runCheck(api, L) {
   h.dataset.checkEmptySummaries = String(document.querySelectorAll(".vapp.empty summary").length);
   h.dataset.checkWide = String(wide);
   h.dataset.checkWidth = String(innerWidth);
-  const target = rows[Math.min(5, rows.length - 1)];
+  // Two thirds down: far enough that a rail which scrolls short of its target misses it.
+  const target = rows[Math.floor(rows.length * 2 / 3)];
   target.row.scrollIntoView({ block: "start" });
   api.sync({ behavior: "auto" });   // instant, so the rail has moved before it is measured
   h.dataset.checkRange = document.getElementById("mastRange").textContent;
@@ -245,6 +246,8 @@ function runCheck(api, L) {
   const cur = document.querySelector("#rail .vapp.current"), railBox = document.getElementById("rail").getBoundingClientRect();
   const curBox = cur && cur.getBoundingClientRect();
   h.dataset.checkRailCurrent = !wide ? "n/a" : String(!!curBox && curBox.bottom > railBox.top && curBox.top < railBox.bottom);
+  // How far the current apparatus sits from the rail's top edge (inside its padding); 0 when railTo landed.
+  h.dataset.checkRailOffset = !wide || !curBox ? "n/a" : String(Math.round(curBox.top - (railBox.top + (parseFloat(getComputedStyle(document.getElementById("rail")).paddingTop) || 0))));
   h.dataset.checkCurrent = target.row.classList.contains("current") ? target.v.ref : "";
   h.dataset.theme = "dark";
   h.dataset.checkPaper = getComputedStyle(document.body).backgroundColor;

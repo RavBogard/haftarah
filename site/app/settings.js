@@ -30,6 +30,10 @@ export function initSettings({ host, button, pdfHref = null, trope = true }) {
   const close = () => open(false);
   button.addEventListener("click", () => open(!host.hasAttribute("data-open")));
   document.addEventListener("click", e => { if (!host.contains(e.target) && e.target !== button) close(); });
+  // Escape closes the panel on every page (the landing has no side panel to do it) and hands focus back.
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape" && host.hasAttribute("data-open")) { close(); button.focus({ preventScroll: true }); }
+  });
   host.querySelector("#sizeDown").addEventListener("click", () => { html.dataset.size = String(Math.max(1, +html.dataset.size - 1)); store("size", html.dataset.size); sync(); });
   host.querySelector("#sizeUp").addEventListener("click", () => { html.dataset.size = String(Math.min(5, +html.dataset.size + 1)); store("size", html.dataset.size); sync(); });
   host.querySelectorAll("#themeSeg button").forEach(b => b.addEventListener("click", () => { html.dataset.theme = b.dataset.theme; store("theme", b.dataset.theme); sync(); }));
