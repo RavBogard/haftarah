@@ -339,7 +339,8 @@
     const nw = data.nextWeek;
     return {
       shabbatName: name, seriesName: series.name, seriesLabel: (data.shabbat || {}).hebrewEn || series.year,
-      title: `${h.title && h.title.en ? `Haftarat ${h.title.en}` : name} · ${enDash(h.ref || "")}`,
+      // sheet.json may already say "Haftarat Noach"; only a bare name gets the prefix.
+      title: `${h.title && h.title.en ? (/^haftarat\b/i.test(h.title.en) ? h.title.en : `Haftarat ${h.title.en}`) : name} · ${enDash(h.ref || "")}`,
       book: h.book || "", ref: enDash(h.ref || ""), heRef: h.heRef || "",
       shabbat: { civil: (data.shabbat || {}).civil || "", civilDisplay: (data.shabbat || {}).civilDisplay || "", hebrew: (data.shabbat || {}).hebrew || "", hebrewEn: (data.shabbat || {}).hebrewEn || "" },
       front: {

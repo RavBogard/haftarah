@@ -453,6 +453,8 @@ test("sheetModel: divine name, gloss keys in the Hebrew, title and front matter"
   };
   const m = lib.sheetModel(d, { voices: { Rashi: "R. Shlomo Yitzchaki" } });
   assert.equal(m.title, "Haftarat Noach · Isaiah 54:1–55:5");
+  // A title that already says "Haftarat" (as the real weeks' sheet.json does) is not prefixed twice.
+  assert.equal(lib.sheetModel({ ...d, haftarah: { ...d.haftarah, title: { en: "Haftarat Noach" } } }).title, "Haftarat Noach · Isaiah 54:1–55:5");
   assert.equal(m.shabbatName, "Shabbat Noach");
   assert.equal(m.seriesLabel, "6 Cheshvan 5787");
   assert.equal(m.ref, "Isaiah 54:1–55:5");

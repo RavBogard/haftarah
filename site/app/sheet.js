@@ -80,6 +80,9 @@ export async function run() {
   // ---- verse rows and their apparatus ----
   const text = $("text"), rail = $("rail");
   const rows = [];
+  const wide = matchMedia("(min-width: 1100px)");
+  const gutButton = r => r.row.querySelector(".gut button");
+  let current = null;   // the row sync() last marked current
   // A keyed letter becomes a button the popover (panel.js) answers; the sup keeps its classes.
   function keyButtons(node) {
     node.querySelectorAll("sup.fn").forEach(s => {
@@ -139,7 +142,10 @@ export async function run() {
       v.entries.map(e => `<p class="entry reg-${e.register}">${entryHtml(e)}</p>`).join("");
     if (!count) app.classList.add("empty");
     rail.append(app); text.append(row);
-    rows.push({ v, row, app, keys: v.keys });
+    const r = { v, row, app, keys: v.keys };
+    // Narrow, the verse number opens the fold below it; keep its state announced however the fold moves.
+    if (count) app.addEventListener("toggle", () => { if (!wide.matches) gutButton(r).setAttribute("aria-expanded", String(app.open)); });
+    rows.push(r);
   }
 
   // ---- end matter ----
@@ -149,16 +155,17 @@ export async function run() {
   if (!end.childElementCount) end.hidden = true;
 
   // ---- desktop rail vs inline apparatus ----
-  const wide = matchMedia("(min-width: 1100px)");
   function place() {
     for (const r of rows) {
-      const fold = r.app.tagName === "DETAILS";
-      if (wide.matches) { rail.append(r.app); if (fold) r.app.open = true; }
-      else { r.row.append(r.app); if (fold) r.app.open = false; }
+      const fold = r.app.tagName === "DETAILS", b = gutButton(r);
+      if (wide.matches) { rail.append(r.app); if (fold) r.app.open = true; b.removeAttribute("aria-expanded"); }
+      else { r.row.append(r.app); if (fold) { r.app.open = false; b.setAttribute("aria-expanded", "false"); } }
     }
     if (!wide.matches) rows.forEach(r => r.app.classList.remove("current"));
   }
-  place(); wide.addEventListener("change", place);
+  place();
+  // Crossing the breakpoint: forget the current verse so sync() marks it and moves the rail again.
+  wide.addEventListener("change", () => { place(); current = null; sync(); });
 
   // ---- running head and rail that keep pace ----
   const mastLeft = $("mastLeft"), mastRange = $("mastRange");
@@ -166,8 +173,16 @@ export async function run() {
   let railPause = 0;   // a reader scrolling the rail by hand keeps it where they put it for a moment
   rail.addEventListener("wheel", () => { railPause = Date.now() + 1500; }, { passive: true });
   rail.addEventListener("touchmove", () => { railPause = Date.now() + 1500; }, { passive: true });
-  let current = null;
-  function sync() {
+  // Scroll the rail so a verse's apparatus sits at its top. Measured from the boxes, not offsetTop:
+  // the sticky rail is the offsetParent of its children in the wide layout but not in the narrow one.
+  function railTo(app, behavior) {
+    const pad = parseFloat(getComputedStyle(rail).paddingTop) || 0;
+    const top = rail.scrollTop + app.getBoundingClientRect().top - rail.getBoundingClientRect().top - pad;
+    rail.scrollTo({ top, behavior: behavior || (matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth") });
+  }
+  // sync({ behavior: "auto" }) moves the rail at once (the check measures it right after);
+  // as a scroll/resize listener it receives an Event, which has no behavior, so it animates.
+  function sync(opts) {
     // A row counts once more than 1rem of it shows below the masthead: a verse jumped to lands
     // .75rem below it (.row's scroll-margin-top), so the row above it must not count as current.
     const top = mastH() + parseFloat(getComputedStyle(html).fontSize), bottom = innerHeight;
@@ -188,7 +203,7 @@ export async function run() {
       current = first;
       rows.forEach(r => { r.row.classList.toggle("current", r === first); r.app.classList.toggle("current", wide.matches && r === first); });
       if (wide.matches && Date.now() > railPause) {
-        rail.scrollTo({ top: first.app.offsetTop - rail.offsetTop, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+        railTo(first.app, opts && opts.behavior);
       }
     }
   }
@@ -198,9 +213,9 @@ export async function run() {
   sync();
 
   // verse number: jump to its commentary (the rail when wide, the fold below the verse otherwise)
-  for (const r of rows) r.row.querySelector(".gut button").addEventListener("click", () => {
-    if (wide.matches) { railPause = Date.now() + 1500; rail.scrollTo({ top: r.app.offsetTop - rail.offsetTop, behavior: "smooth" }); r.app.classList.add("current"); }
-    else if (r.app.tagName === "DETAILS") { r.app.open = !r.app.open; }
+  for (const r of rows) gutButton(r).addEventListener("click", () => {
+    if (wide.matches) { railPause = Date.now() + 1500; railTo(r.app); r.app.classList.add("current"); }
+    else if (r.app.tagName === "DETAILS") { r.app.open = !r.app.open; }   // the toggle listener updates aria-expanded
   });
 
   const api = { rows, model, sync, closeAll: () => { panel.close(); settings.close(); } };
@@ -221,8 +236,12 @@ function runCheck(api, L) {
   h.dataset.checkWide = String(wide);
   const target = rows[Math.min(5, rows.length - 1)];
   target.row.scrollIntoView({ block: "start" });
-  api.sync();
+  api.sync({ behavior: "auto" });   // instant, so the rail has moved before it is measured
   h.dataset.checkRange = document.getElementById("mastRange").textContent;
+  // Does the current verse's apparatus show inside the rail's visible box?
+  const cur = document.querySelector("#rail .vapp.current"), railBox = document.getElementById("rail").getBoundingClientRect();
+  const curBox = cur && cur.getBoundingClientRect();
+  h.dataset.checkRailCurrent = !wide ? "n/a" : String(!!curBox && curBox.bottom > railBox.top && curBox.top < railBox.bottom);
   h.dataset.checkCurrent = target.row.classList.contains("current") ? target.v.ref : "";
   h.dataset.theme = "dark";
   h.dataset.checkPaper = getComputedStyle(document.body).backgroundColor;
