@@ -8,8 +8,9 @@ DESIGN.md                   the visual system (written from the built sheet)
 template/
   sheet.html                page shell filled by the build
   sheet.css                 the one frame every week shares
+  trope.css                 the chanter's-copy colors; on only while <html data-trope> is set
   render.js                 browser-side paginator: front page, text pages, apparatus, margin notes, end matter
-  lib.js                    pure functions shared by the renderer and the tests (keys, poetry, divine name, incipit fit)
+  lib.js                    pure functions shared by the renderer and the tests (keys, poetry, divine name, incipit fit, trope phrases: tropeHtml, tropeFamiliesUsed)
   voices.json               one-line identifications of named sources, for the front page
   fonts/                    Ezra SIL (Hebrew), Literata (English), Noto Serif Hebrew (fallback); OFL licenses alongside
 scripts/
@@ -58,7 +59,7 @@ node scripts/deliver.mjs weeks/<slug>           # 7. to Drive (--dry-run first)
 npm test                                        # unit tests, when the template or scripts change
 ```
 
-**Chanter's copy.** For the few who chant, `--trope` also writes `sheet-trope.html` and `sheet-trope.pdf`: the same sheet with every trope phrase in the Hebrew column on a colored background, the way TropeTrainer printed it. A phrase ends at each word with a disjunctive accent, except that tipcha, pashta, yetiv and zarka fold into the phrase that follows; the last word of a verse ends a sof pasuk phrase, and the haftarah's last phrase has its own color for the closing melody. The family colors follow TropeTrainer's, so people who learned on it recognize them. The study sheet itself is unchanged; `check.mjs weeks/<slug> --trope` checks the copy, and nothing delivers it to Drive.
+**Chanter's copy.** For the few who chant, `--trope` also writes `sheet-trope.html` and `sheet-trope.pdf`: the same sheet with every trope phrase in the Hebrew column on a colored background, the way TropeTrainer printed it. A phrase ends at each word with a disjunctive accent, except that tipcha, pashta, yetiv and zarka fold into the phrase that follows; the last word of a verse ends a sof pasuk phrase, and the haftarah's last phrase has its own color for the closing melody. The family colors follow TropeTrainer's, so people who learned on it recognize them. The colors are a runtime toggle: every sheet's Hebrew carries the phrase spans, colored (and the legend row shown) only while `<html>` has the attribute `data-trope`, so nothing is rebuilt to turn them on or off; add `?trope=1` to any sheet HTML to look. A web version reuses three pieces, `tropeHtml` and `tropeFamiliesUsed` from `template/lib.js` and `template/trope.css`, plus `TROPE_FAMILIES` for a legend. `check.mjs weeks/<slug> --trope` checks the copy, and nothing delivers it to Drive.
 
 The build prints the browser it used (`Browser: C:/Program Files/Google/Chrome/Application/chrome.exe`) and the page count. Chrome and Edge are tried in that order; set `HAFTARAH_BROWSER` to pin another. The page images are rendered from the PDF with `pdftoppm` when it is on the PATH, so what you see in `preview/` is what prints; without it they are headless screenshots, which on Linux Chromium lose the bottom of the page.
 
