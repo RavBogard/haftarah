@@ -8,11 +8,11 @@ web
 
 ## Stack
 
-delegated: static HTML + CSS rendered to a letter-size PDF with headless Chrome/Edge, driven by a dependency-free Node script. Chosen because the weekly run happens inside Claude Cowork on the rabbi's own machine (Windows today), where Node 24 and Edge/Chrome are present and nothing else should need installing. Fonts are self-hosted in the repo so the PDF renders identically on any machine.
+delegated: static HTML + CSS rendered to a letter-size PDF with headless Chrome/Edge, driven by a dependency-free Node script; the same data also drives a static web page (site/, plain HTML/CSS/ES modules, no framework) deployed by Vercel, with week data in a public Vercel Blob store. Chosen because the weekly run happens inside Claude Cowork on the rabbi's own machine (Windows today), where Node 24 and Edge/Chrome are present and nothing else should need installing. Fonts are self-hosted in the repo so the PDF renders identically on any machine.
 
 ## Users
 
-Rabbi Daniel Bogard of Central Reform Congregation (St. Louis) produces one sheet a week in Claude Cowork, in a short sitting, from the Sefaria MCP. The readers are an adult Torah study group / adult-education class who sit around a table with the printed sheet and discuss the week's haftarah. They are literate, curious adults; many read some Hebrew, most rely on the English, a few can chant; many are older; the sheet is read at arm's length.
+Rabbi Daniel Bogard of Central Reform Congregation (St. Louis) produces one sheet a week in Claude Cowork, in a short sitting, from the Sefaria MCP. The readers are an adult Torah study group / adult-education class who sit around a table with the printed sheet and discuss the week's haftarah; some join on Zoom or bring an iPad, and people look sheets up afterwards at haftarah.centralreform.org. They are literate, curious adults; many read some Hebrew, most rely on the English, a few can chant; many are older; the sheet is read at arm's length.
 
 ## Product Purpose
 
@@ -26,7 +26,7 @@ A Mikraot Gedolot for a Reform study table: Sefaria's sources, pulled live each 
 
 - The weekly ritual: in Cowork, Claude reads the Jewish calendar (Sefaria `get_current_calendar`, Diaspora schedule), fetches the haftarah text in both languages, lists candidate commentary from Sefaria's links, and proposes a shortlist. The rabbi reads the texts and summaries in the conversation, then reviews the built PDF and approves the sheet by printing it. One build makes the sheet he reviews and prints; anything he turns down is marked rejected and stays off the page.
 - Special haftarot are normal, not edge cases: Machar Chodesh, Shabbat Rosh Chodesh, the Three of Affliction, the Seven of Consolation, Shabbat Shuvah, the four parshiyot, festivals. The sheet always names the actual reading and, when it differs from the parashah's default haftarah, says why.
-- The sheet is printed double-sided in color by the rabbi, stapled upper right. It is also sent as a PDF.
+- The sheet is printed double-sided in color by the rabbi, stapled upper right. It is also sent as a PDF, and the delivery step publishes it as a web page at haftarah.centralreform.org/<slug> (decided 2026-10-14).
 - Hebrew source text: Sefaria's "Miqra according to the Masorah" (full te'amim). English: "THE JPS TANAKH: Gender-Sensitive Edition". Both are verse-aligned.
 - Historical-critical content does not exist on Sefaria in quotable form; Claude drafts it as attributed summaries (naming only works on the closed bibliography) and the rabbi reads it before he prints.
 
@@ -38,7 +38,7 @@ A Mikraot Gedolot for a Reform study table: Sefaria's sources, pulled live each 
 - Every commentary entry is keyed to a verse or verse range and labeled by register (traditional, modern, historical-critical) and by source.
 - Each sheet opens with a front page: calendar reason, historical setting, legend, voices. Discussion questions are never printed. A glossary of names and places and a next-week line close the sheet.
 - An optional chanter's copy (`sheet-trope.pdf`) highlights the trope phrases in the Hebrew by family, for the few who chant. It is built only when a chanter asks and is not delivered to Drive.
-- Undecided: whether sheets are also published on the congregation website. The build must not preclude an HTML export later.
+- Every delivered sheet is also a native web page (landing page with an index, one page per week, Sefaria panels for sources and words, trope colors, dark mode, text size); the printed sheet stays the primary object and never changes for the web's sake.
 
 ## Brand Commitments
 
