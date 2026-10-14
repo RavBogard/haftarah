@@ -1,4 +1,4 @@
-# Weekly haftarah sheet: runbook v3
+# Weekly haftarah sheet: runbook v4
 
 One sheet a week for Torah from Scratch at Central Reform Congregation. The template never changes during a weekly run; only `weeks/<slug>/sheet.json` does. `README.md` documents every field of that file. Read `PRODUCT.md` once per session. The English is pinned to the JPS Gender-Sensitive Edition, and gender-sensitive God-language applies to everything you write.
 
@@ -7,7 +7,9 @@ One sheet a week for Torah from Scratch at Central Reform Congregation. The temp
 - Nothing prints unapproved, and Daniel approves by printing. He reads the texts and summaries in the conversation, then looks at the PDF and prints it once he likes it. There is no per-entry approval and no draft build.
 - Never invent a citation. Every classical, modern and reference entry is a Sefaria text by ref, printed with that ref. Historical-critical summaries name only works listed in `bibliography/<book>.md`. The build refuses to run when either rule is broken.
 - No discussion questions, no thematic headings. Commentary is English; Hebrew only for specific words and the haftarah itself.
-- Be brief. Ask only when blocked, with a short "Needs you:" list. Put context first, then the question, in prose.
+- Be brief everywhere except the briefing (step 3), which is written to be read and digested. Ask only when blocked, with a short "Needs you:" list. Put context first, then the question.
+- Assume Daniel arrives cold, with no preparation. Nothing is put to him for a choice until he has had the briefing.
+- Questions: use tappable pop-ups (`ask_user_input`) for picks among clear options (which reading, which issues, keep or cut). Use prose for anything nuanced. Every option in a pop-up must already be explained in the briefing; never offer a label he has to ask about.
 - When Daniel turns something down, set `status: "rejected"` rather than deleting it, so the record shows what was considered. `status` is otherwise optional.
 
 ## 0. Where to work
@@ -28,7 +30,7 @@ node scripts/fetch.mjs --date 2026-10-17
 node scripts/fetch.mjs --ref "Isaiah 54:1-55:5" --date 2026-10-17   # Daniel's pick overrides Hebcal
 ```
 
-Tell Daniel in one line: the Shabbat date, the parashah, the calendar's haftarah (and why, if special), and the parashah's own haftarah when they differ. He picks.
+Tell Daniel in one line: the Shabbat date, the parashah, the calendar's haftarah (and why, if special), and the parashah's own haftarah when they differ. When there is a real choice (special Shabbat, Ashkenazi/Sephardi ranges), he picks by pop-up; when there is none, proceed straight to the briefing.
 
 "This week" can mean the coming Shabbat or the one after. When the coming Shabbat already has a folder (in `weeks/` or the Drive working folder), offer both in the same one-line question. `fetch.mjs` with no `--date` does this for you: it names both Shabbatot and stops.
 
@@ -42,13 +44,21 @@ Sheets are not numbered. Each is known by its date: the front page carries the H
 
 It also proposes the incipit: the first two to four Hebrew words up to the first strong pause, never ending on a function word like לֹא, with the matching JPS words. Check both against the verse; the name a haftarah is known by is not always its first words.
 
-## 3. The map
+## 3. The briefing
 
-Before listing any sources, read the passage and its links and give Daniel a brief of under 300 words: how the passage moves; the cruxes (textual problems, famous verses, theological knots); where the traditional commentators agree and split; what critical scholarship says about date, setting and composition; the connection to the parashah.
+Before any question about sources, give Daniel a briefing in chat of about one printed page (500 to 700 words), plain prose under short labelled sections, written so he can read it cold and come away knowing the passage. Read the passage and pull the key linked texts from Sefaria first so every named source is real.
+
+1. **The portion.** What happens, panel by panel, with verse ranges: who speaks, to whom, the images, how it ends.
+2. **This Shabbat.** The calendar reason, other Shabbatot that use the same verses, and the link to the parashah.
+3. **Major themes.** Three to five, two or three sentences each, tied to verses.
+4. **The commentary tradition.** The famous verses and the Talmud, midrash and liturgy built on them; where Targum, Rashi, Radak, Ibn Ezra, Abarbanel, Malbim and others agree and split; any textual crux. Name each source by its Sefaria ref and say in a sentence what it argues.
+5. **The critical view.** Date, setting, authorship, composition, inner-biblical allusion, naming only works in `bibliography/<book>.md`.
+
+No questions inside the briefing. When it is done, number the issues it raised (one line each) and offer them as a multi-select pop-up, with "Take the whole map" as an option.
 
 ## 4. Digging in
 
-Daniel names the issues that matter this week, or approves the whole map. For each, pull the actual texts with the Sefaria tools on exact refs (`Radak on I Samuel 20:18`), show each in full, translated where needed and labelled, and talk it through. Write each chosen entry to `commentary[]`.
+Daniel picks issues from the pop-up, or takes the whole map. Do not run a second round of explanation before he picks; the briefing is that round. For each, pull the actual texts with the Sefaria tools on exact refs (`Radak on I Samuel 20:18`), show each in full, translated where needed and labelled, and talk it through. Write each chosen entry to `commentary[]`.
 
 - **Classical** (red square) and **modern** (blue circle): quote or abridge a Sefaria text; set `sourceRef`. For a Hebrew-only source, translate faithfully and set `translation: "claude"`; abridge with `kind: "abridged"`.
 - **What historians say** (teal triangle): a 60 to 120 word summary with a short descriptive `source` title, naming only works from `bibliography/<book>.md` in `works`. The works themselves cannot be checked from a session, so a summary gives the standard reading and points to the work ("see Blenkinsopp"); it never claims a page number or a quotation it has not seen (Daniel's ruling, 2026-10-08). When a week needs a work not yet listed, add the line, verify the work exists (publisher catalogue or WorldCat), and mention the addition in the delivery line.
