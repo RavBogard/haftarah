@@ -22,7 +22,7 @@ Work in a cloud session. Clone `https://github.com/RavBogard/haftarah` read-only
 - **Do not change the template or scripts in the cloud copy.** If you find a bug, open a GitHub issue on RavBogard/haftarah with the GitHub connector (title, what happened, the week, the fix you'd suggest) and mention the issue number in the delivery line.
 - **If the cloud build fails, say so in one line and stop.** Daniel can run the build in Claude Code on his machine.
 
-`weeks/` is git-ignored scratch; the record of every week lives in Drive (step 7).
+`weeks/` is git-ignored scratch; the record of every week lives in Drive (step 7). The web page of a week is published by step 7; nothing in steps 1–6 touches the web.
 
 ## 1. Calendar
 
@@ -111,4 +111,4 @@ After Drive, the same command puts the week on the web: `scripts/publish.mjs` up
 
 The script checks every file's sha256 against what Drive stored. If the drop box is not configured or fails, send Daniel the PDF in chat, create the week's working subfolder with the Drive connector, and say in the delivery line which files still need to go in by hand. Never retype file contents into the Drive connector.
 
-One line back to Daniel: Shabbat, reading, page count, entries by register, Drive links, any bibliography additions, and any GitHub issues filed.
+One line back to Daniel: Shabbat, reading, page count, entries by register, Drive links and the page address, any bibliography additions, and any GitHub issues filed.

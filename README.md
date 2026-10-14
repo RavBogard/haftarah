@@ -10,7 +10,7 @@ template/
   sheet.css                 the one frame every week shares
   trope.css                 the chanter's-copy colors; on only while <html data-trope> is set
   render.js                 browser-side paginator: front page, text pages, apparatus, margin notes, end matter
-  lib.js                    pure functions shared by the renderer and the tests (keys, poetry, divine name, incipit fit, trope phrases: tropeHtml, tropeFamiliesUsed)
+  lib.js                    pure functions shared by the renderer and the tests (keys, poetry, divine name, incipit fit, trope phrases: tropeHtml, tropeFamiliesUsed; the web sheet's model: sheetModel, shabbatName, escapeHtml, enDash)
   voices.json               one-line identifications of named sources, for the front page
   fonts/                    Ezra SIL (Hebrew), Literata (English), Noto Serif Hebrew (fallback); OFL licenses alongside
 scripts/
@@ -30,7 +30,9 @@ docs/prompts/
   draft-entries.md          the brief handed to the drafting subagent in step 4
 bibliography/
   <book>.md                 the closed list of works a critical entry may cite
-tests/                      node --test; npm test
+tests/                      node --test; npm test (publish.test.mjs, web.test.mjs, web-build.test.mjs cover the web sheet)
+site/                       the web sheet: index.html, sheet.html, 404.html, web.css, app/*.js (ES modules)
+vercel.json                 Vercel build command, output dir and the /data/ rewrite
 assets/
   logo.png                  the Siona Benjamin mural, CRC's mark, on the front page
 weeks/
@@ -170,3 +172,7 @@ In a sandbox that reaches the internet through an HTTPS proxy (the Cowork cloud 
 - **Re-running:** replaces files of the same name. The old copy goes to Drive's trash.
 - **Sending one side only:** use `--only public` or `--only working`.
 - **Configuration:** set `HAFTARAH_DROPBOX_URL` and `HAFTARAH_DROPBOX_TOKEN`, or put `{"url","token"}` in `~/.haftarah-dropbox.json` (or the file named by `HAFTARAH_DROPBOX_CONFIG`). The token is never printed.
+
+## The web sheet
+
+Every delivered week is also a web page at `https://haftarah.centralreform.org/<slug>`, with the landing page and index at `/`. The site is `site/` (plain HTML, CSS and ES modules, no framework), assembled by `scripts/web-build.mjs` into `site/dist` and deployed by Vercel from `main` (project `haftarah`; `vercel.json` at the repo root holds the build command, the output directory and the rewrites). Week data never enters the repo: `scripts/publish.mjs` (run by `deliver.mjs`) uploads the cleaned `sheet.json` and the PDF to a public Vercel Blob store and updates `index.json`; the site reads them same-origin through the `/data/` rewrite, so a re-delivery shows within a minute and the site redeploys only when its own files change. The page builds its content from `sheetModel` in `template/lib.js`, the same key, divine-name, trope and entry-tail rules as the printed sheet. Sources open in full from Sefaria's texts API; Hebrew words open their root and senses from the words API; both are called from the browser, no key. Settings (text size, theme, trope colors) persist per device. `npm run web-check` builds and checks the site headlessly; `node scripts/web-check.mjs weeks/<slug> --serve` serves it for a look.

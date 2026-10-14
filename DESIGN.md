@@ -285,3 +285,34 @@ Gloss size in secondary grey, 1.45 and 1.4 leading respectively, max width 5.6in
 - **Don't** leave a verse alone on a page or a heading without items.
 - **Don't** write "(cont.)"; an entry carried past its verse's page says which page the verse is on.
 - **Don't** stack sources as labeled blocks or run a commentary band beside the text; commentary lives in the foot apparatus or the keyed margin.
+
+## The web sheet (screen)
+
+`site/web.css` carries the print design onto a screen; the printed rules above still govern the sheet, and the screen adds only what a screen needs. This section records what the stylesheet does.
+
+### Dark theme
+Dark follows the system setting unless the page is set to light, and the settings card can force either. Paper `#121110`, ink `#ebe6dc`, secondary ink and frame `#a8a195`, rubric `#e0616b`. The registers become classical `#e0616b`, modern `#86aaea`, historians `#5ec4b9`, reference `#d7b05c`; the unused-legend grey is `#5c5852`. The light theme keeps the print values.
+
+### Text size
+Five sizes set on the root: 15, 17, 19, 21 and 24px, with 17px the default. Every other size is in rem or em and follows.
+
+### Type scale
+English at 1rem with 1.5 leading; Hebrew at 1.18em with 1.75 leading. The apparatus is .9rem with 1.42 leading, and glosses and chrome (masthead, legend, voices, provenance, summaries) are .88rem. The incipit is Ezra SIL at clamp(2.6rem, 7vw, 4.4rem).
+
+### Layout
+From 1100px up the reading is a two-track grid: the verses on the left and a 22rem sticky rail of apparatus on the right, with a 3rem gap. Below 1100px it is one column: each verse shows its Hebrew above its English, and its apparatus sits under them in a `details` element that opens on the verse's count of entries. Below 640px the front page and glossary go to one column and the mural shrinks to 5.5rem. The masthead is 2.75rem and stays on screen; the page is at most 82rem wide.
+
+### Panel
+A source or a word opens in a panel that slides in from the right, 30rem wide (or the full width of a narrower screen), under the masthead and down to the bottom edge, with a hairline on its left edge. Under 640px it is a sheet from the bottom, full width and 86vh high, with a hairline on top. A closed panel leaves the tab order.
+
+### Interaction
+A hover is a `rgba(ink, .06)` wash (.08 white on dark). The active Hebrew word takes a .035 wash (.05 on dark) and a one-pixel rubric hairline underneath. Focus is a 2px ring in the modern blue `#1d4f9c`, or `#86aaea` on dark, offset 2px. Touch targets in the masthead are 2.75rem.
+
+### Motion
+Two motions: the panel slide, 220ms on a decelerating curve, and the smooth scroll that carries the rail to the current verse. Small state changes (word hover, the settings switch, the summary chevron) take .12 to .18s. Under reduced motion the panel appears without sliding and the rail jumps.
+
+### Shadow
+One shadow family, a soft drop with a faint contact line, for the panels, the settings card and the note popovers. Nothing else on the page has one.
+
+### Trope colors
+The trope backgrounds are light pastels and keep their light values on the dark theme; the words on them turn dark (`#111`) so they stay readable.
