@@ -8,7 +8,6 @@
  */
 import { cp, mkdir, rm, readdir, copyFile } from "node:fs/promises";
 import { join, resolve, dirname, relative, isAbsolute } from "node:path";
-import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -17,13 +16,12 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const same = (a, b) => relative(a, b) === "";
 const inside = (p, dir) => { const r = relative(dir, p); return r !== "" && !r.startsWith("..") && !isAbsolute(r); };
 
-/** The output folder is wiped first: refuse any --out whose wipe would take the repo or site/ with it. */
+/** The output folder is wiped first: only site/dist (or below it) or a folder wholly outside the repo. */
 export function checkOut(out) {
-  const site = join(ROOT, "site"), dist = join(site, "dist");
+  const dist = join(ROOT, "site", "dist");
   const ok = same(out, dist) || inside(out, dist) ||
-    (inside(out, ROOT) && !same(out, site) && !inside(out, site)) ||
-    (!same(out, ROOT) && !inside(out, ROOT) && !inside(ROOT, out) && inside(out, tmpdir()));
-  if (!ok) throw new Error(`refusing to build into ${out}: it is emptied first, so it must be site/dist, a folder in the repo outside site/, or a folder under ${tmpdir()}`);
+    (!same(out, ROOT) && !inside(out, ROOT) && !inside(ROOT, out));
+  if (!ok) throw new Error(`refusing to build into ${out}: it is emptied first, so it must be site/dist or a folder outside the repo (and not one that contains it)`);
   return out;
 }
 

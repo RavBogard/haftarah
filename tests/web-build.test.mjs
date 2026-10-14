@@ -17,13 +17,16 @@ test("buildSite copies the site, lib, trope.css, voices, fonts and the mural", a
   await rm(out, { recursive: true, force: true });
 });
 
-test("buildSite refuses an --out whose wipe would take the repo or site/ with it", async () => {
+test("buildSite --out: only site/dist or a folder outside the repo; ., site, template and ancestors are refused", async () => {
   const root = fileURLToPath(new URL("..", import.meta.url));
   const before = await readdir(root);
-  for (const out of [root, join(root, "site"), join(root, "site", "app"), join(root, ".."), join(root, "..", "elsewhere")]) {
+  for (const out of [root, join(root, "site"), join(root, "site", "app"), join(root, "template"), join(root, "scripts"), join(root, "..")]) {
     await assert.rejects(buildSite({ out }), /refusing to build into/, out);
   }
   assert.deepEqual(await readdir(root), before, "nothing deleted");
   assert.ok((await stat(join(root, "site", "app", "sheet.js"))).isFile());
+  assert.ok((await stat(join(root, "template", "lib.js"))).isFile());
   assert.doesNotThrow(() => checkOut(join(root, "site", "dist")));
+  assert.doesNotThrow(() => checkOut(join(root, "site", "dist", "sub")));
+  assert.doesNotThrow(() => checkOut(join(tmpdir(), "site-out")));
 });
