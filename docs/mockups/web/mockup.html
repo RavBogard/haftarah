@@ -1,0 +1,602 @@
+<!doctype html>
+<html lang="en" data-theme="auto">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Haftarat Noach · Isaiah 54:1–55:5</title>
+<link rel="stylesheet" href="trope.css">
+<style>
+@font-face { font-family: "Ezra SIL"; src: url("fonts/EzraSIL.ttf") format("truetype"); font-display: swap; }
+@font-face { font-family: "Literata"; src: url("fonts/Literata[opsz,wght].ttf") format("truetype"); font-weight: 200 900; font-style: normal; font-display: swap; }
+@font-face { font-family: "Literata"; src: url("fonts/Literata-Italic[opsz,wght].ttf") format("truetype"); font-weight: 200 900; font-style: italic; font-display: swap; }
+@font-face { font-family: "Noto Serif Hebrew"; src: url("fonts/NotoSerifHebrew[wdth,wght].ttf") format("truetype"); font-weight: 100 900; font-display: swap; }
+
+:root {
+  --paper: #ffffff; --ink: #000000; --ink-2: #595959; --frame: #4d4d4d; --rule: #000000;
+  --rubric: #8a0a14;
+  --reg-traditional: #8a0a14; --reg-modern: #1d4f9c; --reg-critical: #0b6a62; --reg-reference: #8a5a00;
+  --legend-unused: #a6a6a6;
+  --hover: rgba(0,0,0,.06); --wash: rgba(0,0,0,.035); --focus: #1d4f9c;
+  --serif: "Literata", Georgia, serif;
+  --hebrew: "Ezra SIL", "Noto Serif Hebrew", "SBL Hebrew", serif;
+  --mast-h: 2.75rem;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --paper: #121110; --ink: #ebe6dc; --ink-2: #a8a195; --frame: #a8a195; --rule: #ebe6dc;
+  --rubric: #e0616b;
+  --reg-traditional: #e0616b; --reg-modern: #86aaea; --reg-critical: #5ec4b9; --reg-reference: #d7b05c;
+  --legend-unused: #5c5852; --hover: rgba(255,255,255,.08); --wash: rgba(255,255,255,.05); --focus: #86aaea;
+  color-scheme: dark;
+} }
+:root[data-theme="dark"] {
+  --paper: #121110; --ink: #ebe6dc; --ink-2: #a8a195; --frame: #a8a195; --rule: #ebe6dc;
+  --rubric: #e0616b;
+  --reg-traditional: #e0616b; --reg-modern: #86aaea; --reg-critical: #5ec4b9; --reg-reference: #d7b05c;
+  --legend-unused: #5c5852; --hover: rgba(255,255,255,.08); --wash: rgba(255,255,255,.05); --focus: #86aaea;
+  color-scheme: dark;
+}
+/* Trope colors are light pastels; on a dark page the words on them go dark. */
+@media (prefers-color-scheme: dark) { :root[data-trope]:not([data-theme="light"]) .he .tr { color: #111; } }
+:root[data-trope][data-theme="dark"] .he .tr { color: #111; }
+
+* { box-sizing: border-box; }
+html { font-size: 17px; -webkit-text-size-adjust: 100%; scroll-padding-top: calc(var(--mast-h) + 1rem); }
+html[data-size="1"] { font-size: 15px; } html[data-size="2"] { font-size: 17px; } html[data-size="3"] { font-size: 19px; }
+html[data-size="4"] { font-size: 21px; } html[data-size="5"] { font-size: 24px; }
+body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--serif); font-variation-settings: "opsz" auto;
+  font-size: 1rem; line-height: 1.5; font-feature-settings: "onum", "pnum"; -webkit-font-smoothing: antialiased; }
+::selection { background: var(--rubric); color: var(--paper); }
+a { color: inherit; text-decoration-thickness: .5px; text-underline-offset: .18em; }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.lining { font-feature-settings: "lnum", "tnum"; }
+.he, .hebrew { font-family: var(--hebrew); direction: rtl; unicode-bidi: isolate; }
+.sig svg, .reg svg { width: .62em; height: .62em; vertical-align: 0.06em; margin-right: .35em; }
+.reg-traditional { --reg: var(--reg-traditional); } .reg-modern { --reg: var(--reg-modern); }
+.reg-critical { --reg: var(--reg-critical); } .reg-reference { --reg: var(--reg-reference); }
+
+/* ---- masthead: the running head, kept on screen ---- */
+.mast { position: sticky; top: 0; z-index: 20; height: var(--mast-h); background: var(--paper);
+  display: flex; align-items: center; gap: 1rem; padding: 0 clamp(1rem, 4vw, 2.5rem);
+  border-bottom: .5px solid var(--rule); color: var(--frame); font-size: .88rem; letter-spacing: .01em; }
+.mast .shabbat { font-style: italic; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-decoration: none; }
+.mast .shabbat:hover { color: var(--ink); }
+.mast .range { font-feature-settings: "lnum"; white-space: nowrap; }
+.mast .tools { display: flex; align-items: center; gap: .25rem; margin-left: .25rem; }
+.mast .tools a, .mast .tools button { color: var(--frame); padding: .35rem .5rem; border-radius: 0; line-height: 1; }
+.mast .tools a:hover, .mast .tools button:hover, .mast .tools button[aria-expanded="true"] { background: var(--hover); color: var(--ink); }
+.mast .tools .aa { font-weight: 600; letter-spacing: 0; }
+.mast .tools svg { width: 1.05em; height: 1.05em; display: block; stroke: currentColor; fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ---- settings ---- */
+.settings { position: fixed; top: calc(var(--mast-h) + .35rem); right: clamp(.75rem, 3vw, 2rem); z-index: 30; width: min(22rem, calc(100vw - 1.5rem));
+  background: var(--paper); border: .5px solid var(--rule); padding: 1rem 1.1rem; box-shadow: 0 10px 30px rgba(0,0,0,.18), 0 1px 2px rgba(0,0,0,.08); display: none; }
+.settings[data-open] { display: block; }
+.settings .row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .45rem 0; }
+.settings .row + .row { border-top: .5px solid var(--legend-unused); }
+.settings .label { color: var(--ink); }
+.settings .seg { display: inline-flex; border: .5px solid var(--frame); }
+.settings .seg button { padding: .3rem .7rem; color: var(--ink-2); }
+.settings .seg button + button { border-left: .5px solid var(--frame); }
+.settings .seg button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+.settings .seg button:hover:not([aria-pressed="true"]) { background: var(--hover); color: var(--ink); }
+.settings .switch { width: 2.6rem; height: 1.45rem; border: .5px solid var(--frame); position: relative; }
+.settings .switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: calc(1.45rem - 5px); height: calc(1.45rem - 5px); background: var(--frame); transition: transform .18s ease-out; }
+.settings .switch[aria-checked="true"] { border-color: var(--ink); } .settings .switch[aria-checked="true"]::after { background: var(--ink); transform: translateX(1.15rem); }
+.settings .dl { display: flex; align-items: center; gap: .5rem; color: var(--rubric); font-weight: 500; text-decoration: none; }
+.settings .dl:hover { text-decoration: underline; }
+
+/* ---- page frame ---- */
+.wrap { max-width: 82rem; margin: 0 auto; padding: 0 clamp(1rem, 4vw, 2.5rem); }
+
+/* front page */
+.front { padding: clamp(2rem, 6vh, 4rem) 0 2rem; }
+.hero { display: grid; grid-template-columns: auto 1fr; gap: clamp(1.25rem, 4vw, 3rem); align-items: center; max-width: 60rem; }
+.hero .mural { width: clamp(6.5rem, 16vw, 9.5rem); height: auto; display: block; }
+.hero .incipit-block { text-align: right; direction: rtl; }
+.hero .incipit { font-family: var(--hebrew); font-size: clamp(2.6rem, 7vw, 4.4rem); line-height: 1.25; margin: 0; text-wrap: balance; }
+.hero .incipit-en { direction: ltr; font-style: italic; margin: .5rem 0 0; }
+.hero .reading { direction: ltr; margin-top: .9rem; line-height: 1.45; }
+.hero .reading .ref { color: var(--rubric); font-weight: 600; font-feature-settings: "lnum"; }
+.hero .reading .dates { color: var(--ink-2); }
+.hero .reading .he-date { font-family: var(--hebrew); font-size: 1.12em; }
+.hero .reading .pdf { color: var(--ink-2); text-decoration: none; }
+.hero .reading .pdf:hover { color: var(--rubric); text-decoration: underline; }
+.opening { max-width: 38em; margin-top: 1.75rem; }
+.opening p { margin: 0 0 .85rem; text-wrap: pretty; hyphens: auto; }
+.opening .setting { border-top: .5px solid var(--rule); padding-top: .85rem; margin-top: 1rem; }
+.legend { margin-top: 1.1rem; font-size: .88rem; color: var(--ink-2); display: flex; flex-wrap: wrap; gap: .35rem 1.5rem; line-height: 1.5; }
+.legend span.reg { color: var(--reg); } .legend span.reg.unused { color: var(--legend-unused); }
+.legend .k { color: var(--rubric); font-style: italic; margin-right: .4em; }
+.legend .trope-legend { display: contents; }
+.trope-legend .label { color: var(--ink-2); }
+.voices { max-width: 60rem; margin-top: 1.25rem; font-size: .88rem; color: var(--ink-2); line-height: 1.5; }
+.voices h2 { font-size: inherit; font-weight: 600; margin: 0 0 .25rem; color: var(--ink-2); }
+.voices .name { color: var(--rubric); font-weight: 500; }
+.voices .sep { color: var(--rubric); }
+.provenance { max-width: 60rem; margin-top: 1.5rem; font-size: .88rem; color: var(--ink-2); line-height: 1.45; }
+.provenance .sign { font-style: italic; color: var(--ink); }
+
+/* ---- the reading ---- */
+.reading-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0; border-top: .5px solid var(--rule); margin-top: 1.5rem; }
+.text { padding-top: 1.25rem; }
+.row { display: grid; grid-template-columns: minmax(0, 1fr) 2.6rem minmax(0, 1fr); column-gap: .6rem; padding: .45rem 0; scroll-margin-top: calc(var(--mast-h) + .75rem); }
+.row.break-setumah { margin-top: 1rem; } .row.break-petuchah { margin-top: 1.6rem; }
+.row .en { line-height: 1.5; hyphens: auto; text-wrap: pretty; }
+.row .en.poetry .ln { display: block; padding-left: 1.1em; text-indent: -1.1em; }
+.row .en.poetry .ln:has(> .indentAll) { padding-left: 2.2em; }
+.row .gut { text-align: center; font-weight: 600; font-feature-settings: "lnum", "tnum"; line-height: 1.5; }
+.row .gut .ch { display: block; color: var(--rubric); font-weight: 400; font-size: .82rem; line-height: 1.2; margin-bottom: .1rem; }
+.row .gut button { font: inherit; font-weight: 600; padding: 0 .3rem; }
+.row .gut button:hover { background: var(--hover); }
+.row .he { font-family: var(--hebrew); font-size: 1.18em; line-height: 1.75; direction: rtl; unicode-bidi: isolate; text-align: right; }
+.he .pisqa { display: inline-block; width: 1.6em; }
+.he .ketiv { font-size: .72em; color: var(--ink-2); }
+.he .w { cursor: pointer; border-radius: 0; transition: background .12s ease-out; padding: 0 .04em; margin: 0 -.04em; }
+.he .w:hover, .he .w:focus-visible { background: var(--hover); outline-offset: 0; }
+.he .w.active { background: var(--wash); box-shadow: 0 1px 0 0 var(--rubric); }
+html[data-trope] .he .w:hover { background: rgba(0,0,0,.08); }
+sup.fn { font-family: var(--serif); font-size: .72em; font-style: italic; color: var(--rubric); line-height: 0; vertical-align: super; }
+.he sup.fn { font-size: .6em; }
+sup.fn button { font: inherit; color: inherit; padding: 0 .15em; margin: 0 -.05em; }
+sup.fn button:hover, sup.fn button[aria-expanded="true"] { background: var(--hover); }
+.row.current .gut button { color: var(--rubric); }
+
+/* note popover (margin notes answered in place) */
+.notepop { position: absolute; z-index: 15; max-width: 20rem; background: var(--paper); border: .5px solid var(--rule); padding: .6rem .75rem;
+  font-size: .88rem; line-height: 1.4; box-shadow: 0 8px 24px rgba(0,0,0,.16), 0 1px 2px rgba(0,0,0,.08); }
+.notepop .k { color: var(--rubric); font-style: italic; margin-right: .35em; }
+.notepop .lemma { font-style: italic; } .notepop .brk { color: var(--ink-2); margin: 0 .3em 0 .1em; }
+.notepop .he-lemma { font-family: var(--hebrew); font-size: 1.12em; direction: rtl; unicode-bidi: isolate; }
+.notepop .tail { color: var(--ink-2); font-size: .85em; letter-spacing: .04em; margin-left: .3em; }
+
+/* the apparatus */
+.rail { font-size: .9rem; line-height: 1.42; }
+.vapp { border-top: .5px solid var(--rule); padding: .55rem 0 .7rem; }
+.vapp > summary { list-style: none; cursor: pointer; color: var(--ink-2); font-size: .88rem; padding: .1rem 0; display: flex; justify-content: space-between; align-items: center; }
+.vapp > summary::-webkit-details-marker { display: none; }
+.vapp > summary .count { color: var(--ink); font-weight: 500; }
+.vapp > summary .chev { width: .9em; height: .9em; stroke: currentColor; fill: none; stroke-width: 1.5; transition: transform .18s ease-out; }
+.vapp[open] > summary .chev { transform: rotate(180deg); }
+.vapp .vh { font-weight: 700; font-feature-settings: "lnum"; color: var(--ink); margin: 0 0 .35rem; display: flex; justify-content: space-between; align-items: baseline; }
+.vapp .vh a { color: var(--ink-2); font-weight: 400; font-size: .85em; text-decoration: none; font-style: italic; }
+.vapp .vh a:hover { color: var(--rubric); text-decoration: underline; }
+.note { margin: 0 0 .4rem; padding-left: .9rem; text-indent: -.9rem; font-size: .88rem; color: var(--ink); }
+.note .k { color: var(--rubric); font-style: italic; margin-right: .3em; }
+.note .lemma { font-style: italic; } .note .brk { color: var(--ink-2); margin: 0 .3em 0 .1em; }
+.note .he-lemma { font-family: var(--hebrew); font-size: 1.12em; direction: rtl; unicode-bidi: isolate; }
+.note .tail { color: var(--ink-2); font-size: .85em; letter-spacing: .04em; margin-left: .3em; }
+.entry { margin: 0 0 .55rem; text-wrap: pretty; }
+.entry .sig { color: var(--reg); }
+.entry .v { font-weight: 700; font-feature-settings: "lnum"; margin-right: .3em; }
+.entry .lem { font-style: italic; } .entry .lem.he-lemma { font-style: normal; font-family: var(--hebrew); font-size: 1.1em; direction: rtl; unicode-bidi: isolate; }
+.entry .brk { color: var(--ink-2); margin: 0 .35em 0 .1em; }
+.entry .src { color: var(--reg); font-weight: 500; margin-right: .3em; }
+.entry button.src { text-decoration: underline; text-decoration-color: transparent; text-underline-offset: .18em; transition: text-decoration-color .12s; }
+.entry button.src:hover, .entry button.src[aria-expanded="true"] { text-decoration-color: currentColor; }
+.entry .src.drafted { font-style: italic; }
+.entry .tail { color: var(--ink-2); font-style: italic; font-size: .92em; }
+.entry .body span[dir="rtl"], .entry .body .heb { font-family: var(--hebrew); font-size: 1.1em; }
+.vapp.current { position: relative; }
+.vapp.current::before { content: ""; position: absolute; left: -1rem; top: .55rem; bottom: .7rem; width: 2px; background: var(--ink); }
+
+/* end matter */
+.end { border-top: .5px solid var(--rule); margin-top: 2rem; padding-top: 1.25rem; }
+.end h2 { font-size: 1rem; font-weight: 600; margin: 0 0 .6rem; }
+.glossary { columns: 2; column-gap: 2rem; font-size: .9rem; line-height: 1.42; max-width: 60rem; }
+.glossary p { margin: 0 0 .5rem; padding-left: .9rem; text-indent: -.9rem; break-inside: avoid; }
+.glossary .term { font-weight: 600; } .glossary .term-he { font-family: var(--hebrew); font-size: 1.1em; margin-left: .3em; direction: rtl; unicode-bidi: isolate; }
+.next { color: var(--rubric); font-weight: 500; margin: 1.5rem 0 0; }
+.archive { margin-top: 2.5rem; border-top: .5px solid var(--rule); padding-top: 1.25rem; max-width: 60rem; }
+.archive ol { list-style: none; margin: 0; padding: 0; }
+.archive li { display: grid; grid-template-columns: 9rem 1fr auto; gap: 1rem; padding: .45rem 0; border-bottom: .5px solid var(--legend-unused); font-size: .95rem; align-items: baseline; }
+.archive li .d { color: var(--ink-2); font-feature-settings: "lnum"; }
+.archive li .r { color: var(--rubric); font-feature-settings: "lnum"; }
+.archive li a { text-decoration: none; } .archive li a:hover { text-decoration: underline; }
+.foot { margin: 3rem 0 2.5rem; display: flex; justify-content: space-between; align-items: end; gap: 1rem; font-size: .88rem; color: var(--frame); flex-wrap: wrap; }
+.foot .wm { display: block; color: var(--ink); font-size: 1.05rem; line-height: 1.2; }
+
+/* side panel: a source or a word, pulled from Sefaria */
+.panel { position: fixed; top: var(--mast-h); right: 0; bottom: 0; width: min(30rem, 100vw); z-index: 25; background: var(--paper);
+  border-left: .5px solid var(--rule); box-shadow: -12px 0 40px rgba(0,0,0,.14); transform: translateX(104%); transition: transform .22s cubic-bezier(.2,.7,.2,1);
+  display: flex; flex-direction: column; }
+.panel[data-open] { transform: none; }
+@media (prefers-reduced-motion: reduce) { .panel { transition: none; } }
+.panel .ph { display: flex; align-items: center; gap: .75rem; padding: .7rem 1.1rem; border-bottom: .5px solid var(--rule); }
+.panel .ph .kind { color: var(--ink-2); font-size: .85rem; flex: 1; }
+.panel .ph button { padding: .3rem; color: var(--frame); } .panel .ph button:hover { background: var(--hover); color: var(--ink); }
+.panel .ph svg { width: 1.1em; height: 1.1em; display: block; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; }
+.panel .pb { overflow: auto; padding: 1rem 1.1rem 2rem; overscroll-behavior: contain; }
+.panel h2 { font-size: 1.05rem; font-weight: 600; margin: 0 0 .15rem; }
+.panel h2.he { font-size: 2rem; line-height: 1.5; font-weight: 400; text-align: right; }
+.panel .sub { color: var(--ink-2); font-size: .88rem; margin: 0 0 .9rem; }
+.panel .sub .reg { color: var(--reg); font-weight: 500; }
+.panel .src-he { font-family: var(--hebrew); font-size: 1.15rem; line-height: 1.8; direction: rtl; unicode-bidi: isolate; text-align: right; margin: 0 0 1rem; }
+.panel .src-en { line-height: 1.5; margin: 0 0 1rem; font-size: .95rem; }
+.panel .src-en p, .panel .src-he p { margin: 0 0 .6rem; }
+.panel .vt { color: var(--ink-2); font-size: .82rem; font-style: italic; margin: -.5rem 0 1rem; }
+.panel .lex { border-top: .5px solid var(--rule); padding-top: .7rem; margin-top: .7rem; font-size: .92rem; }
+.panel .lex .hw { font-family: var(--hebrew); font-size: 1.5rem; direction: rtl; unicode-bidi: isolate; display: inline-block; margin-right: .5rem; }
+.panel .lex .lexname { color: var(--ink-2); font-size: .82rem; font-style: italic; }
+.panel .lex ol { margin: .35rem 0 0; padding-left: 1.2rem; } .panel .lex li { margin: .15rem 0; }
+.panel .lex ol ol { padding-left: 1rem; font-size: .95em; color: var(--ink); }
+.panel .open { display: inline-flex; align-items: center; gap: .4rem; margin-top: 1.1rem; color: var(--rubric); font-weight: 500; text-decoration: none; }
+.panel .open:hover { text-decoration: underline; }
+.panel .open svg { width: 1em; height: 1em; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.panel .loading, .panel .err { color: var(--ink-2); font-style: italic; }
+.panel .err { color: var(--rubric); font-style: normal; }
+.panel .root { font-size: .95rem; margin: 0 0 .5rem; } .panel .root b { font-weight: 600; }
+.panel .inverse { color: var(--ink-2); font-size: .88rem; }
+
+/* ---- layouts ---- */
+@media (min-width: 1100px) {
+  .reading-grid { grid-template-columns: minmax(0, 1fr) 22rem; column-gap: 3rem; }
+  .rail { position: sticky; top: var(--mast-h); align-self: start; max-height: calc(100vh - var(--mast-h)); overflow: auto; padding: 1.25rem 0 40vh 1rem; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--legend-unused) transparent; }
+  .vapp > summary { display: none; }
+  .vapp:first-child { border-top: 0; }
+  .row { grid-template-columns: minmax(0, 1fr) 2.8rem minmax(0, 1fr); column-gap: .8rem; padding: .5rem 0; }
+}
+@media (max-width: 1099.98px) {
+  .row { grid-template-columns: 2.2rem minmax(0, 1fr); grid-template-areas: "gut he" "gut en" "gut app"; padding: .9rem 0; border-top: .5px solid var(--legend-unused); }
+  .row:first-child { border-top: 0; }
+  .row .gut { grid-area: gut; text-align: left; }
+  .row .he { grid-area: he; margin-bottom: .45rem; }
+  .row .en { grid-area: en; }
+  .row .vapp { grid-area: app; border-top: 0; padding: .4rem 0 0; }
+  .vapp.current::before { display: none; }
+  .text { padding-top: .5rem; }
+}
+@media (max-width: 640px) {
+  .hero { grid-template-columns: 1fr; }
+  .hero .mural { width: 5.5rem; }
+  .glossary { columns: 1; }
+  .archive li { grid-template-columns: 1fr; gap: .1rem; }
+  .mast { gap: .5rem; }
+  .panel { top: auto; height: 86vh; width: 100vw; border-left: 0; border-top: .5px solid var(--rule); transform: translateY(104%); }
+  html { font-size: 17px; }
+}
+@media print { .mast, .panel, .settings, .notepop, .archive { display: none !important; } .rail { position: static; } }
+</style>
+</head>
+<body>
+<header class="mast" id="mast">
+  <a class="shabbat" href="#top" id="mastLeft">Haftarah · 6 Cheshvan 5787</a>
+  <span class="range" id="mastRange">Torah from Scratch</span>
+  <span class="tools">
+    <a href="#archive" title="All sheets" aria-label="All sheets"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg></a>
+    <button class="aa" id="aaBtn" aria-expanded="false" aria-controls="settings" title="Text size, theme, trope colors">Aa</button>
+  </span>
+</header>
+
+<div class="settings" id="settings" role="dialog" aria-label="Reading settings">
+  <div class="row"><span class="label">Text size</span>
+    <span class="seg" role="group" aria-label="Text size"><button id="sizeDown" aria-label="Smaller text">−</button><button id="sizeUp" aria-label="Larger text">+</button></span></div>
+  <div class="row"><span class="label">Theme</span>
+    <span class="seg" role="group" aria-label="Theme" id="themeSeg"><button data-theme="auto">Auto</button><button data-theme="light">Light</button><button data-theme="dark">Dark</button></span></div>
+  <div class="row"><span class="label">Trope colors<br><span style="color:var(--ink-2);font-size:.85em">for chanters: phrases by family</span></span>
+    <button class="switch" id="tropeSw" role="switch" aria-checked="false" aria-label="Trope colors"></button></div>
+  <div class="row"><a class="dl" href="sheet.pdf"><svg viewBox="0 0 24 24" width="18" height="18" style="stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round"><path d="M12 4v11m0 0l-4-4m4 4l4-4M5 20h14"/></svg>Download the printed sheet (PDF)</a></div>
+</div>
+
+<main class="wrap" id="top">
+  <section class="front" id="front"></section>
+  <div class="reading-grid">
+    <div class="text" id="text"></div>
+    <aside class="rail" id="rail" aria-label="Commentary"></aside>
+  </div>
+  <section class="end" id="end"></section>
+  <section class="archive" id="archive">
+    <h2 style="font-size:1rem;font-weight:600;margin:0 0 .6rem">All sheets</h2>
+    <ol>
+      <li><span class="d">6 Cheshvan 5787</span><a href="#top">Shabbat Noach</a><span class="r">Isaiah 54:1–55:5</span></li>
+      <li><span class="d">28 Tishrei 5787</span><a href="#top">Shabbat Bereshit, Machar Chodesh</a><span class="r">I Samuel 20:18–42</span></li>
+    </ol>
+  </section>
+  <footer class="foot">
+    <span>Hebrew: Miqra according to the Masorah. English: THE JPS TANAKH: Gender-Sensitive Edition (JPS, 2023). Sources from Sefaria.</span>
+    <span><span class="wm">central reform congregation</span>A Jewish Presence in the City of St. Louis</span>
+  </footer>
+</main>
+
+<aside class="panel" id="panel" aria-label="Source" aria-hidden="true">
+  <div class="ph"><span class="kind" id="panelKind"></span><button id="panelClose" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+  <div class="pb" id="panelBody"></div>
+</aside>
+
+<script src="lib.js"></script>
+<script>
+(async function () {
+  const L = window.HaftarahLib;
+  const data = await (await fetch("sheet.json")).json();
+  const voicesDict = await (await fetch("voices.json")).json();
+  const visible = i => i.status !== "rejected";
+  const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const dash = s => String(s ?? "").replace(/(\d)-(\d)/g, "$1–$2");
+  const el = (tag, cls, html) => { const n = document.createElement(tag); if (cls) n.className = cls; if (html != null) n.innerHTML = html; return n; };
+  const divineName = html => L.divineName(html).html;
+  const SIG = L.SIGLA, NAMES = L.REGISTER_NAMES;
+  const sefariaUrl = ref => "https://www.sefaria.org/" + ref.trim().replace(/ /g, "_").replace(/:/g, ".") + "?lang=bi";
+
+  // ---- settings: size, theme, trope ----
+  const html = document.documentElement;
+  const store = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} };
+  const load = k => { try { return localStorage.getItem(k); } catch { return null; } };
+  html.dataset.size = load("size") || "2";
+  html.dataset.theme = load("theme") || "auto";
+  if (load("trope") === "1" || new URLSearchParams(location.search).get("trope") === "1") html.dataset.trope = "1";
+  const settings = document.getElementById("settings"), aaBtn = document.getElementById("aaBtn");
+  const syncSettings = () => {
+    settings.querySelectorAll("#themeSeg button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.theme === html.dataset.theme)));
+    document.getElementById("tropeSw").setAttribute("aria-checked", String(!!html.dataset.trope));
+  };
+  aaBtn.onclick = () => { const open = !settings.hasAttribute("data-open"); settings.toggleAttribute("data-open", open); aaBtn.setAttribute("aria-expanded", String(open)); };
+  document.addEventListener("click", e => { if (!settings.contains(e.target) && e.target !== aaBtn) { settings.removeAttribute("data-open"); aaBtn.setAttribute("aria-expanded", "false"); } });
+  document.getElementById("sizeDown").onclick = () => { html.dataset.size = String(Math.max(1, +html.dataset.size - 1)); store("size", html.dataset.size); };
+  document.getElementById("sizeUp").onclick = () => { html.dataset.size = String(Math.min(5, +html.dataset.size + 1)); store("size", html.dataset.size); };
+  settings.querySelectorAll("#themeSeg button").forEach(b => b.onclick = () => { html.dataset.theme = b.dataset.theme; store("theme", b.dataset.theme); syncSettings(); });
+  document.getElementById("tropeSw").onclick = () => { if (html.dataset.trope) { delete html.dataset.trope; store("trope", null); } else { html.dataset.trope = "1"; store("trope", "1"); } syncSettings(); };
+  syncSettings();
+
+  // ---- keys: JPS notes and glosses share one letter series ----
+  const keyed = L.assignKeys(data.verses, data.glosses || [], visible);
+  keyed.verses.forEach((kv, i) => { data.verses[i].en = kv.en; data.verses[i].keys = kv.keys; });
+  const entriesByVerse = new Map();
+  for (const e of (data.commentary || []).filter(visible)) {
+    const k = `${e.chapter ?? ""}:${e.verse}`;
+    if (!entriesByVerse.has(k)) entriesByVerse.set(k, []);
+    entriesByVerse.get(k).push(e);
+  }
+  for (const list of entriesByVerse.values()) list.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const shabbatName = `Shabbat ${data.shabbat.parashah.en}${data.shabbat.special ? ", " + data.shabbat.special.replace(/^Shabbat\s+/i, "") : ""}`;
+
+  // ---- front page ----
+  const front = document.getElementById("front");
+  const used = new Set((data.commentary || []).filter(visible).map(e => SIG[e.register] ? e.register : "traditional"));
+  front.innerHTML = `
+    <div class="hero">
+      <img class="mural" src="mural.png" alt="The Siona Benjamin floor mural at Central Reform Congregation">
+      <div class="incipit-block">
+        <h1 class="incipit">${divineName(data.haftarah.incipit.he)}</h1>
+        <p class="incipit-en">${esc(data.haftarah.incipit.en)}</p>
+        <p class="reading"><span class="ref">${esc(dash(data.haftarah.ref))}</span><br>${esc(shabbatName)}<br>
+          <span class="dates"><span class="he-date">${esc(data.shabbat.hebrew)}</span> · ${esc(data.shabbat.civilDisplay)}</span><br>
+          <a class="pdf" href="sheet.pdf">The printed sheet (PDF)</a></p>
+      </div>
+    </div>
+    <div class="opening">
+      <p>${data.openingNote.calendar}</p>
+      <div class="setting">${(data.openingNote.setting || []).map(p => `<p>${p}</p>`).join("")}</div>
+    </div>
+    <div class="legend">${L.REGISTER_ORDER.map(k => `<span class="reg reg-${k}${used.has(k) ? "" : " unused"}">${SIG[k]}${NAMES[k]}</span>`).join("")}
+      <span><span class="k">a–z</span>translators’ notes (JPS) and word notes: tap a letter</span>
+      <span class="trope-legend"><span class="label">Chanter’s copy · trope phrases by family</span>${L.TROPE_FAMILIES.filter(([key]) => L.tropeFamiliesUsed(data.verses).has(key)).map(([key, name]) => `<span class="tr tr-${key}">${esc(name)}</span>`).join(" ")}</span>
+    </div>`;
+  const voices = L.voicesFor(data.commentary || [], voicesDict, visible);
+  if (voices.length) front.append(el("div", "voices", `<h2>Voices on this sheet</h2><p>${voices.map(v => `<span class="voice"><span class="name">${esc(v.name)}</span>${v.refs?.length ? ` (${esc(v.refs.join(", "))})` : ""}${v.line ? ` ${esc(v.line)}` : ""}</span>`).join('<span class="sep"> · </span>')}</p>`));
+  front.append(el("div", "provenance", `Hebrew: ${esc(data.haftarah.versions.he)}. English: ${esc(data.haftarah.versions.en)}. ${esc(data.credits.signoff)} <span class="sign">— ${esc(data.credits.editor)}</span>`));
+
+  // ---- verse rows and apparatus ----
+  const text = document.getElementById("text"), rail = document.getElementById("rail");
+  const rows = [];
+  function keyHebrew(h, lemma, key) {
+    if (!lemma) return h;
+    const mark = `<sup class="fn he"><button aria-expanded="false">${key}</button></sup>`;
+    const hit = L.findHebrew(h, L.divineName(lemma).html);
+    return hit ? h.slice(0, hit.end) + mark + h.slice(hit.end) : h + mark;
+  }
+  function wrapWords(node) {
+    const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+    const texts = []; let t; while ((t = walker.nextNode())) texts.push(t);
+    for (const tn of texts) {
+      if (tn.parentElement.closest("sup, .ketiv")) continue;
+      const words = L.hebrewWords(tn.data); if (!words.length) continue;
+      const frag = document.createDocumentFragment(); let at = 0;
+      for (const w of words) {
+        if (w.start > at) frag.append(tn.data.slice(at, w.start));
+        const s = el("span", "w", esc(w.text)); s.tabIndex = 0; s.setAttribute("role", "button"); frag.append(s); at = w.end;
+      }
+      if (at < tn.data.length) frag.append(tn.data.slice(at));
+      tn.replaceWith(frag);
+    }
+  }
+  function noteHtml(k) {
+    const vn = ""; const lemma = k.lemma ? `<span class="lemma">${esc(k.lemma)}</span><span class="brk">]</span>` : "";
+    const heLemma = k.kind === "gloss" && k.he ? `<span class="he-lemma">${divineName(esc(k.he))}</span> ` : "";
+    const tail = k.kind === "jps" ? ` <span class="tail">JPS</span>` : "";
+    return `<span class="k">${k.key}</span>${lemma}${heLemma}${divineName(k.text)}${tail}`;
+  }
+  function entryHtml(e) {
+    const reg = SIG[e.register] ? e.register : "traditional";
+    const vr = e.verseEnd ? `${e.verse}–${e.verseEnd}` : String(e.verse);
+    const lemma = e.lemma ? `<span class="lem${e.lemmaLang === "he" ? " he-lemma" : ""}">${esc(e.lemma)}</span><span class="brk">]</span>` : "";
+    const tail = [];
+    if (e.sourceRef) tail.push(esc(dash(e.sourceRef)));
+    if (e.translation === "claude") tail.push("translated for this sheet"); else if (e.translation) tail.push(esc(e.translation));
+    if (e.register === "critical" && e.kind !== "quotation") tail.push("summary drafted for this sheet");
+    if (e.cites) tail.push(e.cites);
+    const drafted = e.register === "critical" || e.register === "reference";
+    const src = e.sourceRef
+      ? `<button class="src${drafted ? " drafted" : ""}" data-ref="${esc(e.sourceRef)}" data-reg="${reg}" data-src="${esc(e.source)}" aria-expanded="false">${esc(e.source)}</button>`
+      : `<span class="src${drafted ? " drafted" : ""}">${esc(e.source)}</span>`;
+    return `<span class="sig" title="${NAMES[reg]}">${SIG[reg]}</span><span class="v">${vr}</span>${lemma} ${src}<span class="body">${divineName(e.text)}</span>${tail.length ? ` <span class="tail">${tail.join("; ")}.</span>` : ""}`;
+  }
+  const last = data.verses[data.verses.length - 1];
+  data.verses.forEach((v, i) => {
+    const prev = data.verses[i - 1];
+    const row = el("div", "row" + (prev && prev.break ? ` break-${prev.break}` : ""));
+    row.id = `v${v.chapter}-${v.verse}`; row.dataset.ref = v.ref; row.dataset.verse = `${v.chapter}:${v.verse}`;
+    const lines = L.splitPoetry(v.en);
+    const en = el("div", "en" + (lines.length > 1 ? " poetry" : ""));
+    en.innerHTML = lines.length > 1 ? lines.map(t => `<span class="ln">${L.nowrapKeys(t)}</span>`).join("") : L.nowrapKeys(lines[0] || "");
+    en.querySelectorAll("sup.fn").forEach(s => { s.innerHTML = `<button aria-expanded="false">${s.textContent}</button>`; });
+    const showCh = i === 0 || v.chapter !== prev.chapter;
+    const gut = el("div", "gut", `${showCh ? `<span class="ch">${v.chapter}:${v.verse}</span>` : ""}<button title="Commentary on ${v.chapter}:${v.verse}">${v.verse}</button>`);
+    let heHtml = divineName(v.he.replace(/&thinsp;| /g, " "));
+    for (const k of v.keys || []) if (k.kind === "gloss") heHtml = keyHebrew(heHtml, k.he, k.key);
+    heHtml = L.tropeHtml(heHtml, { final: v === last });
+    const he = el("div", "he", heHtml);
+    wrapWords(he);
+    row.append(en, gut, he);
+    // the verse's apparatus: its notes, then its entries
+    const entries = entriesByVerse.get(`${v.chapter}:${v.verse}`) || entriesByVerse.get(`:${v.verse}`) || [];
+    const keys = v.keys || [];
+    const app = el("details", "vapp"); app.dataset.verse = `${v.chapter}:${v.verse}`;
+    const n = entries.length, m = keys.length;
+    const count = [n ? `${n} ${n === 1 ? "comment" : "comments"}` : "", m ? `${m} ${m === 1 ? "note" : "notes"}` : ""].filter(Boolean).join(" · ");
+    app.innerHTML = `<summary><span class="count">${count || "No commentary"}</span><svg class="chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></summary>` +
+      `<p class="vh"><span>${v.chapter}:${v.verse}</span><a href="${sefariaUrl(v.ref)}" target="_blank" rel="noopener">on Sefaria</a></p>` +
+      keys.map(k => `<p class="note ${k.kind}">${noteHtml(k)}</p>`).join("") +
+      entries.map(e => `<p class="entry reg-${SIG[e.register] ? e.register : "traditional"}">${entryHtml(e)}</p>`).join("");
+    if (!n && !m) app.classList.add("empty");
+    rail.append(app); text.append(row);
+    rows.push({ v, row, app, keys });
+  });
+
+  // ---- end matter ----
+  const end = document.getElementById("end");
+  if (data.glossary?.length) end.innerHTML = `<h2>Names and places</h2><div class="glossary">${data.glossary.filter(visible).map(g => `<p><span class="term">${esc(g.term)}</span><span class="term-he">${esc(g.he)}</span> ${g.text}</p>`).join("")}</div>`;
+  if (data.nextWeek && visible(data.nextWeek)) end.append(el("p", "next", `Next week: ${esc(data.nextWeek.shabbat)}${data.nextWeek.special ? ", " + esc(data.nextWeek.special) : ""} · ${esc(dash(data.nextWeek.ref))} · ${esc(data.nextWeek.civilDisplay)}`));
+
+  // ---- desktop rail vs inline apparatus ----
+  const wide = matchMedia("(min-width: 1100px)");
+  function place() {
+    for (const r of rows) {
+      if (wide.matches) { rail.append(r.app); r.app.open = true; }
+      else { r.row.append(r.app); r.app.open = false; }
+    }
+    if (!wide.matches) rows.forEach(r => r.app.classList.remove("current"));
+  }
+  place(); wide.addEventListener("change", place);
+
+  // ---- running head and rail that keep pace ----
+  const mastLeft = document.getElementById("mastLeft"), mastRange = document.getElementById("mastRange");
+  const mastH = () => document.getElementById("mast").offsetHeight;
+  let railPause = 0;
+  rail.addEventListener("wheel", () => { railPause = Date.now() + 1500; }, { passive: true });
+  rail.addEventListener("touchmove", () => { railPause = Date.now() + 1500; }, { passive: true });
+  let current = null;
+  function sync() {
+    const top = mastH() + 8, bottom = innerHeight;
+    let first = null, lastSeen = null;
+    for (const r of rows) {
+      const b = r.row.getBoundingClientRect();
+      if (b.bottom > top && b.top < bottom) { if (!first) first = r; lastSeen = r; }
+    }
+    if (!first) {
+      const inFront = text.getBoundingClientRect().top > top;
+      mastLeft.textContent = inFront ? "Haftarah · " + data.shabbat.hebrewEn : shabbatName;
+      mastRange.textContent = inFront ? data.series.name : dash(data.haftarah.ref);
+      return;
+    }
+    mastLeft.textContent = shabbatName;
+    const a = first.v, z = lastSeen.v;
+    mastRange.textContent = `${data.haftarah.book} ${a.chapter}:${a.verse}` + (z !== a ? (z.chapter === a.chapter ? `–${z.verse}` : `–${z.chapter}:${z.verse}`) : "");
+    if (first !== current) {
+      current = first;
+      rows.forEach(r => { r.row.classList.toggle("current", r === first); r.app.classList.toggle("current", wide.matches && r === first); });
+      if (wide.matches && Date.now() > railPause) {
+        rail.scrollTo({ top: first.app.offsetTop - rail.offsetTop, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+      }
+    }
+  }
+  let ticking = false;
+  addEventListener("scroll", () => { if (!ticking) { ticking = true; requestAnimationFrame(() => { sync(); ticking = false; }); } }, { passive: true });
+  addEventListener("resize", sync);
+  sync();
+
+  // verse number: jump to its commentary
+  for (const r of rows) r.row.querySelector(".gut button").onclick = () => {
+    if (wide.matches) { railPause = Date.now() + 1500; rail.scrollTo({ top: r.app.offsetTop - rail.offsetTop, behavior: "smooth" }); r.app.classList.add("current"); }
+    else { r.app.open = !r.app.open; }
+  };
+
+  // ---- note popovers on the keyed letters ----
+  let pop = null;
+  function closePop() { if (pop) { pop.anchor.setAttribute("aria-expanded", "false"); pop.node.remove(); pop = null; } }
+  document.addEventListener("click", e => {
+    const b = e.target.closest("sup.fn button");
+    if (!b) { if (pop && !pop.node.contains(e.target)) closePop(); return; }
+    if (pop && pop.anchor === b) { closePop(); return; }
+    closePop();
+    const row = b.closest(".row"); const r = rows.find(x => x.row === row);
+    const k = r.keys.find(k => k.key === b.textContent.trim()); if (!k) return;
+    const node = el("div", "notepop", noteHtml(k)); node.setAttribute("role", "note");
+    document.body.append(node);
+    const rb = b.getBoundingClientRect(); const w = node.offsetWidth;
+    let left = rb.left + scrollX - 8; if (left + w > innerWidth - 8) left = innerWidth - w - 8; if (left < 8) left = 8;
+    node.style.left = left + "px"; node.style.top = (rb.bottom + scrollY + 6) + "px";
+    b.setAttribute("aria-expanded", "true"); pop = { node, anchor: b };
+  });
+
+  // ---- side panel: source text or word ----
+  const panel = document.getElementById("panel"), pKind = document.getElementById("panelKind"), pBody = document.getElementById("panelBody");
+  let panelOpener = null, activeWord = null;
+  function openPanel(kind, bodyHtml, opener) {
+    if (panelOpener) panelOpener.setAttribute("aria-expanded", "false");
+    panelOpener = opener || null; if (panelOpener) panelOpener.setAttribute("aria-expanded", "true");
+    pKind.textContent = kind; pBody.innerHTML = bodyHtml; pBody.scrollTop = 0;
+    panel.setAttribute("data-open", ""); panel.setAttribute("aria-hidden", "false");
+  }
+  function closePanel() {
+    panel.removeAttribute("data-open"); panel.setAttribute("aria-hidden", "true");
+    if (panelOpener) { panelOpener.setAttribute("aria-expanded", "false"); panelOpener = null; }
+    if (activeWord) { activeWord.classList.remove("active"); activeWord = null; }
+  }
+  document.getElementById("panelClose").onclick = closePanel;
+  addEventListener("keydown", e => { if (e.key === "Escape") { closePanel(); closePop(); settings.removeAttribute("data-open"); } });
+  const openLink = (href, label) => `<a class="open" href="${href}" target="_blank" rel="noopener">${label}<svg viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 13v6H5V6h6"/></svg></a>`;
+  const joinText = t => Array.isArray(t) ? t.flat(Infinity).map(s => `<p>${s}</p>`).join("") : `<p>${t}</p>`;
+
+  rail.addEventListener("click", onSrc); text.addEventListener("click", onSrc);
+  async function onSrc(e) {
+    const b = e.target.closest("button.src"); if (!b) return;
+    const ref = b.dataset.ref, reg = b.dataset.reg;
+    openPanel("Source", `<h2>${esc(b.dataset.src)}</h2><p class="sub"><span class="reg reg-${reg}">${SIG[reg]}${NAMES[reg]}</span> · ${esc(dash(ref))}</p><p class="loading">Fetching from Sefaria…</p>`, b);
+    try {
+      const res = await fetch(`https://www.sefaria.org/api/v3/texts/${encodeURIComponent(ref)}?version=primary&version=translation`);
+      const j = await res.json(); if (j.error) throw new Error(j.error);
+      const he = (j.versions || []).find(v => v.language === "he"), en = (j.versions || []).find(v => v.language === "en");
+      pBody.innerHTML = `<h2>${esc(b.dataset.src)}</h2><p class="sub"><span class="reg reg-${reg}">${SIG[reg]}${NAMES[reg]}</span> · ${esc(dash(j.ref || ref))} · <span class="hebrew">${esc(j.heRef || "")}</span></p>` +
+        (he ? `<div class="src-he">${joinText(he.text)}</div><p class="vt">${esc(he.versionTitle)}</p>` : "") +
+        (en ? `<div class="src-en">${joinText(en.text)}</div><p class="vt">${esc(en.versionTitle)}</p>` : `<p class="inverse">No English on Sefaria for this passage; the sheet's rendering is translated for this sheet.</p>`) +
+        openLink(sefariaUrl(ref), "Open on Sefaria");
+    } catch (err) {
+      pBody.innerHTML = `<h2>${esc(b.dataset.src)}</h2><p class="sub">${esc(dash(ref))}</p><p class="err">Sefaria did not answer (${esc(err.message)}). The passage is still there:</p>` + openLink(sefariaUrl(ref), "Open on Sefaria");
+    }
+  }
+
+  // Hebrew word: root and dictionary senses from Sefaria's lexicon (cantillation stripped first).
+  const senses = arr => !arr?.length ? "" : `<ol>${arr.map(s => `<li>${s.definition || ""}${senses(s.senses)}</li>`).join("")}</ol>`;
+  text.addEventListener("click", e => { const w = e.target.closest(".he .w"); if (w) openWord(w); });
+  text.addEventListener("keydown", e => { const w = e.target.closest(".he .w"); if (w && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openWord(w); } });
+  async function openWord(w) {
+    if (activeWord) activeWord.classList.remove("active"); activeWord = w; w.classList.add("active");
+    const row = w.closest(".row"); const ref = row.dataset.ref;
+    const word = w.textContent;
+    const vocal = L.hebrewKey(word).normalize("NFC"), cons = L.stripMarks(word);
+    openPanel("Word", `<h2 class="he hebrew">${esc(word)}</h2><p class="sub">${esc(dash(ref))} · <span class="hebrew">${esc(cons)}</span></p><p class="loading">Looking it up…</p>`, null);
+    try {
+      let j = await (await fetch(`https://www.sefaria.org/api/words/${encodeURIComponent(vocal)}?lookup_ref=${encodeURIComponent(ref)}`)).json();
+      if (!Array.isArray(j) || !j.length) j = await (await fetch(`https://www.sefaria.org/api/words/${encodeURIComponent(cons)}?lookup_ref=${encodeURIComponent(ref)}`)).json();
+      const entries = (Array.isArray(j) ? j : []).filter(x => x.parent_lexicon !== "BDB Augmented Strong" || !j.some(y => y.parent_lexicon === "BDB Dictionary"));
+      const roots = [...new Set(entries.map(x => x.headword).filter(Boolean))];
+      let body = `<h2 class="he hebrew">${esc(word)}</h2><p class="sub">${esc(dash(ref))}</p>`;
+      if (!entries.length) body += `<p class="inverse">No dictionary entry for this form. Try the word without its prefix, or open the verse on Sefaria.</p>`;
+      else {
+        body += `<p class="root">Root <b class="hebrew" style="font-size:1.25em">${roots.map(esc).join(" · ")}</b></p>`;
+        for (const x of entries.slice(0, 4)) {
+          const c = x.content || {};
+          body += `<div class="lex"><span class="hw">${esc(x.headword)}</span><span class="lexname">${esc(x.parent_lexicon)}${c.morphology ? " · " + esc(c.morphology) : ""}</span>${senses(c.senses)}</div>`;
+        }
+      }
+      body += openLink(sefariaUrl(ref), "Open the verse on Sefaria");
+      pBody.innerHTML = body;
+    } catch (err) {
+      pBody.innerHTML = `<h2 class="he hebrew">${esc(word)}</h2><p class="err">Sefaria did not answer (${esc(err.message)}).</p>` + openLink(sefariaUrl(ref), "Open the verse on Sefaria");
+    }
+  }
+})();
+</script>
+</body>
+</html>
