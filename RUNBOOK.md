@@ -87,10 +87,11 @@ Draft each and show it with the rest.
 ```
 node scripts/lint.mjs weeks/<slug> --fix    # optional: lint runs inside build; --fix rewrites near-miss Hebrew lemmas
 node scripts/build.mjs weeks/<slug> --png   # lint, then sheet.pdf and page images; refuses on a broken citation or failed lint
+node scripts/build.mjs weeks/<slug> --trope # optional; also sheet-trope.pdf, the chanter's copy: trope phrases highlighted by family
 node scripts/check.mjs weeks/<slug>         # layout invariants
 ```
 
-Clear lint warnings that matter (God-language, voices, stacked note letters, word counts). If check fails on a gap, it names the entry to trim and by how many words. Look at the page images before calling anything done. Then show Daniel the Claude-written texts in full (standing rules) together with the PDF. If he asks for changes, edit `sheet.json` and build again; the sheet he prints is the last one built.
+Clear lint warnings that matter (God-language, voices, stacked note letters, word counts). If check fails on a gap, it names the entry to trim and by how many words. Look at the page images before calling anything done. Then show Daniel the Claude-written texts in full (standing rules) together with the PDF. If he asks for changes, edit `sheet.json` and build again; the sheet he prints is the last one built. Build the chanter's copy only when Daniel asks for it that week, check it with `check.mjs weeks/<slug> --trope`, and hand him the PDF; step 7 does not deliver it.
 
 ## 7. Deliver
 

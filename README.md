@@ -16,7 +16,7 @@ scripts/
   fetch.mjs                 Hebcal + Sefaria -> weeks/<slug>/sheet.json, candidates.json and texts.json
   digest.mjs                texts.json + candidates.json -> weeks/<slug>/digest.md, a one-page map of the passage
   lint.mjs                  entry lint (glosses, voices, God-language, word counts); build runs it first; --fix
-  build.mjs                 sheet.json -> sheet.html -> sheet.pdf (headless Chrome/Edge), optional page PNGs; refuses a broken citation or failed lint
+  build.mjs                 sheet.json -> sheet.html -> sheet.pdf (headless Chrome/Edge), optional page PNGs; refuses a broken citation or failed lint; --trope adds the chanter's copy
   deliver.mjs               week files -> Google Drive through the drop box, byte-exact (sha256-checked)
   check.mjs                 renders twice and asserts the layout rules (no lone verse, no gap over the rule, keys in series, same output both times)
   migrate.mjs               schema 1 -> schema 2
@@ -37,6 +37,7 @@ weeks/
     digest.md               one-page map of the passage
     briefing.md             the briefing, the issues and Daniel's picks
     sheet.pdf               the sheet Daniel reviews and prints
+    sheet-trope.pdf         the chanter's copy (optional)
     preview/                page images
 RUNBOOK.md                  the weekly runbook Claude follows in Cowork (the Cowork skill points here)
 ```
@@ -51,10 +52,13 @@ node scripts/digest.mjs weeks/<slug>            # 2. one-page map of the passage
 # 3. fill weeks/<slug>/sheet.json: incipit, opening note, commentary, glosses, glossary, next week
 node scripts/lint.mjs weeks/<slug> [--fix]      # 4. optional; build runs it
 node scripts/build.mjs weeks/<slug> --png       # 5. sheet.pdf and page images; refuses on a broken citation or failed lint and names it
+node scripts/build.mjs weeks/<slug> --trope     #    optional; also sheet-trope.pdf, the chanter's copy: trope phrases highlighted by family
 node scripts/check.mjs weeks/<slug>             # 6. layout check; on a gap failure it names the entry to trim
 node scripts/deliver.mjs weeks/<slug>           # 7. to Drive (--dry-run first)
 npm test                                        # unit tests, when the template or scripts change
 ```
+
+**Chanter's copy.** For the few who chant, `--trope` also writes `sheet-trope.html` and `sheet-trope.pdf`: the same sheet with every trope phrase in the Hebrew column on a colored background, the way TropeTrainer printed it. A phrase ends at each word with a disjunctive accent, except that tipcha, pashta, yetiv and zarka fold into the phrase that follows; the last word of a verse ends a sof pasuk phrase, and the haftarah's last phrase has its own color for the closing melody. The family colors follow TropeTrainer's, so people who learned on it recognize them. The study sheet itself is unchanged; `check.mjs weeks/<slug> --trope` checks the copy, and nothing delivers it to Drive.
 
 The build prints the browser it used (`Browser: C:/Program Files/Google/Chrome/Application/chrome.exe`) and the page count. Chrome and Edge are tried in that order; set `HAFTARAH_BROWSER` to pin another. The page images are rendered from the PDF with `pdftoppm` when it is on the PATH, so what you see in `preview/` is what prints; without it they are headless screenshots, which on Linux Chromium lose the bottom of the page.
 

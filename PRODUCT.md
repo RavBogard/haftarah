@@ -37,6 +37,7 @@ A Mikraot Gedolot for a Reform study table: Sefaria's sources, pulled live each 
 - No page target; the build reports the count. Commentary volume is the variable the rabbi controls.
 - Every commentary entry is keyed to a verse or verse range and labeled by register (traditional, modern, historical-critical) and by source.
 - Each sheet opens with a front page: calendar reason, historical setting, legend, voices. Discussion questions are never printed. A glossary of names and places and a next-week line close the sheet.
+- An optional chanter's copy (`sheet-trope.pdf`) highlights the trope phrases in the Hebrew by family, for the few who chant. It is built only when a chanter asks and is not delivered to Drive.
 - Undecided: whether sheets are also published on the congregation website. The build must not preclude an HTML export later.
 
 ## Brand Commitments

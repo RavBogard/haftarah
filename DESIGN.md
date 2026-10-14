@@ -177,6 +177,9 @@ One ink, two greys, one rubric and four register colors. The rubric is the ring 
 
 **The Color Preference.** Shape carries register, letters carry keys, position carries hierarchy; color is never the only signal. But the sheet is designed for color: the mural, the rubric and the greys are chosen for an inkjet, not a photocopier.
 
+### Chanter's copy
+The one exception, in `sheet-trope.pdf` and only there: each trope phrase in the Hebrew column sits on a background in its family's color. The colors are TropeTrainer's, so people who learned on it recognize them: zakef #fff176, etnachta #9ec5ff, sof pasuk #f59a9a, revia #ffc078 (also munach legarmeh), tevir #9be29b, segol #eaa0ea, kadma v'azla #ffd2d2, telisha ketana #ffb3c6, pazer #d3c1ff (also telisha gedola), zakef gadol #ffd9a3, end of the haftarah #66c2c2. The front-page legend gains one row, "Chanter's copy · trope phrases by family", listing only the families used that week. Nothing else on the sheet changes. The study sheet keeps its rules: color never carries meaning, and nothing has a background but paper.
+
 ## Typography
 
 **Display Font:** Ezra SIL (with Noto Serif Hebrew, SBL Hebrew) for all Hebrew, from the incipit down to inline lemmas
