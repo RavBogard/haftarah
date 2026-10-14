@@ -297,7 +297,7 @@ node scripts/publish.mjs weeks/<slug> [--dry-run] [--token TOKEN] [--store URL]
   absent at phone width, one `details` per verse with commentary at phone width, the masthead range
   after scrolling, the dark theme tokens applied under `data-theme="dark"`. Run by hand and in the
   plan's verification; not a weekly step.
-- Existing `npm test` keeps its 94/95 (the one environmental timeout).
+- Existing `npm test` keeps passing in full. (The "one environmental timeout" this line once allowed for was the deliver CLI test really delivering the fixture on Windows; it is fixed and must stay fixed.)
 
 ## 10. Out of scope for version one
 

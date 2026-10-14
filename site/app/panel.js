@@ -5,8 +5,9 @@ import { noteHtml } from "./sheet.js";
 
 // Sefaria's text and dictionary markup is trusted but not ours: keep inline text tags only, strip
 // scripts, frames, handlers and non-http links before it reaches the live document.
-const KEEP = /^(P|B|I|EM|STRONG|BR|SPAN|SUP|SUB|SMALL|BIG|A|OL|UL|LI|DIV|ABBR)$/;
-const DROP = /^(SCRIPT|STYLE|IFRAME|OBJECT|EMBED|TEMPLATE|META|LINK|BASE|SVG|MATH)$/;
+// Case-insensitive: inside <svg>/<math> the parser keeps lowercase tag names.
+const KEEP = /^(P|B|I|EM|STRONG|BR|SPAN|SUP|SUB|SMALL|BIG|A|OL|UL|LI|DIV|ABBR)$/i;
+const DROP = /^(SCRIPT|STYLE|IFRAME|OBJECT|EMBED|TEMPLATE|META|LINK|BASE|SVG|MATH)$/i;
 export function clean(html) {
   const t = document.createElement("template");
   t.innerHTML = String(html == null ? "" : html);
