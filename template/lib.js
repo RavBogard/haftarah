@@ -348,7 +348,7 @@
   // gloss key only appends a <sup> to a word, so neither moves a phrase boundary.
   function tropeFamiliesUsed(verses) {
     const fams = new Set();
-    (verses || []).forEach((v, i) => tropePhrases(String(v.he == null ? "" : v.he).replace(/&thinsp;| /g, " "), { final: i === verses.length - 1 }).forEach(b => { if (b.family) fams.add(b.family); }));
+    (verses || []).forEach((v, i) => tropePhrases(String(v.he == null ? "" : v.he).replace(/&thinsp;|\u2009/g, " "), { final: i === verses.length - 1 }).forEach(b => { if (b.family) fams.add(b.family); }));
     return fams;
   }
 

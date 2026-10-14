@@ -775,8 +775,9 @@
     const keyed = L.assignKeys(data.verses, data.glosses || [], visible);
     keyed.verses.forEach((kv, idx) => { data.verses[idx].en = kv.en; data.verses[idx].keys = kv.keys; });
     document.documentElement.dataset.keys = keyed.sequence.join(",");
-    // Trope colors: on for the chanter's copy or ?trope=1; the screen toggle below flips them.
-    if (opts.trope || new URLSearchParams(location.search).get("trope") === "1") document.documentElement.dataset.trope = "1";
+    // Trope colors: ?trope=1 turns them on and ?trope=0 off; with neither, the chanter's copy has them on.
+    const tropeParam = new URLSearchParams(location.search).get("trope");
+    if (tropeParam === "1" || (tropeParam !== "0" && opts.trope)) document.documentElement.dataset.trope = "1";
     buildFrontPage();
     const last = buildTextPages();
     buildEndMatter(last);
@@ -788,17 +789,19 @@
     const rn = document.querySelector(".review-note");
     if (rn) rn.append(` Divine name set as יי ${yyCount} time${yyCount === 1 ? "" : "s"}.`);
     // Screen-only switch for the trope colors; .review-note never prints and hides in data-single.
+    // It reloads with ?trope= set instead of flipping the attribute in place, because the phrase
+    // padding can re-wrap a near-full line and only a fresh render paginates again.
     if (rn) {
-      const html = document.documentElement;
+      const on = "trope" in document.documentElement.dataset;
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "trope-toggle";
-      const label = () => { btn.textContent = `Trope colors: ${"trope" in html.dataset ? "on" : "off"}`; };
+      btn.textContent = `Trope colors: ${on ? "on" : "off"}`;
       btn.addEventListener("click", () => {
-        if ("trope" in html.dataset) delete html.dataset.trope; else html.dataset.trope = "1";
-        label();
+        const url = new URL(location.href);
+        url.searchParams.set("trope", on ? "0" : "1");
+        location.href = url.href;
       });
-      label();
       rn.append(btn);
     }
     // ?page=N shows one page alone (used for review captures).
