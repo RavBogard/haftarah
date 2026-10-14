@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
+import { readFileSync } from "node:fs";
 const require = createRequire(import.meta.url);
 const lib = require("../template/lib.js");
 
@@ -223,4 +224,96 @@ test("analyse lets the last verse stand alone when only note pages follow it", (
 <section class="page text verso" data-kind="text" data-rows="0" data-gap="-1" data-fill="80" data-split="" data-cont="0" data-offpage="0"></section>
 </html>`;
   assert.deepEqual(analyse(dom).problems, []);
+});
+
+// ---- tropePhrases ------------------------------------------------------------
+const fam = ps => ps.map(p => p.family);
+const htmls = ps => ps.map(p => p.html);
+
+test("tropePhrases cuts Isaiah 54:1 at etnachta, zakef, tevir and the verse end", () => {
+  const he = "רׇנִּ֥י עֲקָרָ֖ה לֹ֣א יָלָ֑דָה פִּצְחִ֨י רִנָּ֤ה וְצַֽהֲלִי֙ לֹא־חָ֔לָה כִּֽי־רַבִּ֧ים בְּֽנֵי־שׁוֹמֵמָ֛ה מִבְּנֵ֥י בְעוּלָ֖ה אָמַ֥ר יְהֹוָֽה׃";
+  const ps = lib.tropePhrases(he);
+  assert.deepEqual(fam(ps), ["etnachta", "zakef", "tevir", "sof-pasuk"]);
+  assert.deepEqual(htmls(ps), [
+    "רׇנִּ֥י עֲקָרָ֖ה לֹ֣א יָלָ֑דָה",
+    "פִּצְחִ֨י רִנָּ֤ה וְצַֽהֲלִי֙ לֹא־חָ֔לָה",
+    "כִּֽי־רַבִּ֧ים בְּֽנֵי־שׁוֹמֵמָ֛ה",
+    "מִבְּנֵ֥י בְעוּלָ֖ה אָמַ֥ר יְהֹוָֽה׃",
+  ]);
+});
+
+test("tropePhrases treats munach before a paseq as legarmeh (a revia block)", () => {
+  const he = "הַרְחִ֣יבִי <b>׀</b> מְק֣וֹם אׇהֳלֵ֗ךְ וִירִיע֧וֹת מִשְׁכְּנוֹתַ֛יִךְ יַטּ֖וּ אַל־תַּחְשֹׂ֑כִי הַאֲרִ֙יכִי֙ מֵיתָרַ֔יִךְ וִיתֵדֹתַ֖יִךְ חַזֵּֽקִי׃";
+  const ps = lib.tropePhrases(he);
+  assert.deepEqual(fam(ps), ["revia", "revia", "tevir", "etnachta", "zakef", "sof-pasuk"]);
+  assert.deepEqual(htmls(ps), [
+    "הַרְחִ֣יבִי <b>׀</b>",
+    "מְק֣וֹם אׇהֳלֵ֗ךְ",
+    "וִירִיע֧וֹת מִשְׁכְּנוֹתַ֛יִךְ",
+    "יַטּ֖וּ אַל־תַּחְשֹׂ֑כִי",
+    "הַאֲרִ֙יכִי֙ מֵיתָרַ֔יִךְ",
+    "וִיתֵדֹתַ֖יִךְ חַזֵּֽקִי׃",
+  ]);
+});
+
+test("tropePhrases: a word with two accents ends a block if either one does", () => {
+  const a = lib.tropePhrases("עַל־מ֨וֹשָׁב֜וֹ יִפָּקֵ֖ד מוֹשָׁבֶֽךָ׃");
+  assert.deepEqual(fam(a), ["azla", "sof-pasuk"]);
+  assert.equal(a[0].html, "עַל־מ֨וֹשָׁב֜וֹ");
+  const z = lib.tropePhrases("וּמִ֨מְּחִתָּ֔ה יִפָּקֵ֖ד מוֹשָׁבֶֽךָ׃");
+  assert.deepEqual(fam(z), ["zakef", "sof-pasuk"]);
+  assert.equal(z[0].html, "וּמִ֨מְּחִתָּ֔ה");
+});
+
+test("tropePhrases names the haftarah's last block sof-haftarah when final", () => {
+  const he = "כִּ֥י יִפָּקֵ֖ד מוֹשָׁבֶֽךָ׃";
+  assert.deepEqual(fam(lib.tropePhrases(he, { final: true })), ["sof-haftarah"]);
+  assert.deepEqual(fam(lib.tropePhrases(he)), ["sof-pasuk"]);
+});
+
+test("tropePhrases folds zarka in both encodings into the segol block", () => {
+  for (const zarka of ["֮", "֘"]) {
+    const he = `וַיֹּ֥אמֶר הַנַּעַר${zarka} אָמַר֒ יִפָּקֵ֖ד מוֹשָׁבֶֽךָ׃`;
+    const ps = lib.tropePhrases(he);
+    assert.deepEqual(fam(ps), ["segol", "sof-pasuk"], `zarka U+${zarka.codePointAt(0).toString(16)}`);
+    assert.equal(ps[0].html, `וַיֹּ֥אמֶר הַנַּעַר${zarka} אָמַר֒`);
+  }
+});
+
+test("tropePhrases keeps a ketiv/qere element as one token", () => {
+  const kq = '<span class="mam-kq"><span class="mam-kq-q">[הַ֣חִצִּ֔ים]</span> <span class="mam-kq-k">(החצי)</span></span>';
+  const he = `וַיֹּ֤אמֶר הַנַּ֙עַר֙ אֶת־${kq} וְאֶת־קְשַׁתּ֖וֹ`;
+  const ps = lib.tropePhrases(he);
+  assert.deepEqual(fam(ps), ["zakef", "sof-pasuk"]);
+  assert.equal(ps[0].html, `וַיֹּ֤אמֶר הַנַּ֙עַר֙ אֶת־${kq}`);
+  assert.ok(ps[0].html.includes(kq));
+  assert.equal(ps[1].html, "וְאֶת־קְשַׁתּ֖וֹ");
+});
+
+test("tropePhrases returns a letterless token between blocks, unwrapped", () => {
+  const pisqa = '<span class="pisqa"></span>';
+  const he = `לֹ֣א יָלָ֑דָה ${pisqa} כִּ֥י יִפָּקֵ֖ד מוֹשָׁבֶֽךָ׃`;
+  const ps = lib.tropePhrases(he);
+  assert.deepEqual(ps, [
+    { family: "etnachta", html: "לֹ֣א יָלָ֑דָה" },
+    { family: null, html: pisqa },
+    { family: "sof-pasuk", html: "כִּ֥י יִפָּקֵ֖ד מוֹשָׁבֶֽךָ׃" },
+  ]);
+});
+
+test("tropePhrases round-trips every fixture verse", () => {
+  for (const f of ["week-notes", "week-min"]) {
+    const sheet = JSON.parse(readFileSync(new URL(`./fixtures/${f}/sheet.json`, import.meta.url), "utf8"));
+    for (const v of sheet.verses) {
+      const he = v.he.replace(/&thinsp;/g, " ");
+      const ps = lib.tropePhrases(he);
+      assert.equal(ps.map(p => p.html).join(" "), he, `${f} ${v.chapter}:${v.verse}`);
+      for (const p of ps) assert.ok(p.html.length > 0, `${f} ${v.chapter}:${v.verse} empty block`);
+    }
+  }
+});
+
+test("TROPE_FAMILIES is the legend order", () => {
+  assert.deepEqual(lib.TROPE_FAMILIES.map(([k]) => k), ["zakef", "etnachta", "sof-pasuk", "revia", "tevir", "segol", "azla", "telisha-ketana", "pazer", "zakef-gadol", "sof-haftarah"]);
+  assert.equal(lib.TROPE_FAMILIES[6][1], "kadma v’azla");
 });
