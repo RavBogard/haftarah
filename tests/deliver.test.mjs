@@ -206,3 +206,19 @@ test("CLI uploads with config from env", async () => {
   assert.ok(!stdout.includes(TOKEN));
   await rm(home, { recursive: true, force: true });
 });
+
+test("deliver runs publish after the Drive uploads when a web config is given", async () => {
+  drive.clear(); mode = "ok";
+  const lines = [];
+  const calls = [];
+  await deliver(week, { only: "public", config: config(), log: l => lines.push(l), webConfig: { token: "webtok" }, publishImpl: async (dir, o) => { calls.push({ dir, token: o.config.token }); o.log("web      weeks/x/sheet.json  1 KB  https://example/x"); } });
+  assert.deepEqual(calls, [{ dir: week, token: "webtok" }]);
+  assert.ok(lines.findIndex(l => l.startsWith("Public folder:")) < lines.findIndex(l => l.startsWith("web ")), "Drive first, then the web");
+});
+
+test("deliver skips the web without a web config", async () => {
+  drive.clear(); mode = "ok";
+  let called = 0;
+  await deliver(week, { only: "public", config: config(), log: quiet, publishImpl: async () => { called++; } });
+  assert.equal(called, 0);
+});

@@ -4,6 +4,7 @@
  * (tools/dropbox/Code.gs), byte-exact, with a sha256 check on every file.
  *
  *   node scripts/deliver.mjs weeks/<slug> [--dry-run] [--only public|working] [--url URL] [--token TOKEN]
+ *   --no-web      skip the web publish (scripts/publish.mjs) that otherwise runs last
  *
  * Config, first found wins: --url/--token; HAFTARAH_DROPBOX_URL and
  * HAFTARAH_DROPBOX_TOKEN; the JSON file at $HAFTARAH_DROPBOX_CONFIG or
@@ -13,12 +14,15 @@
  * Working folder, subfolder <slug>: sheet.json, candidates.json, texts.json,
  * digest.md, briefing.md (the last three when present) and the PDF under the
  * public name.
+ *
+ * After the Drive uploads the week goes to the web through publish.mjs when a Blob token is configured (~/.haftarah-web.json); --no-web skips it.
  */
 import { readFile, access } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { homedir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { publish, loadWebConfig } from "./publish.mjs";
 
 const REQUIRED = ["sheet.json", "candidates.json", "sheet.pdf"];
 const OPTIONAL = ["texts.json", "digest.md", "briefing.md"];
@@ -147,7 +151,7 @@ async function postFile(url, payload, fetchImpl) {
  * Deliver the week. Returns the per-file replies. Throws on the first failure,
  * including a sha256 mismatch.
  */
-export async function deliver(dir, { only, dryRun = false, config, log = console.log, fetchImpl = globalThis.fetch } = {}) {
+export async function deliver(dir, { only, dryRun = false, config, log = console.log, fetchImpl = globalThis.fetch, webConfig = null, publishImpl = publish } = {}) {
   const plan = await planFiles(dir, { only });
 
   if (dryRun) {
@@ -184,6 +188,8 @@ export async function deliver(dir, { only, dryRun = false, config, log = console
   }
   if (folders.public) log(`Public folder:  ${folders.public}`);
   if (folders.working) log(`Working folder: ${folders.working}`);
+  // The web comes last so a Drive failure never leaves the site ahead of the record.
+  if (webConfig) await publishImpl(dir, { config: webConfig, log, fetchImpl });
   return results;
 }
 
@@ -193,12 +199,13 @@ function parseArgs(argv) {
     const a = argv[i];
     const m = a.match(/^--(url|token|only)(?:=(.*))?$/);
     if (m) { out.flags[m[1]] = m[2] ?? argv[++i]; continue; }
+    if (a === "--no-web") { out.noWeb = true; continue; }
     if (a === "--dry-run") { out.dryRun = true; continue; }
     if (a.startsWith("--")) throw new Error(`unknown option ${a}`);
     if (out.dir) throw new Error(`one week folder only (got ${out.dir} and ${a})`);
     out.dir = a;
   }
-  if (!out.dir) throw new Error("usage: node scripts/deliver.mjs weeks/<slug> [--dry-run] [--only public|working]");
+  if (!out.dir) throw new Error("usage: node scripts/deliver.mjs weeks/<slug> [--dry-run] [--only public|working] [--no-web]");
   if (out.flags.only && !["public", "working"].includes(out.flags.only)) throw new Error("--only takes public or working");
   return out;
 }
@@ -208,10 +215,17 @@ async function main() {
   const only = args.flags.only;
   if (args.dryRun) {
     await deliver(args.dir, { only, dryRun: true });
+    if (!args.noWeb) await publish(args.dir, { dryRun: true });
     return;
   }
   const config = await loadConfig({ flags: { url: args.flags.url, token: args.flags.token } });
-  await deliver(args.dir, { only, config });
+  let webConfig = null;
+  if (args.noWeb) console.log("Web: skipped (--no-web).");
+  else {
+    try { webConfig = await loadWebConfig(); }
+    catch (err) { console.log(`Web: skipped; ${err.message}`); }
+  }
+  await deliver(args.dir, { only, config, webConfig });
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {

@@ -55,7 +55,7 @@ node scripts/lint.mjs weeks/<slug> [--fix]      # 4. optional; build runs it
 node scripts/build.mjs weeks/<slug> --png       # 5. sheet.pdf and page images; refuses on a broken citation or failed lint and names it
 node scripts/build.mjs weeks/<slug> --trope     #    optional; also sheet-trope.pdf, the chanter's copy: trope phrases highlighted by family
 node scripts/check.mjs weeks/<slug>             # 6. layout check; on a gap failure it names the entry to trim
-node scripts/deliver.mjs weeks/<slug>           # 7. to Drive (--dry-run first)
+node scripts/deliver.mjs weeks/<slug>           # 7. to Drive and the web (--dry-run first; --no-web for Drive only)
 npm test                                        # unit tests, when the template or scripts change
 ```
 
