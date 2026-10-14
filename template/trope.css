@@ -1,0 +1,18 @@
+/* Trope phrases on their family's color (TropeTrainer's grouping). render.js always wraps each
+   phrase in <span class="tr tr-<family>">; the colors and the legend row show only while <html>
+   has data-trope (the --trope build, ?trope=1, or the screen toggle), so the plain sheet is untouched. */
+html[data-trope] .he .tr { padding: 0 0.14em; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+html[data-trope] .tr-zakef { background: #fff176; }
+html[data-trope] .tr-etnachta { background: #9ec5ff; }
+html[data-trope] .tr-sof-pasuk { background: #f59a9a; }
+html[data-trope] .tr-revia { background: #ffc078; }
+html[data-trope] .tr-tevir { background: #9be29b; }
+html[data-trope] .tr-segol { background: #eaa0ea; }
+html[data-trope] .tr-azla { background: #ffd2d2; }
+html[data-trope] .tr-telisha-ketana { background: #ffb3c6; }
+html[data-trope] .tr-pazer { background: #d3c1ff; }
+html[data-trope] .tr-zakef-gadol { background: #ffd9a3; }
+html[data-trope] .tr-sof-haftarah { background: #66c2c2; }
+html[data-trope] .trope-legend .label { color: var(--ink-2); margin-right: 4pt; }
+html[data-trope] .trope-legend .tr { padding: 1pt 5px; color: var(--ink); }
+html:not([data-trope]) .trope-legend { display: none; }

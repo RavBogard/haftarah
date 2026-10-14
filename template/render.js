@@ -173,12 +173,10 @@
     }
     p.body.append(legend);
 
-    // Chanter's copy: a second row naming the trope families this haftarah uses, in fixed order.
-    if (opts.trope) {
-      const fams = new Set();
-      // Raw v.he yields the same families the rows show: divineName keeps every accent on יי, and keyHebrew
-      // only appends a <sup> to a word, so neither moves a phrase boundary.
-      data.verses.forEach((v, i) => L.tropePhrases(v.he.replace(/&thinsp;|\u2009/g, " "), { final: i === data.verses.length - 1 }).forEach(b => fams.add(b.family)));
+    // Trope legend: a second row naming the trope families this haftarah uses, in fixed order. Always
+    // built; trope.css hides it (display: none, so the fill is unchanged) unless <html> has data-trope.
+    {
+      const fams = L.tropeFamiliesUsed(data.verses);
       const tl = el("div", "legend trope-legend");
       tl.append(el("span", "label", "Chanter’s copy · trope phrases by family"));
       L.TROPE_FAMILIES.filter(([k]) => fams.has(k)).forEach(([k, label]) => tl.append(el("span", `tr tr-${k}`, label)));
@@ -237,11 +235,8 @@
     row.setLocator(false);
     let heHtml = divineName(v.he.replace(/&thinsp;|\u2009/g, " "));
     for (const k of (v.keys || [])) if (k.kind === "gloss") heHtml = keyHebrew(heHtml, k.he, k.key);
-    // Chanter's copy: wrap each trope phrase in its family's span; separators (a pisqa) stay bare.
-    if (opts.trope) {
-      const final = v === data.verses[data.verses.length - 1];
-      heHtml = L.tropePhrases(heHtml, { final }).map(b => b.family ? `<span class="tr tr-${b.family}">${b.html}</span>` : b.html).join(" ");
-    }
+    // Each trope phrase in its family's span, always; trope.css colors them only under data-trope.
+    heHtml = L.tropeHtml(heHtml, { final: v === data.verses[data.verses.length - 1] });
     const he = el("div", "he");
     const heInner = el("div", "inner", heHtml);
     he.append(heInner);
@@ -780,7 +775,8 @@
     const keyed = L.assignKeys(data.verses, data.glosses || [], visible);
     keyed.verses.forEach((kv, idx) => { data.verses[idx].en = kv.en; data.verses[idx].keys = kv.keys; });
     document.documentElement.dataset.keys = keyed.sequence.join(",");
-    if (opts.trope) document.documentElement.dataset.trope = "1";
+    // Trope colors: on for the chanter's copy or ?trope=1; the screen toggle below flips them.
+    if (opts.trope || new URLSearchParams(location.search).get("trope") === "1") document.documentElement.dataset.trope = "1";
     buildFrontPage();
     const last = buildTextPages();
     buildEndMatter(last);
@@ -791,6 +787,20 @@
     window.SHEET_YY = yyCount;
     const rn = document.querySelector(".review-note");
     if (rn) rn.append(` Divine name set as יי ${yyCount} time${yyCount === 1 ? "" : "s"}.`);
+    // Screen-only switch for the trope colors; .review-note never prints and hides in data-single.
+    if (rn) {
+      const html = document.documentElement;
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "trope-toggle";
+      const label = () => { btn.textContent = `Trope colors: ${"trope" in html.dataset ? "on" : "off"}`; };
+      btn.addEventListener("click", () => {
+        if ("trope" in html.dataset) delete html.dataset.trope; else html.dataset.trope = "1";
+        label();
+      });
+      label();
+      rn.append(btn);
+    }
     // ?page=N shows one page alone (used for review captures).
     const only = Number(new URLSearchParams(location.search).get("page"));
     if (only) {

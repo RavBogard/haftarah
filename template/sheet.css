@@ -1,3 +1,4 @@
+@import url("trope.css");
 /* Haftarah sheet — the critical edition.
    One frame for every week. Everything week-specific comes from sheet.json. */
 
@@ -292,21 +293,6 @@ html, body {
 .he b, .he small { font-weight: normal; font-size: inherit; }
 .he .pisqa { display: inline-block; width: 1.6em; }
 .he .mam-kq-k { font-size: 0.72em; color: var(--ink-2); }
-/* Chanter's copy: each trope phrase on its family's color (TropeTrainer's grouping). */
-.he .tr { padding: 0 0.14em; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
-.tr-zakef { background: #fff176; }
-.tr-etnachta { background: #9ec5ff; }
-.tr-sof-pasuk { background: #f59a9a; }
-.tr-revia { background: #ffc078; }
-.tr-tevir { background: #9be29b; }
-.tr-segol { background: #eaa0ea; }
-.tr-azla { background: #ffd2d2; }
-.tr-telisha-ketana { background: #ffb3c6; }
-.tr-pazer { background: #d3c1ff; }
-.tr-zakef-gadol { background: #ffd9a3; }
-.tr-sof-haftarah { background: #66c2c2; }
-.trope-legend .label { color: var(--ink-2); margin-right: 4pt; }
-.trope-legend .tr { padding: 1pt 5px; color: var(--ink); }
 .he .fn {
   font-family: var(--serif);
   font-size: 0.6em;
@@ -465,6 +451,16 @@ html, body {
     font-size: 12px;
     color: #4a4a4a;
     font-family: var(--serif);
+  }
+  .review-note .trope-toggle {
+    margin-left: 8px;
+    padding: 1px 8px;
+    font: inherit;
+    color: inherit;
+    background: none;
+    border: 1px solid #a6a6a6;
+    border-radius: 3px;
+    cursor: pointer;
   }
 }
 @media print {

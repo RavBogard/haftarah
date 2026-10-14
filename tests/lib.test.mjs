@@ -334,3 +334,34 @@ test("TROPE_FAMILIES is the legend order", () => {
   assert.deepEqual(lib.TROPE_FAMILIES.map(([k]) => k), ["zakef", "etnachta", "sof-pasuk", "revia", "tevir", "segol", "azla", "telisha-ketana", "pazer", "zakef-gadol", "sof-haftarah"]);
   assert.equal(lib.TROPE_FAMILIES[6][1], "kadma v’azla");
 });
+
+// ---- tropeHtml / tropeFamiliesUsed -------------------------------------------
+const is547 = "בְּרֶ֥גַע קָטֹ֖ן עֲזַבְתִּ֑יךְ וּבְרַחֲמִ֥ים גְּדֹלִ֖ים אֲקַבְּצֵֽךְ׃";
+
+test("tropeHtml wraps each phrase of Isaiah 54:7 in its family's span", () => {
+  assert.equal(lib.tropeHtml(is547),
+    '<span class="tr tr-etnachta">בְּרֶ֥גַע קָטֹ֖ן עֲזַבְתִּ֑יךְ</span> <span class="tr tr-sof-pasuk">וּבְרַחֲמִ֥ים גְּדֹלִ֖ים אֲקַבְּצֵֽךְ׃</span>');
+  assert.match(lib.tropeHtml(is547, { final: true }), /<span class="tr tr-sof-haftarah">וּבְרַחֲמִ֥ים גְּדֹלִ֖ים אֲקַבְּצֵֽךְ׃<\/span>$/);
+});
+
+test("tropeHtml leaves a separator bare", () => {
+  const pisqa = '<span class="pisqa"></span>';
+  const out = lib.tropeHtml(`לֹ֣א ${pisqa} יָלָ֑דָה כִּ֥י יִפָּקֵ֖ד מוֹשָׁבֶֽךָ׃`);
+  assert.equal(out, `<span class="tr tr-etnachta">לֹ֣א</span> ${pisqa} <span class="tr tr-etnachta">יָלָ֑דָה</span> <span class="tr tr-sof-pasuk">כִּ֥י יִפָּקֵ֖ד מוֹשָׁבֶֽךָ׃</span>`);
+});
+
+test("tropeHtml keeps the text of every fixture verse", () => {
+  const strip = s => s.replace(/<[^>]*>/g, "");
+  for (const f of ["week-notes", "week-min"]) {
+    const sheet = JSON.parse(readFileSync(new URL(`./fixtures/${f}/sheet.json`, import.meta.url), "utf8"));
+    for (const v of sheet.verses) {
+      const he = v.he.replace(/&thinsp;/g, " ");
+      assert.equal(strip(lib.tropeHtml(he)), strip(he), `${f} ${v.chapter}:${v.verse}`);
+    }
+  }
+});
+
+test("tropeFamiliesUsed names the families a haftarah uses, the last verse final", () => {
+  assert.deepEqual(lib.tropeFamiliesUsed([{ he: is547 }]), new Set(["etnachta", "sof-haftarah"]));
+  assert.deepEqual(lib.tropeFamiliesUsed([{ he: is547 }, { he: "כִּ֥י יִפָּקֵ֖ד מוֹשָׁבֶֽךָ׃" }]), new Set(["etnachta", "sof-pasuk", "sof-haftarah"]));
+});

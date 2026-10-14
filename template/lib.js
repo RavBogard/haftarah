@@ -337,6 +337,21 @@
     return out;
   }
 
+  // The verse HTML with each trope phrase in <span class="tr tr-<family>">; separators (a pisqa)
+  // stay bare. The spans are always there; trope.css colors them only under html[data-trope].
+  function tropeHtml(html, { final = false } = {}) {
+    return tropePhrases(html, { final }).map(b => b.family ? `<span class="tr tr-${b.family}">${b.html}</span>` : b.html).join(" ");
+  }
+
+  // The families a haftarah's verses ([{ he }], in order) use, for the trope legend; the last verse
+  // is final. Raw he gives the families the rows show: divineName keeps every accent on יי, and a
+  // gloss key only appends a <sup> to a word, so neither moves a phrase boundary.
+  function tropeFamiliesUsed(verses) {
+    const fams = new Set();
+    (verses || []).forEach((v, i) => tropePhrases(String(v.he == null ? "" : v.he).replace(/&thinsp;| /g, " "), { final: i === verses.length - 1 }).forEach(b => { if (b.family) fams.add(b.family); }));
+    return fams;
+  }
+
   // "- key: McCarter 1980 | citation | use" → Map(key → { citation, use })
   function parseBibliography(md) {
     const map = new Map();
@@ -347,5 +362,5 @@
     return map;
   }
 
-  return { TETRA, divineName, stripMarks, splitPoetry, nowrapKeys, letterFor, isDeadRef, normalizeRefs, assignKeys, SIGLA, REGISTER_ORDER, REGISTER_NAMES, voicesFor, voiceKey, hebrewKey, hebrewWords, findHebrew, plainText, findEnglish, fitIncipitSize, parseBibliography, tropePhrases, TROPE_FAMILIES };
+  return { TETRA, divineName, stripMarks, splitPoetry, nowrapKeys, letterFor, isDeadRef, normalizeRefs, assignKeys, SIGLA, REGISTER_ORDER, REGISTER_NAMES, voicesFor, voiceKey, hebrewKey, hebrewWords, findHebrew, plainText, findEnglish, fitIncipitSize, parseBibliography, tropePhrases, tropeHtml, tropeFamiliesUsed, TROPE_FAMILIES };
 });
