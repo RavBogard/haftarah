@@ -176,7 +176,9 @@
     // Chanter's copy: a second row naming the trope families this haftarah uses, in fixed order.
     if (opts.trope) {
       const fams = new Set();
-      data.verses.forEach((v, i) => L.tropePhrases(v.he.replace(/&thinsp;| /g, " "), { final: i === data.verses.length - 1 }).forEach(b => fams.add(b.family)));
+      // Raw v.he yields the same families the rows show: divineName keeps every accent on יי, and keyHebrew
+      // only appends a <sup> to a word, so neither moves a phrase boundary.
+      data.verses.forEach((v, i) => L.tropePhrases(v.he.replace(/&thinsp;|\u2009/g, " "), { final: i === data.verses.length - 1 }).forEach(b => fams.add(b.family)));
       const tl = el("div", "legend trope-legend");
       tl.append(el("span", "label", "Chanter’s copy · trope phrases by family"));
       L.TROPE_FAMILIES.filter(([k]) => fams.has(k)).forEach(([k, label]) => tl.append(el("span", `tr tr-${k}`, label)));
@@ -782,7 +784,7 @@
     buildFrontPage();
     const last = buildTextPages();
     buildEndMatter(last);
-    document.title = `${shabbatName()} — ${dash(data.haftarah.ref)}`;
+    document.title = `${shabbatName()} — ${dash(data.haftarah.ref)}${opts.trope ? " (chanter’s copy)" : ""}`;
     document.documentElement.dataset.pages = String(pageCount);
     document.documentElement.dataset.yy = String(yyCount);
     window.SHEET_PAGES = pageCount;

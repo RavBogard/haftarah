@@ -6,8 +6,9 @@
 })(typeof self !== "undefined" ? self : globalThis, function () {
   "use strict";
 
-  // Any Tetragrammaton, with any pointing (including the Elohim pointing).
-  const TETRA = /י[֑-ׇ]*ה[֑-ׇ]*ו[֑-ׇ]*ה[֑-ׇ]*/g;
+  // Any Tetragrammaton, with any pointing (including the Elohim pointing). The class holds combining
+  // marks only: maqaf U+05BE, paseq U+05C0, sof pasuq U+05C3, nun hafukha U+05C6 stay outside the match.
+  const TETRA = /י[\u0591-\u05BD\u05BF\u05C1\u05C2\u05C4\u05C5\u05C7]*ה[\u0591-\u05BD\u05BF\u05C1\u05C2\u05C4\u05C5\u05C7]*ו[\u0591-\u05BD\u05BF\u05C1\u05C2\u05C4\u05C5\u05C7]*ה[\u0591-\u05BD\u05BF\u05C1\u05C2\u05C4\u05C5\u05C7]*/g;
 
   // יי, with the verse's cantillation marks (U+0591–U+05AE) kept on the second yud.
   function divineName(html) {

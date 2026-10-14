@@ -24,6 +24,13 @@ test("divineName leaves Judah and Jonathan alone", () => {
   assert.equal(lib.divineName(s).count, 0);
 });
 
+test("divineName leaves sof pasuq, maqaf and paseq outside the Name", () => {
+  // silluq/meteg U+05BD is not an accent carried onto the yud; the ׃ must survive
+  assert.equal(lib.divineName("אָמַ֥ר יְהֹוָֽה׃").html, "אָמַ֥ר יי׃");
+  assert.equal(lib.divineName("יְהוָ֖ה־").html, "יי֖־");
+  assert.equal(lib.divineName("יְהוָ֣ה ׀").html, "יי֣ ׀");
+});
+
 test("stripMarks removes vowels and accents", () => {
   assert.equal(lib.stripMarks("וְנִפְקַ֕דְתָּ"), "ונפקדת");
 });
