@@ -211,3 +211,38 @@ Files: `README.md`, `RUNBOOK.md`, `DESIGN.md`, `PRODUCT.md`.
 - `PRODUCT.md`: one bullet in the right list: an optional chanter's copy with trope phrases
   highlighted for the few who chant.
 - No code changes. Commit: `Docs: the chanter's copy`.
+
+## Task 4: small fixes found in review
+
+Files: `template/lib.js`, `tests/lib.test.mjs`, `template/render.js`.
+
+1. **Sof pasuq lost after the divine name (pre-existing bug).** In `template/lib.js` the
+   Tetragrammaton pattern `TETRA` uses the class `[֑-ׇ]` (U+0591–U+05C7) for the marks between and
+   after the letters. That range also holds punctuation: maqaf U+05BE, paseq U+05C0, sof pasuq
+   U+05C3, nun hafukha U+05C6. The trailing match swallows a ׃ attached to יהוה, and `divineName`
+   keeps only accents U+0591–U+05AE, so the ׃ vanishes: `אָמַ֥ר יְהֹוָֽה׃` renders as `אָמַ֥ר יי` with no
+   sof pasuq. Fix: restrict the class in `TETRA` to combining marks only
+   (`[\u0591-\u05BD\u05BF\u05C1\u05C2\u05C4\u05C5\u05C7]`), in all four positions, so punctuation
+   is left outside the match and survives. Keep the existing behavior that only accents
+   U+0591–U+05AE are carried onto the second yud. TDD: add a test in `tests/lib.test.mjs` first:
+   `lib.divineName("אָמַ֥ר יְהֹוָֽה׃").html` equals `"אָמַ֥ר יי֥׃"`? — no: the accent on the Name here is
+   only the meteg/silluq U+05BD, which is not carried, so the expected result is `"אָמַ֥ר יי׃"`;
+   also `lib.divineName("יְהוָ֖ה־").html` equals `"יי֖־"` (maqaf survives) and
+   `lib.divineName("יְהוָ֣ה ׀").html` equals `"יי֣ ׀"` (nothing swallowed). The existing divineName
+   tests must still pass unchanged. Check `tests/lib.test.mjs` and `scripts/check.mjs` for any other
+   copy of the same pattern (`check.mjs` has its own `TETRA` for the determinism check: it only
+   counts occurrences, so leave it unless a test says otherwise, and say in the report what you found).
+2. **Title suffix.** `render.js` sets `document.title` on every render, which overwrites the
+   template `<title>` that build.mjs suffixed with ` (chanter’s copy)`. Make the renderer append
+   ` (chanter’s copy)` to the title it sets when `opts.trope` is true, so the PDF's Title metadata
+   and the browser tab carry it. Leave the build.mjs suffix in place (it is what shows before the
+   script runs).
+3. **Thin space.** `render.js` builds the trope legend's family set with a regex that holds a
+   literal U+2009; write it as `\u2009` like the verse-row code does, and add a one-line comment
+   on the legend computation saying why running `tropePhrases` on the raw `v.he` gives the same
+   families the rows show (divineName keeps all accents; keyHebrew only appends a `<sup>` to a word).
+
+Verification: `npm test` (the known deliver timeout aside); `node scripts/build.mjs weeks/2026-10-17-noach --trope`
+then confirm in `weeks/2026-10-17-noach/sheet-trope.html`'s rendered output — a headless Chrome
+screenshot of page 2 — that 54:1 now ends with ׃ after יי; and `node scripts/check.mjs` on both
+copies still passes. Commit: `Sof pasuq survives the divine name; chanter's copy title; thin-space regex`.
