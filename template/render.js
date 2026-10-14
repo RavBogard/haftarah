@@ -1,6 +1,7 @@
 /* render.js — lays one week's sheet.json out as fixed letter pages.
    Runs in the browser (headless Chrome for the PDF, or a normal browser for review).
-   Expects window.SHEET (the data) and window.SHEET_OPTIONS ({ logo, voices }). */
+   Expects window.SHEET (the data) and window.SHEET_OPTIONS ({ logo, voices, trope }); trope: true
+   makes the chanter's copy, with each trope phrase of the Hebrew on its family's color. */
 
 (function () {
   "use strict";
@@ -172,6 +173,16 @@
     }
     p.body.append(legend);
 
+    // Chanter's copy: a second row naming the trope families this haftarah uses, in fixed order.
+    if (opts.trope) {
+      const fams = new Set();
+      data.verses.forEach((v, i) => L.tropePhrases(v.he.replace(/&thinsp;| /g, " "), { final: i === data.verses.length - 1 }).forEach(b => fams.add(b.family)));
+      const tl = el("div", "legend trope-legend");
+      tl.append(el("span", "label", "Chanter’s copy · trope phrases by family"));
+      L.TROPE_FAMILIES.filter(([k]) => fams.has(k)).forEach(([k, label]) => tl.append(el("span", `tr tr-${k}`, label)));
+      p.body.append(tl);
+    }
+
     // Voices on this sheet.
     const voices = L.voicesFor(data.commentary || [], opts.voices || {}, visible);
     let vb = null;
@@ -224,6 +235,11 @@
     row.setLocator(false);
     let heHtml = divineName(v.he.replace(/&thinsp;|\u2009/g, " "));
     for (const k of (v.keys || [])) if (k.kind === "gloss") heHtml = keyHebrew(heHtml, k.he, k.key);
+    // Chanter's copy: wrap each trope phrase in its family's span; separators (a pisqa) stay bare.
+    if (opts.trope) {
+      const final = v === data.verses[data.verses.length - 1];
+      heHtml = L.tropePhrases(heHtml, { final }).map(b => b.family ? `<span class="tr tr-${b.family}">${b.html}</span>` : b.html).join(" ");
+    }
     const he = el("div", "he");
     const heInner = el("div", "inner", heHtml);
     he.append(heInner);
@@ -762,6 +778,7 @@
     const keyed = L.assignKeys(data.verses, data.glosses || [], visible);
     keyed.verses.forEach((kv, idx) => { data.verses[idx].en = kv.en; data.verses[idx].keys = kv.keys; });
     document.documentElement.dataset.keys = keyed.sequence.join(",");
+    if (opts.trope) document.documentElement.dataset.trope = "1";
     buildFrontPage();
     const last = buildTextPages();
     buildEndMatter(last);

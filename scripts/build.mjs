@@ -5,6 +5,7 @@
  *   node scripts/build.mjs weeks/<slug>            # sheet.pdf: everything not rejected
  *   node scripts/build.mjs weeks/<slug> --png      # also write page images (from the PDF when pdftoppm is present)
  *   node scripts/build.mjs weeks/<slug> --no-pdf   # HTML only (open sheet.html in a browser and print)
+ *   node scripts/build.mjs weeks/<slug> --trope    # also the chanter's copy: sheet-trope.html and sheet-trope.pdf
  *
  * Needs Node 18+ and Chrome or Edge installed (or set HAFTARAH_BROWSER to a browser executable).
  */
@@ -27,13 +28,14 @@ const ROOT = resolve(here, "..");
 function flag(name) { return process.argv.includes(`--${name}`); }
 // Set by main(); kept at module level so the helpers below can see them. Importing this module
 // (check.mjs and the tests do) must not parse arguments or exit.
-let weekDir, WANT_PDF, WANT_PNG;
+let weekDir, WANT_PDF, WANT_PNG, WANT_TROPE;
 function parseArgs() {
   const dirArg = process.argv.slice(2).find(a => !a.startsWith("--"));
-  if (!dirArg) { console.error("usage: node scripts/build.mjs weeks/<slug> [--png] [--no-pdf]"); process.exit(1); }
+  if (!dirArg) { console.error("usage: node scripts/build.mjs weeks/<slug> [--png] [--no-pdf] [--trope]"); process.exit(1); }
   weekDir = resolve(dirArg);
   WANT_PDF = !flag("no-pdf");
   WANT_PNG = flag("png");
+  WANT_TROPE = flag("trope");
 }
 
 function toPosix(p) { return p.split("\\").join("/"); }
@@ -134,19 +136,25 @@ async function main() {
   const tpl = await readFile(join(ROOT, "template", "sheet.html"), "utf8");
   const title = `${data.shabbat?.parashah?.en || ""} haftarah`;
   const note = `${shown} commentary entr${shown === 1 ? "y" : "ies"}.`;
-  const html = fillTemplate(tpl, {
-    TITLE: title.replace(/[<>&]/g, ""),
+  // The chanter's copy is the same page with trope: true in its options and its own title.
+  const pageHtml = (options, titleText) => fillTemplate(tpl, {
+    TITLE: titleText.replace(/[<>&]/g, ""),
     CSS: toPosix(relative(weekDir, join(ROOT, "template", "sheet.css"))),
     RENDER: toPosix(relative(weekDir, join(ROOT, "template", "render.js"))),
     LIB: toPosix(relative(weekDir, join(ROOT, "template", "lib.js"))),
     DATA: JSON.stringify(data).replace(/<\/script/gi, "<\\/script"),
-    OPTIONS: JSON.stringify({ logo, voices }),
+    OPTIONS: JSON.stringify(options),
     NOTE: note,
   });
 
   const htmlPath = join(weekDir, "sheet.html");
-  await writeFile(htmlPath, html, "utf8");
+  await writeFile(htmlPath, pageHtml({ logo, voices }, title), "utf8");
   console.log(`Wrote ${relative(ROOT, htmlPath)}${logo ? ` (logo: ${logo})` : " (no logo in assets/; typographic wordmark)"}`);
+  const tropePath = join(weekDir, "sheet-trope.html");
+  if (WANT_TROPE) {
+    await writeFile(tropePath, pageHtml({ logo, voices, trope: true }, `${title} (chanter’s copy)`), "utf8");
+    console.log(`Wrote ${relative(ROOT, tropePath)}`);
+  }
 
   if (!WANT_PDF && !WANT_PNG) return;
 
@@ -160,26 +168,14 @@ async function main() {
   await mkdir(profile, { recursive: true });
   const url = pathToFileURL(htmlPath).href;
   const common = chromeFlags(profile);
+  const kb = buf => `${Math.round(buf.length / 1024)} KB`;
 
   try {
     // The page images are rendered from the PDF when pdftoppm is present: a headless screenshot
     // on Linux Chromium loses the bottom of the page, and the PDF is what prints.
     const pdfPath = WANT_PDF ? join(weekDir, "sheet.pdf") : join(profile, "probe.pdf");
-    await run(browser, [...common, "--no-pdf-header-footer", `--print-to-pdf=${pdfPath}`, url]);
-    // Pages are counted before packing: afterwards the page objects sit inside compressed streams.
-    const pages = countPdfPages(await readFile(pdfPath)) || 1;
-    // Chrome writes every object uncompressed; qpdf, when installed (the cloud image has it), packs
-    // them into object streams without touching content: about a fifth smaller. Optional.
-    const qpdf = findTool("qpdf");
-    if (qpdf) {
-      const packed = pdfPath + ".packed";
-      try {
-        await run(qpdf, ["--object-streams=generate", "--compress-streams=y", "--recompress-flate", "--compression-level=9", pdfPath, packed], [0, 3]);
-        await rename(packed, pdfPath);
-      } catch { await rm(packed, { force: true }).catch(() => {}); }
-    }
-    const buf = await readFile(pdfPath);
-    if (WANT_PDF) console.log(`Wrote ${relative(ROOT, pdfPath)}: ${pages} pages, ${Math.round(buf.length / 1024)} KB`);
+    const { pages, buf } = await printPdf(browser, common, url, pdfPath);
+    if (WANT_PDF) console.log(`Wrote ${relative(ROOT, pdfPath)}: ${pages} pages, ${kb(buf)}`);
     if (WANT_PNG) {
       const outDir = join(weekDir, "preview");
       await rm(outDir, { recursive: true, force: true }).catch(() => {});
@@ -197,9 +193,33 @@ async function main() {
         console.log(`Wrote ${pages} page image${pages === 1 ? "" : "s"} to ${relative(ROOT, outDir)}/ (screenshots; check the PDF if a page looks cut off)`);
       }
     }
+    // The chanter's copy prints after the study sheet, the same way; previews stay the sheet's.
+    if (WANT_TROPE && WANT_PDF) {
+      const tropePdf = join(weekDir, "sheet-trope.pdf");
+      const t = await printPdf(browser, common, pathToFileURL(tropePath).href, tropePdf);
+      console.log(`Wrote ${relative(ROOT, tropePdf)}: ${t.pages} pages, ${kb(t.buf)}`);
+    }
   } finally {
     await rm(profile, { recursive: true, force: true }).catch(() => {});
   }
+}
+
+// Print one page to one PDF, packed with qpdf when present. Returns the page count and the file's bytes.
+async function printPdf(browser, common, url, pdfPath) {
+  await run(browser, [...common, "--no-pdf-header-footer", `--print-to-pdf=${pdfPath}`, url]);
+  // Pages are counted before packing: afterwards the page objects sit inside compressed streams.
+  const pages = countPdfPages(await readFile(pdfPath)) || 1;
+  // Chrome writes every object uncompressed; qpdf, when installed (the cloud image has it), packs
+  // them into object streams without touching content: about a fifth smaller. Optional.
+  const qpdf = findTool("qpdf");
+  if (qpdf) {
+    const packed = pdfPath + ".packed";
+    try {
+      await run(qpdf, ["--object-streams=generate", "--compress-streams=y", "--recompress-flate", "--compression-level=9", pdfPath, packed], [0, 3]);
+      await rename(packed, pdfPath);
+    } catch { await rm(packed, { force: true }).catch(() => {}); }
+  }
+  return { pages, buf: await readFile(pdfPath) };
 }
 
 function findTool(name) {

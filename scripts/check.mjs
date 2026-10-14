@@ -4,6 +4,7 @@
  * design review asked for. Reads the data-* attributes render.js writes on <html> and each .page.
  *
  *   node scripts/check.mjs weeks/<slug>
+ *   node scripts/check.mjs weeks/<slug> --trope   # check the chanter's copy, sheet-trope.html
  */
 import { readFile, mkdir, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
@@ -120,9 +121,9 @@ export function gapReport(n, p, next) {
 
 async function main() {
   const dirArg = process.argv.slice(2).find(a => !a.startsWith("--"));
-  if (!dirArg) { console.error("usage: node scripts/check.mjs weeks/<slug>"); process.exit(1); }
+  if (!dirArg) { console.error("usage: node scripts/check.mjs weeks/<slug> [--trope]"); process.exit(1); }
   const weekDir = resolve(dirArg);
-  const html = join(weekDir, "sheet.html");
+  const html = join(weekDir, process.argv.includes("--trope") ? "sheet-trope.html" : "sheet.html");
   const browser = findBrowser();
   if (!browser) { console.error("No Chrome or Edge found."); process.exit(1); }
   const url = pathToFileURL(html).href;
