@@ -1,0 +1,14 @@
+{
+ "ref": "Isaiah 54:1-4",
+ "sources": [
+  { "source": "BDB", "category": "Reference", "count": 12, "verses": ["Isaiah 54:1"], "refs": ["BDB, בָּעַל 1"] },
+  { "source": "Sources and References on Likkutei Torah", "category": "Quoting Commentary", "count": 9, "verses": ["Isaiah 54:1"], "refs": ["Sources and References on Likkutei Torah, Bamidbar 5:77"] },
+  { "source": "Mashmia Yeshuah", "category": "Quoting Commentary", "count": 4, "verses": ["Isaiah 54:2"], "refs": ["Mashmia Yeshuah, Introduction 37"] },
+  { "source": "Tikkunei Zohar", "category": "Kabbalah", "count": 3, "verses": ["Isaiah 54:1"], "refs": ["Tikkunei Zohar 60a:9"] },
+  { "source": "Zohar", "category": "Kabbalah", "count": 1, "verses": ["Isaiah 54:1"], "refs": ["Zohar, Vayechi 12:82"] },
+  { "source": "Yismach Moshe", "category": "Chasidut", "count": 7, "verses": ["Isaiah 54:1"], "refs": ["Yismach Moshe, Toldot 4:1"] },
+  { "source": "Shenei Luchot HaBerit", "category": "Musar", "count": 2, "verses": ["Isaiah 54:2"], "refs": ["Shenei Luchot HaBerit, Vaetchanan 7"] },
+  { "source": "Ketubot", "category": "Talmud", "count": 1, "verses": ["Isaiah 54:1"], "refs": ["Ketubot 8a:4"] },
+  { "source": "Rashi on Isaiah", "category": "Commentary", "count": 2, "verses": ["Isaiah 54:1", "Isaiah 54:3"], "refs": ["Rashi on Isaiah 54:1:1", "Rashi on Isaiah 54:3:1"] }
+ ]
+}

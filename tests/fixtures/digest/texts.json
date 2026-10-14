@@ -1,0 +1,188 @@
+{
+ "ref": "Isaiah 54:1-4",
+ "verses": [
+  "Isaiah 54:1",
+  "Isaiah 54:2",
+  "Isaiah 54:3",
+  "Isaiah 54:4"
+ ],
+ "commentaries": {
+  "Radak on Isaiah": {
+   "index": "Radak on Isaiah",
+   "core": true,
+   "segments": {
+    "Radak on Isaiah 54:1:1": {
+     "verse": "Isaiah 54:1",
+     "he": "רד\"ק"
+    },
+    "Radak on Isaiah 54:2:1": {
+     "verse": "Isaiah 54:2",
+     "he": "רד\"ק"
+    },
+    "Radak on Isaiah 54:3:1": {
+     "verse": "Isaiah 54:3",
+     "he": "רד\"ק"
+    },
+    "Radak on Isaiah 54:4:1": {
+     "verse": "Isaiah 54:4",
+     "he": "רד\"ק"
+    }
+   },
+   "coverage": {}
+  },
+  "Rashi on Isaiah": {
+   "index": "Rashi on Isaiah",
+   "core": true,
+   "segments": {
+    "Rashi on Isaiah 54:1:1": {
+     "verse": "Isaiah 54:1",
+     "he": "<b>רני עקרה</b> ירושלים",
+     "en": [
+      {
+       "versionTitle": "Judaica Press",
+       "text": "<b>Sing, you barren woman</b> Jerusalem."
+      }
+     ]
+    },
+    "Rashi on Isaiah 54:3:1": {
+     "verse": "Isaiah 54:3",
+     "he": "<b>ימין ושמאל</b> דרום וצפון"
+    }
+   },
+   "coverage": {}
+  },
+  "Abarbanel on Isaiah": {
+   "index": "Abarbanel on Isaiah",
+   "core": true,
+   "segments": {
+    "Abarbanel on Isaiah 54:1:1": {
+     "verse": "Isaiah 54:1",
+     "he": "הנבואה האחת ושלשים",
+     "sectionFiled": true,
+     "coversFrom": "Isaiah 54:1",
+     "coversTo": "Isaiah 54:3",
+     "note": "Abarbanel's comment under 54:1 covers 54:1–3."
+    },
+    "Abarbanel on Isaiah 54:4:1": {
+     "verse": "Isaiah 54:4",
+     "he": "לא תבושי"
+    }
+   },
+   "coverage": {
+    "Isaiah 54:2": "Abarbanel on Isaiah 54:1",
+    "Isaiah 54:3": "Abarbanel on Isaiah 54:1"
+   }
+  },
+  "Minchat Shai on Isaiah": {
+   "index": "Minchat Shai on Isaiah",
+   "core": false,
+   "segments": {
+    "Minchat Shai on Isaiah 54:2:1": {
+     "verse": "Isaiah 54:2",
+     "he": "יריעות"
+    }
+   },
+   "coverage": {}
+  }
+ },
+ "linked": {
+  "Ketubot 8a:4": {
+   "source": "Ketubot",
+   "category": "Talmud",
+   "kind": "Talmud",
+   "anchors": [
+    "Isaiah 54:1"
+   ],
+   "he": "שׂוֹשׂ תָּשִׂישׂ",
+   "en": [
+    {
+     "versionTitle": "William Davidson Edition - English",
+     "text": "<b>The fourth blessing is:</b> May the barren city of Jerusalem greatly rejoice and delight with the ingathering of her children into her midst in joy."
+    }
+   ]
+  },
+  "Lekha Dodi 7:1": {
+   "source": "Lekha Dodi",
+   "category": "Liturgy",
+   "kind": "Liturgy",
+   "anchors": [
+    "Isaiah 54:4"
+   ],
+   "he": "לֹא תֵבֹשִׁי",
+   "en": [
+    {
+     "versionTitle": "Sziddur [hu]",
+     "text": "Ne szégyenkezz"
+    },
+    {
+     "versionTitle": "Sefaria",
+     "text": "Don't be ashamed!"
+    }
+   ]
+  },
+  "Zohar, Vayechi 12:82": {
+   "source": "Zohar",
+   "category": "Kabbalah",
+   "kind": "Zohar",
+   "anchors": [
+    "Isaiah 54:1"
+   ],
+   "he": "תָּא חֲזֵי",
+   "en": []
+  },
+  "Bereshit Rabbah 5:7": {
+   "source": "Bereshit Rabbah",
+   "category": "Midrash",
+   "kind": "Midrash",
+   "anchors": [
+    "Isaiah 54:2",
+    "Isaiah 54:3"
+   ],
+   "he": "דרכו של עולם",
+   "en": [
+    {
+     "versionTitle": "Sefaria",
+     "text": "The way of the world is that a person empties a full vessel into an empty vessel."
+    }
+   ]
+  },
+  "Midrash Sekhel Tov, Bereshit 28:14:2": {
+   "source": "Midrash Sekhel Tov",
+   "category": "Midrash",
+   "kind": "Midrash",
+   "anchors": [
+    "Isaiah 54:3"
+   ],
+   "he": "ופרצת. לשון ממשלה",
+   "en": []
+  },
+  "Shulchan Arukh, Orach Chayim 428:8": {
+   "source": "Shulchan Arukh, Orach Chayim",
+   "category": "Halakhah",
+   "kind": "Halakhah",
+   "anchors": [
+    "Isaiah 54:1"
+   ],
+   "he": "סימן",
+   "en": []
+  }
+ },
+ "notFetched": {
+  "commentaries": [
+   "Ralbag on Isaiah"
+  ],
+  "linkedOverCap": [
+   {
+    "ref": "Pesikta DeRav Kahana 20:1",
+    "source": "Pesikta DeRav Kahana",
+    "category": "Midrash",
+    "kind": "Midrash",
+    "anchors": [
+     "Isaiah 54:1"
+    ]
+   }
+  ],
+  "linkedOverBudget": [],
+  "linkedFailed": []
+ }
+}

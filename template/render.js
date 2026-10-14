@@ -56,20 +56,14 @@
   const WORDMARK = "central reform congregation";
   const TAGLINE = "A Jewish Presence in the City of St. Louis";
 
-  // Insert a keying circle after the Hebrew lemma inside the verse HTML.
+  // Insert a keying circle after the Hebrew lemma inside the verse HTML. The lemma is found by
+  // L.findHebrew: exactly, then ignoring mark order, accents and meteg, then by consonants, so a
+  // lemma pasted with its marks in another order still keys the right word.
   function keyHebrew(html, lemma, key) {
     if (!lemma) return html;
     const mark = `<sup class="fn he">${key}</sup>`;
-    if (html.includes(lemma)) return html.replace(lemma, lemma + mark);
-    // fall back to matching with vowels and accents removed
-    const plainLemma = stripMarks(lemma);
-    const re = /[א-ת־֑-ׇ]+/g;
-    let m;
-    while ((m = re.exec(html))) {
-      if (stripMarks(m[0]).replace(/־$/, "") === plainLemma.replace(/־$/, "")) {
-        return html.slice(0, m.index + m[0].length) + mark + html.slice(m.index + m[0].length);
-      }
-    }
+    const hit = L.findHebrew(html, L.divineName(lemma).html);
+    if (hit) return html.slice(0, hit.end) + mark + html.slice(hit.end);
     return html + mark;
   }
 
@@ -185,7 +179,7 @@
       vb = el("div", "voices");
       vb.append(el("h2", null, "Voices on this sheet"));
       // One running paragraph: "Rashi R. Shlomo Yitzchaki, Troyes, 1040–1105 · Radak …"
-      const list = el("p", "voices-list", voices.map(v => `<span class="voice"><span class="name">${esc(v.name)}</span>${v.line ? ` ${esc(v.line)}` : ""}</span>`).join('<span class="sep"> · </span>'));
+      const list = el("p", "voices-list", voices.map(v => `<span class="voice"><span class="name">${esc(v.name)}</span>${v.refs && v.refs.length ? ` (${esc(v.refs.join(", "))})` : ""}${v.line ? ` ${esc(v.line)}` : ""}</span>`).join('<span class="sep"> · </span>'));
       vb.append(list);
       p.body.append(vb);
       document.documentElement.dataset.voicesMissing = voices.filter(v => !v.line).map(v => v.name).join("|");
@@ -261,6 +255,10 @@
     if (e.register === "critical" && e.kind !== "quotation") tailBits.push("summary drafted for this sheet");
     if (e.cites) tailBits.push(e.cites);
     const drafted = e.register === "critical" || e.register === "reference";
+    // For check.mjs's gap report: which verse and source, and how long the body is.
+    entry.dataset.verse = `${e.chapter != null ? e.chapter + ":" : ""}${e.verse}`;
+    entry.dataset.src = e.source || "";
+    entry.dataset.words = String(String(e.text || "").replace(/<[^>]+>/g, " ").split(/\s+/).filter(w => /\w/.test(w)).length);
     entry.innerHTML =
       `<span class="sig" title="${REGISTER_NAMES[reg]}">${SIGLA[reg]}</span>` +
       `<span class="v">${vr}${where}</span>${lemma} ` +
@@ -401,7 +399,7 @@
 
     const versePage = {};
     const keyOf = v => `${v.chapter}:${v.verse}`;
-    const PX_IN = 96, GAP_MAX = 0.5 * PX_IN, MOVE_MAX = 1.2 * PX_IN;
+    const PX_IN = 96, GAP_MAX = 0.5 * PX_IN, MOVE_MAX = 1.2 * PX_IN, GAP_TRADE = 1.0 * PX_IN, GAP_REPORT = 1.0 * PX_IN;
     let i = 0, carry = [], lastPage = null, pendingTail = null;
     // Margin notes that do not fit beside their verse travel to the next page's margin: as many per
     // page as fit, in key order, and a displaced note shows its verse number.
@@ -544,6 +542,7 @@
       }
 
       // Rule 4: a gap over half an inch and a row waiting: split the row at a line boundary.
+      let splitState = null;
       if (i < rows.length && placed.gap > GAP_MAX) {
         const own = entriesFor(rows[i].v);
         let budget = placed.gap - RULE_GAP - rows[i].mt - 4;
@@ -564,7 +563,7 @@
             pageRows[pageRows.length - 1] = head = withNotes(head, [], []);
             placed = renderTextPage(p, pageRows, pageEntries, bodyH, versePage);
           }
-          if (placed.overflow <= 0) { pendingTail = split.tail; i++; break; }
+          if (placed.overflow <= 0) { pendingTail = split.tail; splitState = { head, tail: split.tail, added }; i++; break; }
           // undo and try a shorter head
           pageRows.pop(); rowTops.pop(); delete versePage[keyOf(rows[i].v)];
           carry = carry.filter(x => !added.includes(x));
@@ -572,6 +571,65 @@
           budget -= placed.overflow + 2;
           placed = renderTextPage(p, pageRows, pageEntries, bodyH, versePage);
         }
+      }
+      // Rule 6: the gap is still over an inch because the next verse neither fits nor splits well (a
+      // split needs two lines of each language on each side, and margin notes can block it). Take
+      // the whole verse anyway and send this page's last apparatus entries on to the next page,
+      // where they print first under their "· p. N" label, followed by the new verse's own
+      // entries. Kept only if it narrows the gap.
+      const tryTrade = baseGap => {
+        if (!(i < rows.length && pageEntries.length > 1 && !deferring && !carryNotes.length)) return false;
+        const r = rows[i], own = entriesFor(r.v);
+        const before = { entries: pageEntries.slice(), carry: carry.slice() };
+        const moved = [];
+        pageRows.push(r); rowTops.push(textH);
+        versePage[keyOf(r.v)] = pageCount;
+        let trial = renderTextPage(p, pageRows, pageEntries, bodyH, versePage);
+        while (trial.overflow > 0 && pageEntries.length > 1) {
+          moved.unshift(pageEntries.pop());
+          trial = renderTextPage(p, pageRows, pageEntries, bodyH, versePage);
+        }
+        if (trial.overflow <= 0 && trial.gap >= 0 && trial.gap < baseGap) {
+          carry = moved.concat(before.carry.filter(x => !moved.includes(x)), own.filter(x => !before.carry.includes(x) && !moved.includes(x)));
+          textH += r.h; i++;
+          placed = trial;
+          p.page.dataset.traded = String(moved.length);
+          return true;
+        }
+        pageRows.pop(); rowTops.pop(); delete versePage[keyOf(r.v)];
+        pageEntries = before.entries; carry = before.carry;
+        placed = renderTextPage(p, pageRows, pageEntries, bodyH, versePage);
+        return false;
+      };
+      if (placed.gap > GAP_TRADE && splitState) {
+        // The split left a wide gap anyway (a short head): undo it and try the trade with the whole verse.
+        const gapWithSplit = placed.gap;
+        const node = rows[i - 1].node;
+        const clips = [node.querySelector(".en").style.getPropertyValue("--clip"), node.querySelector(".he").style.getPropertyValue("--clip")];
+        pageRows.pop(); rowTops.pop(); i--; delete versePage[keyOf(rows[i].v)];
+        carry = carry.filter(x => !splitState.added.includes(x));
+        unsplitRow(rows[i]); pendingTail = null;
+        placed = renderTextPage(p, pageRows, pageEntries, bodyH, versePage);
+        if (!tryTrade(gapWithSplit)) {
+          node.classList.add("split-head");
+          node.querySelector(".en").style.setProperty("--clip", clips[0]);
+          node.querySelector(".he").style.setProperty("--clip", clips[1]);
+          pageRows.push(splitState.head); rowTops.push(textH);
+          versePage[keyOf(rows[i].v)] = pageCount;
+          carry = carry.concat(splitState.added);
+          pendingTail = splitState.tail; i++;
+          placed = renderTextPage(p, pageRows, pageEntries, bodyH, versePage);
+        }
+      } else if (placed.gap > GAP_TRADE && !pendingTail) {
+        tryTrade(placed.gap);
+      }
+      // For check.mjs: when a wide gap remains, how many px the next verse overflows by if added.
+      if (i < rows.length && placed.gap > GAP_REPORT && !pendingTail) {
+        pageRows.push(rows[i]); rowTops.push(textH);
+        const trial = renderTextPage(p, pageRows, pageEntries, bodyH, versePage);
+        pageRows.pop(); rowTops.pop();
+        placed = renderTextPage(p, pageRows, pageEntries, bodyH, versePage);
+        p.page.dataset.need = String(Math.max(1, Math.round(trial.overflow)));
       }
       p.leftover = placed.leftover;
       p.grid = placed.grid;
@@ -613,7 +671,10 @@
       });
       p.body.append(app);
       appTop = app.getBoundingClientRect().top - bodyRect.top;
+      // An entry broken across the two columns is measured fragment by fragment.
+      [...app.children].forEach(n => { n.dataset.h = String(Math.round([...n.getClientRects()].reduce((a, r) => a + r.height, 0) + parseFloat(getComputedStyle(n).marginBottom || 0))); });
     }
+    pageRows.forEach(r => { if (r.v) { r.node.dataset.verse = `${r.v.chapter}:${r.v.verse}`; r.node.dataset.h = String(Math.round(r.node.getBoundingClientRect().height + parseFloat(getComputedStyle(r.node).marginTop || 0))); } });
     const gridBottom = pageRows.length ? grid.getBoundingClientRect().bottom - bodyRect.top : 0;
     const contentBottom = Math.max(gridBottom, stacked.bottom);
     const overflow = contentBottom + (pageEntries.length ? RULE_GAP : 0) - appTop;
@@ -719,6 +780,41 @@
     }
   }
 
+  // The mural file is 1335px square, about 840 ppi at its printed size, and Chrome embeds it whole
+  // (2 MB of a 3 MB PDF). Redraw it once at 300 ppi of the size the stylesheet prints it, flattened
+  // onto the white page, and use that JPEG instead. If anything fails the original is kept.
+  const LOGO_PPI = 300;
+  // img.decode() never settles under headless virtual time; onload does.
+  const loadImage = src => new Promise((res, rej) => {
+    const img = new Image();
+    img.onload = () => res(img);
+    img.onerror = () => rej(new Error("logo did not load"));
+    img.src = src;
+  });
+  async function downsampleLogo() {
+    if (!opts.logo || /\.svg$/i.test(opts.logo)) return;
+    try {
+      const img = await loadImage(opts.logo);
+      const probe = el("div", "hero"); const m = el("img", "mark"); probe.append(m); stage.append(probe);
+      const inches = Math.max(m.getBoundingClientRect().width, m.getBoundingClientRect().height) / 96 || 1.6;
+      probe.remove();
+      const scale = (inches * LOGO_PPI) / Math.max(img.naturalWidth, img.naturalHeight);
+      if (!(scale < 1)) return;
+      const c = document.createElement("canvas");
+      c.width = Math.round(img.naturalWidth * scale); c.height = Math.round(img.naturalHeight * scale);
+      const ctx = c.getContext("2d");
+      ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, c.width, c.height);
+      ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(img, 0, 0, c.width, c.height);
+      const url = c.toDataURL("image/jpeg", 0.85);
+      await loadImage(url);
+      opts.logo = url;
+      document.documentElement.dataset.logo = `${c.width}x${c.height} jpeg`;
+    } catch (e) {
+      document.documentElement.dataset.logo = "original (" + (e && e.name || "error") + ")";
+    }
+  }
+
   // Lay out only after every face is loaded; otherwise rows are measured in a fallback
   // font and reflow after pagination, which is how text ends up under the apparatus rule.
   async function start() {
@@ -730,6 +826,7 @@
       try { await Promise.all(faces.map(f => document.fonts.load(f, "אבג abc"))); } catch (e) { /* fall through */ }
       try { await document.fonts.ready; } catch (e) { /* fall through */ }
     }
+    await downsampleLogo();
     run();
   }
   start();

@@ -112,10 +112,11 @@ test("voicesFor introduces each named source once, in order of first use, skippi
     { register: "traditional", source: "Rashi", status: "approved" },
     { register: "critical", source: "A damaged verse", status: "approved" },
     { register: "traditional", source: "Radak", status: "approved" },
-    { register: "traditional", source: "Malbim", status: "proposed" },
+    { register: "traditional", source: "Malbim", status: "rejected" },
   ];
-  const r = lib.voicesFor(commentary, voices, e => e.status === "approved");
-  assert.deepEqual(r.map(v => v.name), ["Talmud, Megillah 31a", "Rashi", "Radak"]);
+  const r = lib.voicesFor(commentary, voices, e => e.status !== "rejected");
+  assert.deepEqual(r.map(v => v.name), ["Talmud", "Rashi", "Radak"]);
+  assert.deepEqual(r[0].refs, ["Megillah 31a"]);
   assert.equal(r[1].line, voices.Rashi);
   assert.equal(r[2].line, null);
 });

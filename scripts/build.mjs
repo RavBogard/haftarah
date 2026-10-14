@@ -9,13 +9,15 @@
  * Needs Node 18+ and Chrome or Edge installed (or set HAFTARAH_BROWSER to a browser executable).
  */
 
-import { readFile, writeFile, access, mkdir, rm } from "node:fs/promises";
+import { readFile, writeFile, access, mkdir, rm, rename } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join, resolve, relative, dirname, basename } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 import { createRequire } from "node:module";
+
+import { lint, formatLint } from "./lint.mjs";
 
 const HaftarahLib = createRequire(import.meta.url)("../template/lib.js");
 
@@ -91,13 +93,13 @@ export function gate(data, biblio) {
   return problems;
 }
 
-function run(cmd, args) {
+function run(cmd, args, okCodes = [0]) {
   return new Promise((res, rej) => {
     const child = spawn(cmd, args, { stdio: ["ignore", "pipe", "pipe"] });
     let err = "";
     child.stderr.on("data", d => (err += d));
     child.on("error", rej);
-    child.on("close", code => (code === 0 ? res() : rej(new Error(`${basename(cmd)} exited ${code}\n${err.slice(-800)}`))));
+    child.on("close", code => (okCodes.includes(code) ? res() : rej(new Error(`${basename(cmd)} exited ${code}\n${err.slice(-800)}`))));
   });
 }
 
@@ -118,8 +120,17 @@ async function main() {
   if (problems.length) { console.error("Not built; fix these first:\n" + problems.map(x => "  - " + x).join("\n")); process.exit(1); }
   const shown = (data.commentary || []).filter(e => e.status !== "rejected").length;
 
-  const logo = await findLogo();
+  // Entry lint (scripts/lint.mjs): errors stop the build, warnings print and the build goes on.
   const voices = JSON.parse(await readFile(join(ROOT, "template", "voices.json"), "utf8"));
+  const linted = lint(data, { voices });
+  if (linted.warnings.length) console.warn(`Lint warnings:\n${formatLint(linted.warnings)}`);
+  if (linted.errors.length) {
+    const fixable = linted.fixes.length ? "\n(node scripts/lint.mjs <week> --fix rewrites gloss lemmas to the verse's exact text)" : "";
+    console.error(`Not built; fix these first:\n${formatLint(linted.errors)}${fixable}`);
+    process.exit(1);
+  }
+
+  const logo = await findLogo();
   const tpl = await readFile(join(ROOT, "template", "sheet.html"), "utf8");
   const title = `${data.shabbat?.parashah?.en || ""} haftarah`;
   const note = `${shown} commentary entr${shown === 1 ? "y" : "ies"}.`;
@@ -155,8 +166,19 @@ async function main() {
     // on Linux Chromium loses the bottom of the page, and the PDF is what prints.
     const pdfPath = WANT_PDF ? join(weekDir, "sheet.pdf") : join(profile, "probe.pdf");
     await run(browser, [...common, "--no-pdf-header-footer", `--print-to-pdf=${pdfPath}`, url]);
+    // Pages are counted before packing: afterwards the page objects sit inside compressed streams.
+    const pages = countPdfPages(await readFile(pdfPath)) || 1;
+    // Chrome writes every object uncompressed; qpdf, when installed (the cloud image has it), packs
+    // them into object streams without touching content: about a fifth smaller. Optional.
+    const qpdf = findTool("qpdf");
+    if (qpdf) {
+      const packed = pdfPath + ".packed";
+      try {
+        await run(qpdf, ["--object-streams=generate", "--compress-streams=y", "--recompress-flate", "--compression-level=9", pdfPath, packed], [0, 3]);
+        await rename(packed, pdfPath);
+      } catch { await rm(packed, { force: true }).catch(() => {}); }
+    }
     const buf = await readFile(pdfPath);
-    const pages = countPdfPages(buf) || 1;
     if (WANT_PDF) console.log(`Wrote ${relative(ROOT, pdfPath)}: ${pages} pages, ${Math.round(buf.length / 1024)} KB`);
     if (WANT_PNG) {
       const outDir = join(weekDir, "preview");
@@ -180,12 +202,13 @@ async function main() {
   }
 }
 
-function findPdftoppm() {
+function findTool(name) {
   const dirs = (process.env.PATH || "").split(process.platform === "win32" ? ";" : ":");
-  const names = process.platform === "win32" ? ["pdftoppm.exe"] : ["pdftoppm"];
+  const names = process.platform === "win32" ? [`${name}.exe`] : [name];
   for (const d of dirs) for (const n of names) { const p = join(d, n); if (d && existsSync(p)) return p; }
   return null;
 }
+const findPdftoppm = () => findTool("pdftoppm");
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
   main().catch(err => { console.error(err.message || err); process.exit(1); });

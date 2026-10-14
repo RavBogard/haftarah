@@ -13,10 +13,17 @@ template/
   voices.json               one-line identifications of named sources, for the front page
   fonts/                    Ezra SIL (Hebrew), Literata (English), Noto Serif Hebrew (fallback); OFL licenses alongside
 scripts/
-  fetch.mjs                 Hebcal + Sefaria -> weeks/<slug>/sheet.json and candidates.json
-  build.mjs                 sheet.json -> sheet.html -> sheet.pdf (headless Chrome/Edge), optional page PNGs; refuses a broken citation
+  fetch.mjs                 Hebcal + Sefaria -> weeks/<slug>/sheet.json, candidates.json and texts.json
+  digest.mjs                texts.json + candidates.json -> weeks/<slug>/digest.md, a one-page map of the passage
+  lint.mjs                  entry lint (glosses, voices, God-language, word counts); build runs it first; --fix
+  build.mjs                 sheet.json -> sheet.html -> sheet.pdf (headless Chrome/Edge), optional page PNGs; refuses a broken citation or failed lint
+  deliver.mjs               week files -> Google Drive through the drop box, byte-exact (sha256-checked)
   check.mjs                 renders twice and asserts the layout rules (no lone verse, no gap over the rule, keys in series, same output both times)
   migrate.mjs               schema 1 -> schema 2
+tools/dropbox/
+  Code.gs, SETUP.md         the Google Apps Script drop box deliver.mjs posts to; one-time setup
+docs/prompts/
+  draft-entries.md          the brief handed to the drafting subagent in step 4
 bibliography/
   <book>.md                 the closed list of works a critical entry may cite
 tests/                      node --test; npm test
@@ -26,9 +33,12 @@ weeks/
   <date>-<parashah>[-<special>]/
     sheet.json              the week's content (the record)
     candidates.json         what Sefaria links to the passage
+    texts.json              full texts of the core commentators and linked sources
+    digest.md               one-page map of the passage
+    briefing.md             the briefing, the issues and Daniel's picks
     sheet.pdf               the sheet Daniel reviews and prints
     preview/                page images
-.claude/skills/haftarah-sheet/SKILL.md   the weekly runbook Claude follows in Cowork
+RUNBOOK.md                  the weekly runbook Claude follows in Cowork (the Cowork skill points here)
 ```
 
 ## Weekly use
@@ -36,10 +46,13 @@ weeks/
 Requirements: Node 18+ and Chrome or Edge. Nothing to install; do not run `npm install`.
 
 ```
-node scripts/fetch.mjs --date 2026-10-17        # 1. fetch the reading (omit --date for next Shabbat)
-# 2. fill weeks/<slug>/sheet.json: incipit, opening note, commentary, glosses, glossary, next week
-node scripts/build.mjs weeks/<slug> --png       # 3. sheet.pdf and page images; refuses on a broken citation and names it
-node scripts/check.mjs weeks/<slug>             # 4. layout check
+node scripts/fetch.mjs --date 2026-10-17 --known <slug,slug>   # 1. fetch the reading (omit --date for next Shabbat; --known: weeks that exist only in Drive; --no-texts skips texts.json)
+node scripts/digest.mjs weeks/<slug>            # 2. one-page map of the passage; read before the briefing
+# 3. fill weeks/<slug>/sheet.json: incipit, opening note, commentary, glosses, glossary, next week
+node scripts/lint.mjs weeks/<slug> [--fix]      # 4. optional; build runs it
+node scripts/build.mjs weeks/<slug> --png       # 5. sheet.pdf and page images; refuses on a broken citation or failed lint and names it
+node scripts/check.mjs weeks/<slug>             # 6. layout check; on a gap failure it names the entry to trim
+node scripts/deliver.mjs weeks/<slug>           # 7. to Drive (--dry-run first)
 npm test                                        # unit tests, when the template or scripts change
 ```
 
@@ -101,3 +114,51 @@ The sheet is stapled in the upper right corner and printed duplex, so the margin
 ## Sources and licenses
 
 Hebrew: Miqra according to the Masorah (CC BY-SA), via Sefaria. English: THE JPS TANAKH: Gender-Sensitive Edition (The Jewish Publication Society, 2023), via Sefaria. Schedule: Hebcal leyning API. Fonts: Ezra SIL (SIL OFL), Literata (OFL), Noto Serif Hebrew (OFL); license texts in `template/fonts/`.
+
+## Texts and digest
+
+`texts.json` is refreshed on every fetch, like `candidates.json`, even when `sheet.json` is kept. It holds:
+
+- **commentaries:** the core commentators on the book (Rashi, Radak, Ibn Ezra, Ralbag, Malbim, Metzudat David and Zion, Abarbanel, Shadal, Steinsaltz, Targum Jonathan), plus any other "<X> on <Book>" linked to three or more verses.
+  - Each is fetched once per chapter with Hebrew and every English version, keyed by exact segment ref ("Radak on Isaiah 54:9:1").
+  - A comment filed under an earlier verse but covering several (Abarbanel) is marked `sectionFiled`, with `coversFrom`/`coversTo`; `coverage[verse]` names the segment that covers a silent verse.
+- **linked:** Talmud, Mishnah, Tosefta, midrash, liturgy, Targum, top halakhah and Zohar segments, with Hebrew, each English `versionTitle`, and anchor verses.
+  - Capped per kind and kept under about 2 MB.
+  - What was left out is listed in `notFetched`.
+
+`digest.md` lists, verse by verse, the rabbinic and liturgical texts anchored there, with a one-line opening, and which commentators have text on the verse. Noise (lexicons, quoting commentaries, the Chasidut and Musar long tail) is counted at the end, not listed.
+
+## Lint and pagination
+
+`build.mjs` runs `scripts/lint.mjs` after the citation gate. Errors stop the build and name the entry; warnings print and the build continues.
+
+- **Errors:**
+  - a gloss's Hebrew lemma is not in its verse, even ignoring mark order, accents, meteg and vowels;
+  - a gloss's English anchor is not in the verse's English.
+- **Warnings:**
+  - a lemma that matches only after normalizing (`--fix` rewrites it to the verse's exact text);
+  - a gloss anchor that contains or ends at a JPS note marker;
+  - a named source with no line in `template/voices.json`;
+  - capitalized He/His/Him/Himself/Lord/King/Father for God;
+  - word counts outside commentary 25–120, historians 60–130, glosses 12–35.
+
+The renderer locates lemmas with the same tolerant matching. "Voices on this sheet" collapses "Talmud, Berakhot 10a" and "Talmud, Sanhedrin 99a" into one line, and does the same for any "Source, ref" entries.
+
+When a gap over an inch remains and the next verse can't be split, the renderer places the verse and sends the page's last apparatus entries to the next page under their "· p. N" label. When the gap check fails, `check.mjs` lists the verses and apparatus entries with their heights, the shortfall, and a suggested trim.
+
+The build downsamples the mural to 300 ppi as a JPEG in the page. When `qpdf` is on the PATH, it also repacks the PDF losslessly: about 0.8 MB with it, about 1.0 MB without.
+
+## Delivery to Drive
+
+The week's files go to Drive through the drop box, a small Google Apps Script web app in Daniel's account (`tools/dropbox/Code.gs`; one-time setup in `tools/dropbox/SETUP.md`). It writes the bytes as built and returns a sha256, which the script checks against the local file.
+
+    node scripts/deliver.mjs weeks/<slug> --dry-run     # show what goes where
+    node scripts/deliver.mjs weeks/<slug>               # upload; one line per file, then both folder links
+
+In a sandbox that reaches the internet through an HTTPS proxy (the Cowork cloud session), run it with `NODE_USE_ENV_PROXY=1`; Node's fetch ignores the proxy otherwise.
+
+- **Public folder `Haftarah`:** `sheet.pdf`, named `<date> <parashah> — <reading>.pdf`.
+- **Working folder `Haftarah working/<slug>/`:** `sheet.json` and `candidates.json`; `texts.json`, `digest.md` and `briefing.md` when present; and the PDF.
+- **Re-running:** replaces files of the same name. The old copy goes to Drive's trash.
+- **Sending one side only:** use `--only public` or `--only working`.
+- **Configuration:** set `HAFTARAH_DROPBOX_URL` and `HAFTARAH_DROPBOX_TOKEN`, or put `{"url","token"}` in `~/.haftarah-dropbox.json` (or the file named by `HAFTARAH_DROPBOX_CONFIG`). The token is never printed.

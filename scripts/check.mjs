@@ -41,29 +41,38 @@ export function letterFor(i) { let n = i + 1, s = ""; while (n > 0) { const r = 
 export function analyse(dom) {
   const rootTag = (dom.match(/<html[^>]*>/) || [""])[0];
   const pages = [...dom.matchAll(/<section class="page[^"]*"[^>]*>/g)].map(m => m[0]);
+  // Each page's markup, for the per-entry and per-row data render.js writes (data-h, data-verse ...).
+  const bodies = dom.split(/<section class="page/).slice(1);
+  const tagsOf = (html, re) => [...html.matchAll(re)].map(m => m[0]);
+  const entriesOn = html => tagsOf(html, /<p class="entry[^"]*"[^>]*>/g).map(t => ({ verse: attr(t, "verse"), src: attr(t, "src"), words: Number(attr(t, "words") || 0), h: Number(attr(t, "h") || 0) }));
+  const rowsOn = html => tagsOf(html, /<div class="verse-row(?! synthetic)[^"]*"[^>]*>/g).filter(t => attr(t, "verse")).map(t => ({ verse: attr(t, "verse"), h: Number(attr(t, "h") || 0) }));
   const summary = {
     pages: Number(attr(rootTag, "pages")),
     yy: Number(attr(rootTag, "yy")),
     keys: (attr(rootTag, "keys") || "").split(",").filter(Boolean),
     emptySections: Number(attr(rootTag, "empty-sections") || 0),
     voicesMissing: (attr(rootTag, "voices-missing") || "").split("|").filter(Boolean),
-    page: pages.map(t => ({
+    page: pages.map((t, i) => ({
+      entries: entriesOn(bodies[i] || ""), verses: rowsOn(bodies[i] || ""),
       kind: attr(t, "kind"), rows: Number(attr(t, "rows") || 0), gap: Number(attr(t, "gap") || -1),
       fill: Number(attr(t, "fill") || 0), split: attr(t, "split") || "", cont: Number(attr(t, "cont") || 0),
-      offpage: Number(attr(t, "offpage") || 0), overflow: attr(t, "overflow") === "true", incipit: attr(t, "incipit"), voices: attr(t, "voices"),
+      offpage: Number(attr(t, "offpage") || 0), need: Number(attr(t, "need") || 0), overflow: attr(t, "overflow") === "true", incipit: attr(t, "incipit"), voices: attr(t, "voices"),
     })),
     brInEnglish: (dom.match(/<div class="en[^"]*">[\s\S]*?<div class="gut"/g) || []).filter(s => /<br/i.test(s)).length,
     // The keys of the margin notes actually printed on the pages (the measuring stage is not a page).
     noteKeys: dom.split(/<section class="page/).slice(1).flatMap(pg => [...pg.matchAll(/<p class="note[^"]*"[^>]*>\s*<span class="k">([a-z]+)<\/span>/g)].map(m => m[1])),
   };
-  const problems = [];
+  const problems = [], diagnostics = [];
   const textPages = summary.page.filter(p => p.kind === "text");
   // The last page that holds a verse; pages after it carry only margin notes and the end matter.
   const lastText = [...textPages].reverse().find(p => p.rows > 0) || textPages[textPages.length - 1];
   summary.page.forEach((p, i) => {
     const n = i + 1;
     if (p.overflow) problems.push(`page ${n}: content overflows the page`);
-    if (p.kind === "text" && p !== lastText && p.gap > GAP_CEILING) problems.push(`page ${n}: ${p.gap}px gap above the apparatus (max ${GAP_CEILING})`);
+    if (p.kind === "text" && p !== lastText && p.gap > GAP_CEILING) {
+      problems.push(`page ${n}: ${p.gap}px gap above the apparatus (max ${GAP_CEILING})`);
+      diagnostics.push(gapReport(n, p, summary.page[i + 1]));
+    }
     if (p.kind === "text" && p !== lastText && p.rows === 1 && !p.split) problems.push(`page ${n}: a single verse on a page`);
     if (p.kind !== "front" && p.fill < 15) problems.push(`page ${n}: only ${p.fill}% full`);
     if (p.cont > 0) problems.push(`page ${n}: ${p.cont} entries labelled (cont.)`);
@@ -83,7 +92,30 @@ export function analyse(dom) {
   if (twice.length) problems.push(`margin note printed twice: ${twice.join(", ")}`);
   if (summary.page[0]?.kind !== "front") problems.push("page 1 is not the front page");
   if (summary.page[1] && summary.page[1].kind !== "text") problems.push("the text does not start on page 2");
-  return { summary, problems };
+  return { summary, problems, diagnostics };
+}
+
+// Why a page has a wide gap, and what to cut. The gap is there because the next verse (first row of
+// the next page) did not fit above this page's apparatus. Freeing `need` px of apparatus lets it
+// come up. The apparatus is set in two balanced columns, so shortening an entry by one line saves
+// about half a line of apparatus height: words to cut ≈ 2 × need × (entry words / entry height).
+const RULE_GAP = 16;
+export function gapReport(n, p, next) {
+  const fmt = e => `${e.verse} ${e.src}: ${e.h}px, ${e.words} words`;
+  const lines = [`page ${n}: gap ${p.gap}px, ${p.gap - GAP_CEILING}px over the ${GAP_CEILING}px ceiling`];
+  lines.push(`  verses on page ${n}: ${p.verses.map(v => v.verse).join(", ") || "none"}`);
+  lines.push(`  apparatus on page ${n}:` + (p.entries.length ? "\n" + p.entries.map(e => "    " + fmt(e)).join("\n") : " none"));
+  if (next) lines.push(`  apparatus on page ${n + 1}:` + (next.entries.length ? "\n" + next.entries.map(e => "    " + fmt(e)).join("\n") : " none"));
+  const waiting = next?.verses?.[0];
+  // render.js measures the real shortfall (verse plus its margin notes) as data-need; otherwise estimate.
+  const need = p.need || (waiting ? Math.max(1, waiting.h + RULE_GAP - p.gap) : p.gap - GAP_CEILING);
+  if (waiting) lines.push(`  next verse ${waiting.verse} (${waiting.h}px tall) misses page ${n} by ${need}px${p.need ? "" : " (estimated)"}; that much apparatus must go for it to fit`);
+  const big = [...p.entries].sort((a, b) => b.h - a.h)[0];
+  if (big && big.h) {
+    const words = Math.min(big.words, Math.ceil(2 * need * big.words / big.h));
+    lines.push(`  suggested trim: ${big.src} on ${big.verse} (the largest entry, ${big.words} words): cut about ${words} words`);
+  }
+  return lines.join("\n");
 }
 
 async function main() {
@@ -105,7 +137,11 @@ async function main() {
   console.log(`Browser: ${browser}`);
   console.log(`Pages: ${a.summary.pages}; divine name ${a.summary.yy}x; keys ${a.summary.keys.length}; voices without a line: ${a.summary.voicesMissing.join(", ") || "none"}`);
   console.table(a.summary.page.map((p, i) => ({ page: i + 1, kind: p.kind, rows: p.rows, gap: p.gap, fill: p.fill, split: p.split, offpage: p.offpage, voices: p.voices || "" })));
-  if (problems.length) { console.error("Check failed:\n  - " + problems.join("\n  - ")); process.exit(1); }
+  if (problems.length) {
+    console.error("Check failed:\n  - " + problems.join("\n  - "));
+    if (a.diagnostics.length) console.error("\nGap diagnostics:\n" + a.diagnostics.join("\n"));
+    process.exit(1);
+  }
   console.log("Check passed.");
 }
 
