@@ -227,7 +227,7 @@ sup.fn button:hover, sup.fn button[aria-expanded="true"] { background: var(--hov
 .panel .open svg { width: 1em; height: 1em; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 .panel .loading, .panel .err { color: var(--ink-2); font-style: italic; }
 .panel .err { color: var(--rubric); font-style: normal; }
-.panel .root { font-size: .95rem; margin: 0 0 .5rem; } .panel .root b { font-weight: 600; }
+.panel .root { font-size: .95rem; margin: 0 0 .5rem; } .panel .root b { font-weight: 600; font-size: 1.25em; }
 .panel .inverse { color: var(--ink-2); font-size: .88rem; }
 /* the word panel's folded entry */
 .panel .lex details { margin-top: .4rem; } .panel .lex summary { cursor: pointer; color: var(--ink-2); font-size: .88rem; } .panel .gloss { margin: .25rem 0 0; }

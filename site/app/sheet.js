@@ -20,6 +20,13 @@ export function countLabel(n, m) {
   return [n ? `${n} ${n === 1 ? "comment" : "comments"}` : "", m ? `${m} ${m === 1 ? "note" : "notes"}` : ""].filter(Boolean).join(" · ");
 }
 export const sefariaUrl = ref => "https://www.sefaria.org/" + String(ref).trim().replace(/ /g, "_").replace(/:/g, ".") + "?lang=bi";
+// One keyed note: the rail's note and the popover on its letter (panel.js) share this markup.
+export function noteHtml(k, L) {
+  const esc = L.escapeHtml;
+  const lemma = k.lemma ? `<span class="lemma">${esc(k.lemma)}</span><span class="brk">]</span>` : "";
+  const heLemma = k.heHtml ? `<span class="he-lemma" lang="he" dir="rtl">${k.heHtml}</span> ` : "";
+  return `<span class="k">${k.key}</span>${lemma}${heLemma}${k.textHtml}${k.tail ? ` <span class="tail">${k.tail}</span>` : ""}`;
+}
 
 export async function run() {
   const L = window.HaftarahLib;
@@ -107,11 +114,6 @@ export async function run() {
       tn.replaceWith(frag);
     }
   }
-  function noteHtml(k) {
-    const lemma = k.lemma ? `<span class="lemma">${esc(k.lemma)}</span><span class="brk">]</span>` : "";
-    const heLemma = k.heHtml ? `<span class="he-lemma" lang="he" dir="rtl">${k.heHtml}</span> ` : "";
-    return `<span class="k">${k.key}</span>${lemma}${heLemma}${k.textHtml}${k.tail ? ` <span class="tail">${k.tail}</span>` : ""}`;
-  }
   function entryHtml(e) {
     const reg = e.register;
     const lemma = e.lemma
@@ -138,7 +140,7 @@ export async function run() {
     const app = el(count ? "details" : "div", "vapp"); app.dataset.verse = cv;
     app.innerHTML = (count ? `<summary><span class="count">${count}</span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></summary>` : "") +
       `<p class="vh"><span>${cv}</span><a href="${sefariaUrl(v.ref)}" target="_blank" rel="noopener">on Sefaria</a></p>` +
-      v.keys.map(k => `<p class="note ${k.kind}">${noteHtml(k)}</p>`).join("") +
+      v.keys.map(k => `<p class="note ${k.kind}">${noteHtml(k, L)}</p>`).join("") +
       v.entries.map(e => `<p class="entry reg-${e.register}">${entryHtml(e)}</p>`).join("");
     if (!count) app.classList.add("empty");
     rail.append(app); text.append(row);
