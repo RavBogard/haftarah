@@ -4,10 +4,10 @@ import { mkdtemp, mkdir, writeFile, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
-import { cleanSheet, indexEntry, upsertIndex, loadWebConfig, storeIdFromToken, publish } from "../scripts/publish.mjs";
+import { cleanSheet, indexEntry, upsertIndex, loadWebConfig, storeIdFromToken, publish, STORE_ID } from "../scripts/publish.mjs";
 
-const TOKEN = "vercel_blob_rw_AbC123xyz_s3cr3tpart";
-const STORE = "https://abc123xyz.public.blob.vercel-storage.com";
+const TOKEN = "vercel_blob_rw_wOGdAqvPmTFjKrmY_s3cr3tpart";
+const STORE = "https://wogdaqvpmtfjkrmy.public.blob.vercel-storage.com";
 let root, week, sheet;
 
 before(async () => {
@@ -67,7 +67,8 @@ test("loadWebConfig: flag over env over file; the token never appears in the err
   await writeFile(join(home, ".haftarah-web.json"), JSON.stringify({ token: "filetok" }));
   assert.deepEqual(await loadWebConfig({ env: {}, home }), { token: "filetok" });
   assert.deepEqual(await loadWebConfig({ env: { HAFTARAH_BLOB_TOKEN: "envtok" }, home }), { token: "envtok" });
-  assert.deepEqual(await loadWebConfig({ env: { BLOB_READ_WRITE_TOKEN: "sdktok" }, home }), { token: "sdktok" });
+  // The SDK's variable is ignored: only our own names choose the token.
+  assert.deepEqual(await loadWebConfig({ env: { BLOB_READ_WRITE_TOKEN: "sdktok" }, home }), { token: "filetok" });
   assert.deepEqual(await loadWebConfig({ flags: { token: "flagtok" }, env: { HAFTARAH_BLOB_TOKEN: "envtok" }, home }), { token: "flagtok" });
   await writeFile(join(home, "other.json"), JSON.stringify({ token: "othertok" }));
   assert.deepEqual(await loadWebConfig({ env: { HAFTARAH_WEB_CONFIG: join(home, "other.json") }, home }), { token: "othertok" });
@@ -75,7 +76,8 @@ test("loadWebConfig: flag over env over file; the token never appears in the err
 });
 
 test("storeIdFromToken", () => {
-  assert.equal(storeIdFromToken(TOKEN), "AbC123xyz");
+  assert.equal(storeIdFromToken(TOKEN), STORE_ID);
+  assert.equal(storeIdFromToken("vercel_blob_rw_AbC123xyz_s3cr3t"), "AbC123xyz");
   assert.equal(storeIdFromToken("something-else"), null);
 });
 
@@ -116,7 +118,7 @@ test("publish uploads sheet.json, sheet.pdf, then the index, with the SDK's head
   assert.equal(h["x-allow-overwrite"], "1");
   assert.equal(h["x-cache-control-max-age"], "60");
   assert.equal(h["x-vercel-blob-access"], "public");
-  assert.equal(h["x-vercel-blob-store-id"], "AbC123xyz");
+  assert.equal(h["x-vercel-blob-store-id"], STORE_ID);
   assert.equal(puts[1].headers["x-content-type"], "application/pdf");
   assert.equal(puts[1].headers["x-cache-control-max-age"], "3600");
   assert.ok(Buffer.isBuffer(puts[1].body) || puts[1].body instanceof Uint8Array);
@@ -131,7 +133,7 @@ test("publish uploads sheet.json, sheet.pdf, then the index, with the SDK's head
   assert.deepEqual(api.stored.weeks.map(w => w.slug), ["2026-10-17-noach"]);
   assert.equal(api.stored.updated, "2026-10-15T20:11:03Z");
   assert.equal(r.page, "https://haftarah.centralreform.org/2026-10-17-noach");
-  assert.match(lines[0], /^web {2,}weeks\/2026-10-17-noach\/sheet\.json {2,}[\d.]+ KB {2,}https:\/\/abc123xyz\.public/);
+  assert.match(lines[0], /^web {2,}weeks\/2026-10-17-noach\/sheet\.json {2,}[\d.]+ KB {2,}https:\/\/wogdaqvpmtfjkrmy\.public/);
   assert.match(lines.at(-1), /^Page: {1,}https:\/\/haftarah\.centralreform\.org\/2026-10-17-noach$/);
   assert.ok(lines.every(l => !l.includes(TOKEN) && !l.includes("s3cr3tpart")));
 });
@@ -161,7 +163,7 @@ test("publish refuses a non-JSON index", async () => {
 
 test("a wrong token is reported without being echoed", async () => {
   const api = stubApi();
-  const err = await publish(week, { config: { token: "vercel_blob_rw_X_wrong" }, fetchImpl: api.fetchImpl, log: () => {} }).catch(e => e);
+  const err = await publish(week, { config: { token: `vercel_blob_rw_${STORE_ID}_wrong` }, fetchImpl: api.fetchImpl, log: () => {} }).catch(e => e);
   assert.match(err.message, /sheet\.json: Blob answered HTTP 403/);
   assert.ok(!err.message.includes("wrong"));
 });
@@ -182,4 +184,47 @@ test("dry run makes no requests and reports the cleaned counts", async () => {
   assert.match(lines.join("\n"), new RegExp(`${sheet.commentary.length - 1} entries`));
   assert.match(lines.join("\n"), /1 rejected entry removed/);
   assert.match(lines.at(-1), /^Page: {1,}https:\/\/haftarah\.centralreform\.org\/2026-10-17-noach$/);
+});
+
+test("a token for another store is refused before any upload, without echoing it", async () => {
+  const api = stubApi();
+  const err = await publish(week, { config: { token: "vercel_blob_rw_AbC123xyz_s3cr3tpart" }, fetchImpl: api.fetchImpl, log: () => {} }).catch(e => e);
+  assert.match(err.message, /^publish: the Blob token is for store AbC123xyz, not the site's store wOGdAqvPmTFjKrmY; nothing uploaded$/);
+  assert.equal(api.calls.length, 0);
+  const err2 = await publish(week, { config: { token: "not-a-blob-token" }, fetchImpl: api.fetchImpl, log: () => {} }).catch(e => e);
+  assert.match(err2.message, /nothing uploaded/);
+  assert.ok(!err2.message.includes("not-a-blob-token"));
+  assert.equal(api.calls.length, 0);
+});
+
+test("publish refuses a folder that is not a week slug, or disagrees with sheet.json", async () => {
+  const bad = join(root, "weeks", "noach");
+  await mkdir(bad, { recursive: true });
+  await writeFile(join(bad, "sheet.json"), JSON.stringify(sheet));
+  await writeFile(join(bad, "sheet.pdf"), "%PDF-1.7\n");
+  const api = stubApi();
+  for (const dryRun of [true, false]) {
+    const err = await publish(bad, { dryRun, config: { token: TOKEN }, fetchImpl: api.fetchImpl, log: () => {} }).catch(e => e);
+    assert.equal(err.message, 'publish: folder name "noach" is not a week slug (YYYY-MM-DD-parashah[-special])');
+  }
+  const other = join(root, "weeks", "2026-10-24-lech-lecha");
+  await mkdir(other, { recursive: true });
+  await writeFile(join(other, "sheet.json"), JSON.stringify(sheet));
+  await writeFile(join(other, "sheet.pdf"), "%PDF-1.7\n");
+  for (const dryRun of [true, false]) {
+    const err = await publish(other, { dryRun, config: { token: TOKEN }, fetchImpl: api.fetchImpl, log: () => {} }).catch(e => e);
+    assert.equal(err.message, 'publish: folder "2026-10-24-lech-lecha" does not match sheet.json slug "2026-10-17-noach"');
+  }
+  assert.equal(api.calls.length, 0);
+});
+
+test("dry run copes with a sheet that has no commentary", async () => {
+  const dir = join(root, "bare", "2026-10-17-noach");
+  await mkdir(dir, { recursive: true });
+  const { commentary, ...rest } = sheet;
+  await writeFile(join(dir, "sheet.json"), JSON.stringify(rest));
+  await writeFile(join(dir, "sheet.pdf"), "%PDF-1.7\n");
+  const lines = [];
+  await publish(dir, { dryRun: true, log: l => lines.push(l) });
+  assert.match(lines[0], /0 entries, .* 0 rejected entries removed/);
 });

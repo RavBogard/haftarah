@@ -5,8 +5,9 @@
  *
  *   node scripts/publish.mjs weeks/<slug> [--dry-run] [--token TOKEN] [--store URL] [--api URL]
  *
- * Config, first found wins: --token; HAFTARAH_BLOB_TOKEN; BLOB_READ_WRITE_TOKEN; the JSON file at
- * $HAFTARAH_WEB_CONFIG or ~/.haftarah-web.json ({"token": "..."}). The token is never printed.
+ * Config, first found wins: --token; HAFTARAH_BLOB_TOKEN; the JSON file at
+ * $HAFTARAH_WEB_CONFIG or ~/.haftarah-web.json ({"token": "..."}). The token is never printed, and a
+ * token for any store but STORE_ID is refused before anything is uploaded.
  *
  * --store is the public store origin (https://<id>.public.blob.vercel-storage.com); without it the
  * origin of the first upload's url is used. --api overrides the Blob API base (tests, outages).
@@ -21,6 +22,10 @@ const L = createRequire(import.meta.url)("../template/lib.js");
 
 export const SITE = "https://haftarah.centralreform.org";
 export const BLOB_API = "https://vercel.com/api/blob";
+// The site's Blob store. Its lowercase form is the host in vercel.json's /data rewrite, so a token
+// for any other store would publish where the site never reads.
+export const STORE_ID = "wOGdAqvPmTFjKrmY";
+const SLUG = /^\d{4}-\d{2}-\d{2}-[a-z0-9-]+$/;
 const API_VERSION = "13";
 const MAX_AGE = { json: 60, pdf: 3600 };
 // Schema 2's top-level fields; anything else (candidates, drafts) stays home.
@@ -77,7 +82,8 @@ export function storeIdFromToken(token) {
 
 /** {token}; throws when missing. The message never contains a token. */
 export async function loadWebConfig({ flags = {}, env = process.env, home = homedir() } = {}) {
-  let token = flags.token || env.HAFTARAH_BLOB_TOKEN || env.BLOB_READ_WRITE_TOKEN || "";
+  // Not BLOB_READ_WRITE_TOKEN: a stray SDK token for some other project must not be picked up.
+  let token = flags.token || env.HAFTARAH_BLOB_TOKEN || "";
   const file = env.HAFTARAH_WEB_CONFIG || join(home, ".haftarah-web.json");
   if (!token && (await exists(file))) {
     let cfg;
@@ -144,8 +150,11 @@ async function fetchIndex(store, fetchImpl) {
  */
 export async function publish(dir, { dryRun = false, config, log = console.log, fetchImpl = globalThis.fetch, api = BLOB_API, store = null, now = () => new Date() } = {}) {
   const slug = basename(resolve(dir));
+  // The folder name becomes the page address and the Blob path: it must be a real week slug.
+  if (!SLUG.test(slug)) throw new Error(`publish: folder name "${slug}" is not a week slug (YYYY-MM-DD-parashah[-special])`);
   for (const f of ["sheet.json", "sheet.pdf"]) if (!(await exists(join(dir, f)))) throw new Error(`${dir} is missing ${f}`);
   const raw = JSON.parse(await readFile(join(dir, "sheet.json"), "utf8"));
+  if (raw.slug && raw.slug !== slug) throw new Error(`publish: folder "${slug}" does not match sheet.json slug "${raw.slug}"`);
   const clean = cleanSheet(raw);
   const json = Buffer.from(JSON.stringify(clean), "utf8");
   const pdf = await readFile(join(dir, "sheet.pdf"));
@@ -154,7 +163,7 @@ export async function publish(dir, { dryRun = false, config, log = console.log, 
   const removed = (raw.commentary || []).filter(rejected).length;
 
   if (dryRun) {
-    log(`web      ${paths.sheet}  (${human(json.length)}; ${clean.commentary.length} entries, ${(clean.glosses || []).length} glosses, ${(clean.glossary || []).length} glossary terms; ${removed} rejected entr${removed === 1 ? "y" : "ies"} removed)`);
+    log(`web      ${paths.sheet}  (${human(json.length)}; ${(clean.commentary || []).length} entries, ${(clean.glosses || []).length} glosses, ${(clean.glossary || []).length} glossary terms; ${removed} rejected entr${removed === 1 ? "y" : "ies"} removed)`);
     log(`web      ${paths.pdf}  (${human(pdf.length)})`);
     log(`web      ${paths.index}  (upsert ${slug})`);
     log(`Page:    ${page}`);
@@ -162,6 +171,10 @@ export async function publish(dir, { dryRun = false, config, log = console.log, 
   }
 
   const token = config.token;
+  const id = storeIdFromToken(token);
+  if (!id || id.toLowerCase() !== STORE_ID.toLowerCase()) {
+    throw new Error(`publish: the Blob token is for store ${id || "(unknown)"}, not the site's store ${STORE_ID}; nothing uploaded`);
+  }
   const urls = {};
   const r1 = await putBlob({ pathname: paths.sheet, body: json, contentType: "application/json", maxAge: MAX_AGE.json, token, fetchImpl, api });
   urls.sheet = r1.url;
@@ -205,5 +218,5 @@ async function main() {
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
-  main().catch(err => { console.error(`publish: ${err.message}`); process.exit(1); });
+  main().catch(err => { console.error(err.message.startsWith("publish: ") ? err.message : `publish: ${err.message}`); process.exit(1); });
 }
