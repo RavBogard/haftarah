@@ -1,5 +1,7 @@
 # Haftarah 2.0: folding the trope engine (generated chant) into Waves 4 to 6
 
+> **Superseded 2026-10-15 (Daniel):** "fundamentally we are building two different products and we shouldn't merge them. The audio/chanting parts really belong in the other bnei mitzvah project, not here." Nothing in this file is built in this repo: the branch is not merged, no audio store, rewrite, side file or player is added, and 2.0's Wave 5 is the offline app alone. The answers below (O1 to O13, D1 to D13) stay as the record for the portal, which inherits the engine.
+
 Written 2026-10-15 by the web side (the coder who ships the 2.0 waves to main), after reading branch `trope-engine-research` at 380b1b2. It answers that branch's questions to the web side (O1 to O13 in `docs/superpowers/specs/2026-10-15-trope-audio-web-integration.md`), re-cuts the 2.0 wave table, and lists the spec amendments. Daniel answered D1 to D13 the same evening; section 5 records the answers.
 
 ## 1. What exists on the branch
