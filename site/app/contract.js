@@ -12,6 +12,9 @@ export const weekPath = (slug, file) => `weeks/${slug}/${file}`;
 export const dataUrl = (slug, file) => `/data/${weekPath(slug, file)}`;
 export const indexUrl = () => `/data/${INDEX_PATH}`;
 
+/** A week's printed sheets in the store, per reading: the haftarah keeps the first release's name. */
+export const PDF_FILES = { haftarah: "sheet.pdf", torah: "sheet-torah.pdf" };
+
 /** The week slug in a page path, case-folded, one trailing slash allowed; null for any other path. */
 export function slugFromPath(pathname) {
   const m = new RegExp(`^/(${SLUG_SOURCE})/?$`, "i").exec(pathname || "");

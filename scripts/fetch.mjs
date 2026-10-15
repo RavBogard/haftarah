@@ -1,38 +1,47 @@
 #!/usr/bin/env node
 /**
- * fetch.mjs — pull one week's haftarah from Sefaria and start a sheet data file.
+ * fetch.mjs — pull one week's readings (the Torah selection and the haftarah) from Hebcal and Sefaria and start a sheet data file.
  *
- *   node scripts/fetch.mjs                       # next Shabbat (Diaspora schedule)
+ *   node scripts/fetch.mjs                       # next Shabbat, on the calendar customs/crc.json names
  *   node scripts/fetch.mjs --date 2026-10-10     # a specific Shabbat
- *   node scripts/fetch.mjs --ref "Isaiah 42:5-43:10" --date 2026-10-10   # override the reading
+ *   node scripts/fetch.mjs --ref "Isaiah 42:5-43:10" --date 2026-10-10   # override the haftarah
+ *   node scripts/fetch.mjs --torah-pick aliyah:1-2   # the Torah selection: aliyah:N[-M], aliyah:M, triennial, full
+ *   node scripts/fetch.mjs --torah "Genesis 6:9-7:16" # ... or a range of Daniel's own
+ *   node scripts/fetch.mjs --no-torah            # a haftarah-only week: no Torah reading, no aliyot list
  *   node scripts/fetch.mjs --out weeks            # output root (default: weeks)
  *   node scripts/fetch.mjs --known 2026-10-17-noach,2026-10-24-lech-lecha   # weeks that exist only in Drive
- *   node scripts/fetch.mjs --no-texts             # skip texts.json
+ *   node scripts/fetch.mjs --no-texts             # skip the texts files
+ *   node scripts/fetch.mjs --customs crc          # whose customs (default crc: customs/crc.json)
  *
- * Writes weeks/<slug>/sheet.json (text + metadata, no commentary yet) and
- * weeks/<slug>/candidates.json (every commentary Sefaria links to the passage,
- * grouped by source, for the rabbi to approve from) and weeks/<slug>/texts.json
- * (the core commentators' text on the passage, chapter by chapter, and the
- * linked Talmud, midrash, liturgy, Targum and Zohar segments). Never overwrites
- * an existing sheet.json; use --force to replace it. candidates.json and
- * texts.json are refreshed every run.
+ * Writes weeks/<slug>/sheet.json (schema 3: the Torah selection, when there is one, then the
+ * haftarah; Hebcal's aliyot list in `leyning`), and per reading candidates.json / candidates-torah.json
+ * (every commentary Sefaria links to the passage, grouped by source) and texts.json / texts-torah.json
+ * (the core commentators chapter by chapter, and the linked Talmud, midrash, liturgy, Targum and Zohar
+ * segments), each held under about 2 MB. Without a selection (CRC picks weekly) it prints the aliyot
+ * for the briefing; run it again with the pick and the kept sheet.json gains its Torah reading. It
+ * never otherwise overwrites an existing sheet.json; use --force to replace it. The candidates and
+ * texts files are refreshed every run. Sefaria calls are retried (three tries, with backoff).
  *
  * Dependency-free: Node 18+ with global fetch.
  */
 
-import { mkdir, writeFile, access, readFile, readdir } from "node:fs/promises";
+import { mkdir, writeFile, readFile, readdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defaultHaftarahFor } from "./rites.mjs";
+import { createRequire } from "node:module";
+import { loadCustoms } from "./customs.mjs";
+import { leyningOf, parsePick, defaultPick, selectTorah, aliyotLines } from "./leyning.mjs";
+import { migrate3 } from "./migrate.mjs";
+import { READING_FILES } from "./week-files.mjs";
 
-const HEBREW_VERSION = "Miqra according to the Masorah";
-const ENGLISH_VERSION = "THE JPS TANAKH: Gender-Sensitive Edition";
+const L = createRequire(import.meta.url)("../template/lib.js");
 
 // Register lookup by Sefaria index title prefix. Anything not matched is
 // reported as "unclassified" for the rabbi to place.
 const REGISTERS = [
-  [/^(Rashi|Radak|Ralbag|Malbim|Metzudat David|Metzudat Zion|Abarbanel|Targum Jonathan|Targum|Ibn Ezra|Ramban|Sforno|Chizkuni|Marot HaTzoveot|Ahavat Yehonatan|Tze'enah Ure'enah|Maor VaShemesh|Tiferet Shlomo|Kli Yakar|Alshich|Or HaChaim|Siftei Chakhamim|Gur Aryeh|Rambam|Sefer HaShorashim|Machberet Menachem)/, "traditional"],
-  [/^(Steinsaltz|The Early Prophets, by Everett Fox|Tribal Lands|Mishnat Eretz Yisrael|Da'at Mikra|Hirsch|Sacks|Netziv|Depths of Yonah|Peninei Halakhah)/, "modern"],
+  [/^(Rashi|Rashbam|Bekhor Shor|Rabbeinu Bahya|Radak|Ralbag|Malbim|Metzudat David|Metzudat Zion|Abarbanel|Targum Jonathan|Targum|Ibn Ezra|Ramban|Sforno|Chizkuni|Marot HaTzoveot|Ahavat Yehonatan|Tze'enah Ure'enah|Maor VaShemesh|Tiferet Shlomo|Kli Yakar|Alshich|Or HaChaim|Siftei Chakhamim|Gur Aryeh|Rambam|Sefer HaShorashim|Machberet Menachem)/, "traditional"],
+  [/^(Steinsaltz|Haamek Davar|Cassuto|The Early Prophets, by Everett Fox|Tribal Lands|Mishnat Eretz Yisrael|Da'at Mikra|Hirsch|Sacks|Netziv|Depths of Yonah|Peninei Halakhah)/, "modern"],
 ];
 
 function arg(name, fallback) {
@@ -49,11 +58,31 @@ function nextShabbat(from = new Date()) {
   return d.toISOString().slice(0, 10);
 }
 
-async function getJSON(url) {
-  const res = await fetch(url, { headers: { accept: "application/json", "user-agent": "crc-haftarah-sheet/1.0" } });
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText} for ${url}`);
-  return res.json();
+const HEADERS = { accept: "application/json", "user-agent": "crc-haftarah-sheet/1.0" };
+const wait = ms => new Promise(r => setTimeout(r, ms));
+
+/** fn(attempt), tried up to delays.length + 1 times; an error `retryable` refuses is thrown at once. */
+export async function withRetry(fn, { delays = [1500, 4000], sleepImpl = wait, retryable = () => true } = {}) {
+  for (let attempt = 0; ; attempt++) {
+    try { return await fn(attempt); }
+    catch (err) {
+      if (attempt >= delays.length || !retryable(err)) throw err;
+      await sleepImpl(delays[attempt]);
+    }
+  }
 }
+
+/** GET JSON; a network error or a 5xx is retried, a 4xx is not. */
+export async function getJSON(url, { fetchImpl = globalThis.fetch, sleepImpl = wait } = {}) {
+  return withRetry(async () => {
+    const res = await fetchImpl(url, { headers: HEADERS });
+    if (!res.ok) { const e = new Error(`${res.status} ${res.statusText} for ${url}`); e.status = res.status; throw e; }
+    return res.json();
+  }, { sleepImpl, retryable: e => !(e.status >= 400 && e.status < 500) });
+}
+
+/** Hebcal's leyning item for one date, on the customs' calendar (Diaspora: i=off). */
+export const leyningUrl = (date, customs) => `https://www.hebcal.com/leyning?cfg=json&start=${date}&end=${date}&i=${customs.calendar.diaspora ? "off" : "on"}`;
 
 function slugify(s) {
   return s.toLowerCase().replace(/['’]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -162,6 +191,14 @@ function stripMarks(he) {
 // liturgy, Targum, Tosefta, Mishnah, top halakhah and Zohar come segment by segment.
 
 export const CORE_COMMENTATORS = ["Rashi", "Radak", "Ibn Ezra", "Ralbag", "Malbim", "Metzudat David", "Metzudat Zion", "Abarbanel", "Shadal", "Steinsaltz", "Targum Jonathan"];
+// The Torah's core list (torah-and-library.md section 3): the Torah draws five to seven times the
+// commentary a haftarah does, so only these are fetched by chapter, in this order, and the last ones
+// give way first when the file would pass its budget. Titles Sefaria lacks as "<X> on <Book>" are
+// listed in notFetched, as for the haftarah.
+export const TORAH_CORE = ["Rashi", "Ramban", "Ibn Ezra", "Sforno", "Rashbam", "Or HaChaim", "Kli Yakar", "Chizkuni", "Shadal", "Steinsaltz", "Haamek Davar", "Rabbeinu Bahya", "Bekhor Shor"];
+// Set aside from the Torah's candidates: glosses on Rashi and the like, and quoting commentaries,
+// which sort to the top by link count and bury the commentators (Mechokekei Yehudah alone: 646 links on Noach).
+const SUPER_COMMENTARY = /^(Siftei Chakhamim|Mizrachi|Gur Aryeh|Divrei David|Be'er BaSadeh|Mechokekei Yehudah|Yahel Ohr|Nachalat Yaakov|Levush HaOrah|Imrei Shefer)/;
 const TEXTS_BUDGET = 1.9 * 1024 * 1024; // bytes as written (JSON, indent 1); texts.json stays under ~2 MB
 const SECTION_BLOCK_CHARS = 2500;       // one verse's comment this long that is followed by silent verses is a section
 const SECTION_STYLE_MEAN = 800;         // a commentary averaging this much per commented verse...
@@ -294,22 +331,17 @@ export function chapterSegments(tx, book, chapter, rangeVerses) {
   return { segments, coverage: cov, heVersion: heV?.versionTitle || null, enVersions: enVs.map(e => e.versionTitle) };
 }
 
-const sleep = ms => new Promise(r => setTimeout(r, ms));
-
-async function sefariaText(ref) {
+async function sefariaText(ref, { fetchImpl = globalThis.fetch, sleepImpl = wait } = {}) {
   const url = `https://www.sefaria.org/api/v3/texts/${encodeURIComponent(ref)}?version=hebrew&version=${encodeURIComponent("english|all")}&return_format=default`;
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const res = await fetch(url, { headers: { accept: "application/json", "user-agent": "crc-haftarah-sheet/1.0" } });
+  try {
+    return await withRetry(async () => {
+      const res = await fetchImpl(url, { headers: HEADERS });
       if (res.status === 404 || res.status === 400) return null;
       if (!res.ok) throw new Error(String(res.status));
       const j = await res.json();
       return j && !j.error && Array.isArray(j.versions) && j.versions.length ? j : null;
-    } catch {
-      if (attempt === 0) await sleep(1500);
-    }
-  }
-  return null;
+    }, { sleepImpl });
+  } catch { return null; }
 }
 
 async function pool(items, size, fn) {
@@ -321,30 +353,40 @@ async function pool(items, size, fn) {
   return out;
 }
 
-async function buildTexts({ haftRef, book, verses, links, groups }) {
+/** Drop whole commentaries from the end (the least central first) until the set fits `budget` bytes as written; the first always stays. */
+export function capToBudget(commentaries, budget = TEXTS_BUDGET) {
+  const kept = { ...commentaries }, dropped = [];
+  const order = Object.keys(kept);
+  while (order.length > 1 && Buffer.byteLength(JSON.stringify(kept, null, 1)) > budget) { const k = order.pop(); delete kept[k]; dropped.unshift(k); }
+  return { kept, dropped };
+}
+
+async function buildTexts({ ref, book, verses, links, groups, core = CORE_COMMENTATORS, extras = true, capCommentaries = false }) {
   const chapters = new Map();
   for (const v of verses) { if (!chapters.has(v.chapter)) chapters.set(v.chapter, new Set()); chapters.get(v.chapter).add(v.verse); }
 
-  // Core commentators, plus any other "<X> on <Book>" commentary linked to three or more verses.
-  const indexes = CORE_COMMENTATORS.map(c => `${c} on ${book}`);
-  for (const g of groups.values()) {
+  // Core commentators, plus (for a haftarah) any other "<X> on <Book>" commentary linked to three or more verses.
+  const indexes = core.map(c => `${c} on ${book}`);
+  if (extras) for (const g of groups.values()) {
     if (g.category === "Commentary" && g.source.endsWith(` on ${book}`) && !/^Sources and References/.test(g.source) && g.verses.size >= 3 && !indexes.includes(g.source)) indexes.push(g.source);
   }
   const jobs = indexes.flatMap(index => [...chapters.keys()].map(ch => ({ index, ch })));
   const results = await pool(jobs, 4, async ({ index, ch }) => ({ index, ch, tx: await sefariaText(`${index} ${ch}`) }));
 
-  const commentaries = {};
+  let commentaries = {};
   const missing = [];
   for (const { index, ch, tx } of results) {
     if (!tx || tx.indexTitle !== index) { if (!missing.includes(index)) missing.push(index); continue; }
     const { segments, coverage, heVersion, enVersions } = chapterSegments(tx, book, ch, chapters.get(ch));
-    const c = commentaries[index] ||= { index, core: CORE_COMMENTATORS.some(n => index === `${n} on ${book}`), versions: { he: heVersion, en: [] }, segments: {}, coverage: {} };
+    const c = commentaries[index] ||= { index, core: core.some(n => index === `${n} on ${book}`), versions: { he: heVersion, en: [] }, segments: {}, coverage: {} };
     for (const e of enVersions || []) if (!c.versions.en.includes(e)) c.versions.en.push(e);
     Object.assign(c.segments, segments);
     Object.assign(c.coverage, coverage);
   }
   for (const [k, c] of Object.entries(commentaries)) if (!Object.keys(c.segments).length) { delete commentaries[k]; missing.push(k); }
   const missingNow = missing.filter(m => !commentaries[m]);
+  let overBudgetCommentaries = [];
+  if (capCommentaries) ({ kept: commentaries, dropped: overBudgetCommentaries } = capToBudget(commentaries));
 
   // Linked texts.
   const { selected, skipped } = selectLinked(links, new Set(Object.keys(commentaries)));
@@ -363,29 +405,134 @@ async function buildTexts({ haftRef, book, verses, links, groups }) {
     linked[e.ref] = entry;
   }
 
-  return {
-    ref: haftRef,
-    fetched: new Date().toISOString(),
-    verses: verses.map(v => `${book} ${v.chapter}:${v.verse}`),
-    commentaries,
-    linked,
-    notFetched: {
-      commentaries: missingNow,
-      linkedOverCap: skipped.map(e => ({ ref: e.ref, source: e.source, category: e.category, kind: e.kind, anchors: e.anchors })),
-      linkedOverBudget: overBudget,
-      linkedFailed: failed,
-    },
+  const notFetched = {
+    commentaries: missingNow,
+    linkedOverCap: skipped.map(e => ({ ref: e.ref, source: e.source, category: e.category, kind: e.kind, anchors: e.anchors })),
+    linkedOverBudget: overBudget,
+    linkedFailed: failed,
   };
+  if (capCommentaries) notFetched.commentariesOverBudget = overBudgetCommentaries;
+  return { ref, fetched: new Date().toISOString(), verses: verses.map(v => `${book} ${v.chapter}:${v.verse}`), commentaries, linked, notFetched };
+}
+
+// ---- one reading ------------------------------------------------------------------
+
+/** One passage, verse-aligned in the customs' two versions; every verse names its book (schema 3). */
+export async function fetchPassage(ref, { versions, get = getJSON }) {
+  const refPath = encodeURIComponent(ref.replace(/\s+/g, " "));
+  const tx = await get(`https://www.sefaria.org/api/v3/texts/${refPath}?version=hebrew|${encodeURIComponent(versions.he)}&version=english|${encodeURIComponent(versions.en)}&return_format=default`);
+  const heV = (tx.versions || []).find(v => v.languageFamilyName === "hebrew");
+  const enV = (tx.versions || []).find(v => v.languageFamilyName === "english");
+  if (!heV || !enV) throw new Error("Sefaria did not return both versions for " + ref);
+  const heVerses = flattenVerses(heV.text, tx.sections, tx.toSections);
+  const enVerses = flattenVerses(enV.text, tx.sections, tx.toSections);
+  const book = tx.book || tx.indexTitle || ref.replace(/\s+\d.*$/, "");
+  const verses = heVerses.map((hv, i) => {
+    const { he, break: brk } = cleanHebrew(hv.text || "");
+    const { en, notes } = cleanEnglish((enVerses[i] && enVerses[i].text) || "");
+    return { ref: `${book} ${hv.chapter}:${hv.verse}`, book, chapter: hv.chapter, verse: hv.verse, he, en, notes, break: brk };
+  });
+  return { ref, heRef: tx.heRef || null, book, verses };
+}
+
+const sefariaLinks = (ref, get = getJSON) => get(`https://www.sefaria.org/api/links/${encodeURIComponent(ref.replace(/\s+/g, " "))}?with_text=0`);
+
+/** Sefaria's links → sources grouped for the rabbi to choose from. For the Torah, quoting commentaries and super-commentaries are set aside in `skipped`. */
+export function candidatesFrom(links, { kind = "haftarah" } = {}) {
+  const groups = new Map(), skipped = new Map();
+  for (const l of links) {
+    const title = l.index_title || l.collectiveTitle?.en || l.ref.replace(/\s+\d.*$/, "");
+    if (kind === "torah" && (l.category === "Quoting Commentary" || SUPER_COMMENTARY.test(title))) {
+      const s = skipped.get(title) || { source: title, category: l.category, count: 0 };
+      s.count++; skipped.set(title, s);
+      continue;
+    }
+    const g = groups.get(title) || { source: title, category: l.category, type: l.type, count: 0, verses: new Set(), hasEnglish: false, refs: [] };
+    g.count++;
+    g.hasEnglish = g.hasEnglish || !!l.sourceHasEn;
+    for (const v of (l.anchorRefExpanded || [l.anchorRef])) g.verses.add(v);
+    if (g.refs.length < 60) g.refs.push(l.ref);
+    groups.set(title, g);
+  }
+  const candidates = [...groups.values()].map(g => {
+    const register = g.category === "Reference" ? "reference" : (REGISTERS.find(([re]) => re.test(g.source)) || [null, g.category === "Commentary" || g.category === "Targum" || g.category === "Talmud" || g.category === "Midrash" || g.category === "Chasidut" || g.category === "Kabbalah" ? "traditional" : "unclassified"])[1];
+    return { ...g, register, verses: [...g.verses].sort((a, b) => a.localeCompare(b, undefined, { numeric: true })) };
+  }).sort((a, b) => b.count - a.count);
+  return { groups, candidates, skipped: [...skipped.values()].sort((a, b) => b.count - a.count) };
+}
+
+/** A reading of the sheet from its passage: the incipit fetch proposes, the customs' versions, no entries yet. */
+export function readingFrom(kind, passage, { titleEn, versions, fetched, extra = {} }) {
+  const first = passage.verses[0] || { he: "", en: "" };
+  return {
+    id: kind, kind, ref: passage.ref, heRef: passage.heRef, book: passage.book, ...extra,
+    incipit: { he: incipitHe(first.he), en: incipitEn(first.en) },
+    title: { he: stripMarks(incipitHe(first.he)), en: titleEn },
+    versions: { he: versions.he, en: versions.en }, fetched,
+    verses: passage.verses, glosses: [], commentary: [],
+  };
+}
+
+/** A new week's sheet.json, schema 3. */
+export function freshSheet({ slug, date, item, conv, customs, special = null, readings, leyning = null, nextWeek = null }) {
+  const sheet = {
+    schema: 3,
+    slug,
+    status: "draft",
+    shabbat: {
+      civil: date,
+      civilDisplay: new Date(date + "T12:00:00Z").toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric", timeZone: "UTC" }),
+      hebrew: conv.hebrew,
+      hebrewEn: `${conv.hd} ${conv.hm} ${conv.hy}`,
+      parashah: { en: item.name?.en, he: item.name?.he, ref: item.summary },
+      special,
+    },
+    series: { name: customs.series.name, year: String(conv.hy) },
+    readings,
+    openingNote: { calendar: "", setting: [] },
+    glossary: [],
+    nextWeek,
+    credits: { ...(customs.credits || {}) },
+  };
+  if (leyning) sheet.leyning = leyning;
+  return sheet;
+}
+
+const count = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+/**
+ * A kept sheet.json and this run's Torah reading and aliyot. A schema-2 week with no Torah pick is
+ * returned untouched. A Torah pick is added first in readings[] (a schema-2 week is migrated to hold
+ * it); the same pick again changes nothing; a Torah reading nobody has worked on yet is replaced by a
+ * new pick; one with entries or glosses is never replaced here.
+ */
+export function mergeWeek(existing, { torah = null, leyning = null } = {}) {
+  const notes = [];
+  const has = L.readings(existing).find(r => r.kind === "torah") || null;
+  if (torah && has && has.ref === torah.ref) torah = null;
+  if (torah && has && ((has.commentary || []).length || (has.glosses || []).length)) {
+    throw new Error(`sheet.json's Torah reading (${has.ref}) already has ${count((has.commentary || []).length, "entry", "entries")} and ${count((has.glosses || []).length, "gloss", "glosses")}; --force replaces the whole sheet, or change readings[] by hand`);
+  }
+  const holdsLeyning = torah || Number(existing.schema) >= 3;
+  const newLeyning = leyning && holdsLeyning && JSON.stringify(existing.leyning) !== JSON.stringify(leyning);
+  if (!torah && !newLeyning) return { sheet: existing, changed: false, notes };
+  const sheet = Number(existing.schema) >= 3 ? structuredClone(existing) : migrate3(existing);
+  if (newLeyning) sheet.leyning = leyning;
+  if (torah) {
+    sheet.readings = [torah, ...(sheet.readings || []).filter(r => r.kind !== "torah")];
+    notes.push(has ? `replaced the Torah reading ${has.ref} with ${torah.ref}` : `added the Torah reading ${torah.ref}`);
+  }
+  return { sheet, changed: true, notes };
 }
 
 // ---- main -------------------------------------------------------------------
 
 // The following Shabbat's reading; Daniel confirms it when the calendar offers a choice.
-async function nextWeekFor(date) {
+async function nextWeekFor(date, customs) {
   const d = new Date(date + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() + 7);
   const next = d.toISOString().slice(0, 10);
   try {
-    const ley = await getJSON(`https://www.hebcal.com/leyning?cfg=json&start=${next}&end=${next}`);
+    const ley = await getJSON(leyningUrl(next, customs));
     const it = (ley.items || [])[0];
     if (!it || !it.haftara) return null;
     return {
@@ -404,22 +551,29 @@ export function weeksTaken(date, local = [], known = []) {
 }
 
 async function main() {
+  const customsArg = arg("customs", null);
+  const customs = await loadCustoms(typeof customsArg === "string" ? customsArg : "crc");
   const date = arg("date", nextShabbat());
   const outRoot = arg("out", "weeks");
   const force = arg("force", false) === true;
   const refOverride = arg("ref", null);
   const known = String(arg("known", "") === true ? "" : arg("known", "")).split(",").map(s => s.trim()).filter(Boolean);
   const wantTexts = !process.argv.includes("--no-texts");
+  const noTorah = process.argv.includes("--no-torah");
+  const torahArg = arg("torah", null), pickArg = arg("torah-pick", null);
+  if (noTorah && (typeof torahArg === "string" || pickArg)) throw new Error("--no-torah cannot be combined with --torah <ref> or --torah-pick");
+  const pick = typeof torahArg === "string" ? { kind: "ref", ref: torahArg } : typeof pickArg === "string" ? parsePick(pickArg) : defaultPick(customs);
+  if ((customs.toConfirm || []).length) console.log(`customs/${customs.id}.json: not yet confirmed by Daniel: ${customs.toConfirm.join(", ")}`);
+  const hebcal = d => getJSON(leyningUrl(d, customs));
 
   // "This week" is ambiguous once the coming Shabbat already has a folder: name both Shabbatot and
   // stop, so the question to Daniel can offer the one after as well.
   if (arg("date", null) === null) {
-    // Local folders plus --known slugs (the Drive working folder's week subfolders).
     const taken = weeksTaken(date, await readdir(outRoot).catch(() => []), known);
     if (taken.length) {
       const after = new Date(date + "T12:00:00Z"); after.setUTCDate(after.getUTCDate() + 7);
       const next = after.toISOString().slice(0, 10);
-      const name = async d => { try { const it = (await getJSON(`https://www.hebcal.com/leyning?cfg=json&start=${d}&end=${d}`)).items?.[0]; return it ? `${it.name?.en}, haftarah ${it.haftara}` : "?"; } catch { return "?"; } };
+      const name = async d => { try { const it = (await hebcal(d)).items?.[0]; return it ? `${it.name?.en}, haftarah ${it.haftara}` : "?"; } catch { return "?"; } };
       const local = new Set(await readdir(outRoot).catch(() => []));
       console.log(`${date} already has ${taken.map(t => local.has(t) ? `${outRoot}/${t}` : `${t} (Drive)`).join(", ")}.`);
       console.log(`  ${date}: ${await name(date)}\n  ${next}: ${await name(next)}`);
@@ -430,121 +584,85 @@ async function main() {
 
   console.log(`Shabbat ${date}`);
 
-  // 1. Schedule: Hebcal leyning gives parashah, haftarah and the reason when special.
-  const ley = await getJSON(`https://www.hebcal.com/leyning?cfg=json&start=${date}&end=${date}`);
-  const item = (ley.items || [])[0];
+  // 1. Calendar: Hebcal's leyning item (parashah, haftarah, aliyot, the reason when special) and the Hebrew date.
+  const item = ((await hebcal(date)).items || [])[0];
   if (!item) throw new Error(`Hebcal has no reading for ${date}; is it a Shabbat?`);
   const conv = await getJSON(`https://www.hebcal.com/converter?cfg=json&gy=${date.slice(0, 4)}&gm=${+date.slice(5, 7)}&gd=${+date.slice(8, 10)}&g2h=1`);
-
+  const name = item.name?.en || "";
   const haftRef = refOverride || item.haftara;
-  if (!haftRef) throw new Error(`No haftarah listed for ${date} (${item.name?.en}).`);
+  if (!haftRef) throw new Error(`No haftarah listed for ${date} (${name}).`);
   const special = item.reason?.haftara || null;
-  const defaultHaftarah = defaultHaftarahFor(item.name?.en || "");
+  const defaultHaftarah = defaultHaftarahFor(name, customs.haftarahRite);
+  const leyning = noTorah ? null : leyningOf(item);
+  console.log(`Parashat ${name}; haftarah ${haftRef}${special ? ` (${special})` : ""}`);
+  if (leyning) console.log(aliyotLines(leyning).join("\n"));
+  const fetched = new Date().toISOString();
 
-  console.log(`Parashat ${item.name?.en}; haftarah ${haftRef}${special ? ` (${special})` : ""}`);
-
-  // 2. Text in both versions.
-  const refPath = encodeURIComponent(haftRef.replace(/\s+/g, " "));
-  const textUrl = `https://www.sefaria.org/api/v3/texts/${refPath}?version=hebrew|${encodeURIComponent(HEBREW_VERSION)}&version=english|${encodeURIComponent(ENGLISH_VERSION)}&return_format=default`;
-  const tx = await getJSON(textUrl);
-  const heV = tx.versions.find(v => v.languageFamilyName === "hebrew");
-  const enV = tx.versions.find(v => v.languageFamilyName === "english");
-  if (!heV || !enV) throw new Error("Sefaria did not return both versions for " + haftRef);
-
-  const heVerses = flattenVerses(heV.text, tx.sections, tx.toSections);
-  const enVerses = flattenVerses(enV.text, tx.sections, tx.toSections);
-  const book = tx.book || tx.indexTitle || haftRef.replace(/\s+\d.*$/, "");
-
-  const verses = heVerses.map((hv, i) => {
-    const { he, break: brk } = cleanHebrew(hv.text || "");
-    const { en, notes } = cleanEnglish((enVerses[i] && enVerses[i].text) || "");
-    return { ref: `${book} ${hv.chapter}:${hv.verse}`, chapter: hv.chapter, verse: hv.verse, he, en, notes, break: brk };
+  // 2. The haftarah, verse-aligned in both versions.
+  const hp = await fetchPassage(haftRef, { versions: customs.versions });
+  const haftarah = readingFrom("haftarah", hp, {
+    titleEn: special ? special.replace(/^Shabbat\s+/i, "") : `Haftarat ${name}`, versions: customs.versions, fetched,
+    extra: { defaultHaftarah: special && defaultHaftarah !== haftRef ? defaultHaftarah : null },
   });
 
-  // 3. Linked commentary, grouped by source.
-  const links = await getJSON(`https://www.sefaria.org/api/links/${refPath}?with_text=0`);
-  const groups = new Map();
-  for (const l of links) {
-    const title = l.index_title || l.collectiveTitle?.en || l.ref.replace(/\s+\d.*$/, "");
-    const g = groups.get(title) || { source: title, category: l.category, type: l.type, count: 0, verses: new Set(), hasEnglish: false, refs: [] };
-    g.count++;
-    g.hasEnglish = g.hasEnglish || !!l.sourceHasEn;
-    for (const v of (l.anchorRefExpanded || [l.anchorRef])) g.verses.add(v);
-    if (g.refs.length < 60) g.refs.push(l.ref);
-    groups.set(title, g);
+  // 3. The Torah selection, when there is one: Daniel's pick, or the customs' standing rule.
+  let torah = null;
+  if (leyning && pick) {
+    const sel = selectTorah(leyning, pick);
+    const tp = await fetchPassage(sel.ref, { versions: customs.versions });
+    torah = readingFrom("torah", tp, { titleEn: name, versions: customs.versions, fetched, extra: { selection: sel.selection, aliyot: leyning.aliyot, maftir: sel.maftir } });
+    console.log(`Torah selection: ${sel.selection}, ${sel.ref} (${tp.verses.length} verses)${sel.maftir ? `; maftir ${sel.maftir.ref}${sel.maftir.reason ? ` (${sel.maftir.reason})` : ""}` : ""}`);
+  } else if (leyning) {
+    console.log(`Torah: no selection yet. Put the aliyot to Daniel in the briefing, then run again with --torah-pick aliyah:N[-M] (or aliyah:M, triennial, full) or --torah "<ref>".`);
   }
-  const candidates = [...groups.values()].map(g => {
-    const register = g.category === "Reference" ? "reference" : (REGISTERS.find(([re]) => re.test(g.source)) || [null, g.category === "Commentary" || g.category === "Targum" || g.category === "Talmud" || g.category === "Midrash" || g.category === "Chasidut" || g.category === "Kabbalah" ? "traditional" : "unclassified"])[1];
-    return { ...g, register, verses: [...g.verses].sort((a, b) => a.localeCompare(b, undefined, { numeric: true })) };
-  }).sort((a, b) => b.count - a.count);
 
-  // 4. Assemble the sheet skeleton.
-  const slug = `${date}-${slugify(item.name?.en || "shabbat")}${special ? "-" + slugify(special.replace(/^Shabbat\s+/i, "")) : ""}`;
+  // 4. sheet.json: a new week, or the kept one, with a Torah reading added when there is a new pick.
+  const slug = `${date}-${slugify(name || "shabbat")}${special ? "-" + slugify(special.replace(/^Shabbat\s+/i, "")) : ""}`;
   const dir = join(outRoot, slug);
   await mkdir(dir, { recursive: true });
-
-  const civilDisplay = new Date(date + "T12:00:00Z").toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric", timeZone: "UTC" });
-  const first = verses[0];
-  const sheet = {
-    schema: 2,
-    slug,
-    status: "draft",
-    shabbat: {
-      civil: date,
-      civilDisplay,
-      hebrew: conv.hebrew,
-      hebrewEn: `${conv.hd} ${conv.hm} ${conv.hy}`,
-      parashah: { en: item.name?.en, he: item.name?.he, ref: item.summary },
-      special,
-    },
-    series: { name: "Torah from Scratch", year: String(conv.hy) },
-    haftarah: {
-      ref: haftRef,
-      heRef: tx.heRef || null,
-      book,
-      incipit: { he: incipitHe(first.he), en: incipitEn(first.en) },
-      title: { he: stripMarks(incipitHe(first.he)), en: special ? special.replace(/^Shabbat\s+/i, "") : `Haftarat ${item.name?.en}` },
-      defaultHaftarah: special && defaultHaftarah !== haftRef ? defaultHaftarah : null,
-      versions: { he: HEBREW_VERSION, en: ENGLISH_VERSION },
-      fetched: new Date().toISOString(),
-    },
-    verses,
-    glosses: [],
-    commentary: [],
-    openingNote: { calendar: "", setting: [] },
-    glossary: [],
-    nextWeek: await nextWeekFor(date),
-    credits: {
-      issuedBy: "Central Reform Congregation",
-      editor: "Rabbi Daniel Bogard",
-      signoff: "I chose and approved every entry on this sheet; summaries marked as such were drafted with Claude and read before printing. Tell me what I got wrong.",
-    },
-  };
-
   const sheetPath = join(dir, "sheet.json");
-  let exists = false;
-  try { await access(sheetPath); exists = true; } catch {}
-  if (exists && !force) {
-    console.log(`Kept existing ${sheetPath} (use --force to replace). Refreshed candidates only.`);
+  const existing = await readFile(sheetPath, "utf8").then(JSON.parse, () => null);
+  let sheet, write = null;
+  if (!existing || force) {
+    sheet = freshSheet({ slug, date, item, conv, customs, special, readings: [torah, haftarah].filter(Boolean), leyning, nextWeek: await nextWeekFor(date, customs) });
+    write = existing ? "Replaced" : "Wrote";
   } else {
-    await writeFile(sheetPath, JSON.stringify(sheet, null, 2), "utf8");
-    console.log(`Wrote ${sheetPath} (${verses.length} verses)`);
+    const m = mergeWeek(existing, { torah, leyning });
+    for (const n of m.notes) console.log(`  ${n}`);
+    sheet = m.sheet;
+    if (m.changed) write = "Updated";
   }
-  await writeFile(join(dir, "candidates.json"), JSON.stringify({ ref: haftRef, fetched: sheet.haftarah.fetched, sources: candidates }, null, 2), "utf8");
-  console.log(`Wrote ${join(dir, "candidates.json")} (${candidates.length} sources, ${links.length} links)`);
-  if (wantTexts) {
-    const texts = await buildTexts({ haftRef, book, verses, links, groups });
+
+  // 5. Write sheet.json.
+  if (write) {
+    await writeFile(sheetPath, JSON.stringify(sheet, null, 2), "utf8");
+    console.log(`${write} ${sheetPath} (${L.readings(sheet).map(r => `${r.id}: ${(r.verses || []).length} verses`).join("; ")})`);
+  } else console.log(`Kept existing ${sheetPath} (use --force to replace). Refreshed candidates and texts only.`);
+
+  // 6. Candidates and texts, one pair of files per reading the sheet holds.
+  for (const r of L.readings(sheet).filter(x => (x.verses || []).length && READING_FILES[x.kind])) {
+    const files = READING_FILES[r.kind];
+    const links = await sefariaLinks(r.ref);
+    const { groups, candidates, skipped } = candidatesFrom(links, { kind: r.kind });
+    const cand = { ref: r.ref, fetched, sources: candidates };
+    if (r.kind === "torah") cand.skipped = skipped;
+    await writeFile(join(dir, files.candidates), JSON.stringify(cand, null, 2), "utf8");
+    console.log(`Wrote ${join(dir, files.candidates)} (${candidates.length} sources, ${links.length} links${skipped.length ? `; ${skipped.length} super-commentaries and quoting commentaries set aside` : ""})`);
+    if (!wantTexts) continue;
+    const opts = r.kind === "torah" ? { core: TORAH_CORE, extras: false, capCommentaries: true } : {};
+    const texts = await buildTexts({ ref: r.ref, book: r.book, verses: r.verses, links, groups, ...opts });
     const body = JSON.stringify(texts, null, 1);
-    await writeFile(join(dir, "texts.json"), body, "utf8");
+    await writeFile(join(dir, files.texts), body, "utf8");
     const segs = Object.values(texts.commentaries).reduce((s, c) => s + Object.keys(c.segments).length, 0);
-    const sf = Object.values(texts.commentaries).flatMap(c => Object.entries(c.segments).filter(([, x]) => x.sectionFiled).map(([r]) => r));
-    console.log(`Wrote ${join(dir, "texts.json")} (${(Buffer.byteLength(body) / 1024).toFixed(0)} KB: ${Object.keys(texts.commentaries).length} commentaries, ${segs} segments, ${Object.keys(texts.linked).length} linked texts)`);
-    if (sf.length) console.log(`  section-filed: ${[...new Set(sf.map(r => r.replace(/:\d+$/, "")))].join(", ")}`);
+    const sf = Object.values(texts.commentaries).flatMap(c => Object.entries(c.segments).filter(([, x]) => x.sectionFiled).map(([ref]) => ref));
+    console.log(`Wrote ${join(dir, files.texts)} (${(Buffer.byteLength(body) / 1024).toFixed(0)} KB: ${Object.keys(texts.commentaries).length} commentaries, ${segs} segments, ${Object.keys(texts.linked).length} linked texts)`);
+    if (sf.length) console.log(`  section-filed: ${[...new Set(sf.map(x => x.replace(/:\d+$/, "")))].join(", ")}`);
     const nf = texts.notFetched;
     if (nf.commentaries.length) console.log(`  not on Sefaria: ${nf.commentaries.join(", ")}`);
+    if ((nf.commentariesOverBudget || []).length) console.log(`  over the size budget, not fetched: ${nf.commentariesOverBudget.join(", ")}`);
     if (nf.linkedOverCap.length + nf.linkedOverBudget.length + nf.linkedFailed.length) console.log(`  linked not fetched: ${nf.linkedOverCap.length} over cap, ${nf.linkedOverBudget.length} over size budget, ${nf.linkedFailed.length} failed`);
-    console.log(`  overview: node scripts/digest.mjs ${dir}`);
   }
+  if (wantTexts) console.log(`  overview: node scripts/digest.mjs ${dir}`);
   console.log(`\nNext: review candidates, add entries to sheet.json, then\n  node scripts/build.mjs ${dir} --png`);
 }
 

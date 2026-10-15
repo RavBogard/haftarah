@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { loadCustoms, validateCustoms } from "../scripts/customs.mjs";
 
 test("customs/crc.json is valid and says what spec 3.2 says, with Daniel's open items flagged", async () => {
@@ -31,4 +32,11 @@ test("validateCustoms names every unusable field", () => {
 
 test("loadCustoms names the file it could not use", async () => {
   await assert.rejects(loadCustoms("nobody"), /customs: cannot read .*nobody\.json/);
+});
+
+test("no CRC constant lives in the code that will serve other congregations: it comes from customs", () => {
+  for (const f of ["scripts/fetch.mjs", "scripts/leyning.mjs", "scripts/lint.mjs", "template/lib.js"]) {
+    const src = readFileSync(new URL(`../${f}`, import.meta.url), "utf8");
+    for (const s of ["Central Reform", "Daniel Bogard", "Miqra according to the Masorah", "Gender-Sensitive", "Tell me what I got wrong"]) assert.ok(!src.includes(s), `${f} has "${s}"`);
+  }
 });
