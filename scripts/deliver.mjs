@@ -5,6 +5,7 @@
  *
  *   node scripts/deliver.mjs weeks/<slug> [--dry-run] [--only public|working] [--url URL] [--token TOKEN]
  *   --no-web      skip the web publish (scripts/publish.mjs) that otherwise runs last
+ *   --no-side     skip the web page's side files (words, translations, links)
  *
  * Config, first found wins: --url/--token; HAFTARAH_DROPBOX_URL and
  * HAFTARAH_DROPBOX_TOKEN; the JSON file at $HAFTARAH_DROPBOX_CONFIG or
@@ -169,7 +170,7 @@ async function postFile(url, payload, fetchImpl) {
  * Deliver the week. Returns the per-file replies. Throws on the first failure,
  * including a sha256 mismatch.
  */
-export async function deliver(dir, { only, dryRun = false, config, log = console.log, fetchImpl = globalThis.fetch, webConfig = null, publishImpl = publish } = {}) {
+export async function deliver(dir, { only, dryRun = false, config, log = console.log, fetchImpl = globalThis.fetch, webConfig = null, publishImpl = publish, side = true } = {}) {
   const plan = await planFiles(dir, { only });
 
   if (dryRun) {
@@ -207,7 +208,7 @@ export async function deliver(dir, { only, dryRun = false, config, log = console
   if (folders.public) log(`Public folder:  ${folders.public}`);
   if (folders.working) log(`Working folder: ${folders.working}`);
   // The web comes last so a Drive failure never leaves the site ahead of the record.
-  if (webConfig) await publishImpl(dir, { config: webConfig, log, fetchImpl });
+  if (webConfig) await publishImpl(dir, { config: webConfig, log, fetchImpl, side });
   return results;
 }
 
@@ -218,12 +219,13 @@ function parseArgs(argv) {
     const m = a.match(/^--(url|token|only)(?:=(.*))?$/);
     if (m) { out.flags[m[1]] = m[2] ?? argv[++i]; continue; }
     if (a === "--no-web") { out.noWeb = true; continue; }
+    if (a === "--no-side") { out.noSide = true; continue; }
     if (a === "--dry-run") { out.dryRun = true; continue; }
     if (a.startsWith("--")) throw new Error(`unknown option ${a}`);
     if (out.dir) throw new Error(`one week folder only (got ${out.dir} and ${a})`);
     out.dir = a;
   }
-  if (!out.dir) throw new Error("usage: node scripts/deliver.mjs weeks/<slug> [--dry-run] [--only public|working] [--no-web]");
+  if (!out.dir) throw new Error("usage: node scripts/deliver.mjs weeks/<slug> [--dry-run] [--only public|working] [--no-web] [--no-side]");
   if (out.flags.only && !["public", "working"].includes(out.flags.only)) throw new Error("--only takes public or working");
   return out;
 }
@@ -233,7 +235,7 @@ async function main() {
   const only = args.flags.only;
   if (args.dryRun) {
     await deliver(args.dir, { only, dryRun: true });
-    if (!args.noWeb) await publish(args.dir, { dryRun: true });
+    if (!args.noWeb) await publish(args.dir, { dryRun: true, side: !args.noSide });
     return;
   }
   const config = await loadConfig({ flags: { url: args.flags.url, token: args.flags.token } });
@@ -243,7 +245,7 @@ async function main() {
     try { webConfig = await loadWebConfig(); }
     catch (err) { console.log(`Web: skipped; ${err.message}`); }
   }
-  await deliver(args.dir, { only, config, webConfig });
+  await deliver(args.dir, { only, config, webConfig, side: !args.noSide });
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {

@@ -7,7 +7,7 @@ import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { migrate3 } from "../scripts/migrate.mjs";
 import { makeWeekTorah } from "./helpers/makeWeekTorah.mjs";
-import { cleanSheet, indexEntry, upsertIndex, loadWebConfig, storeIdFromToken, publish, STORE_ID, PUBLISHED_FIELDS, listBlobs, weeksInListing, reindex, STORE_ORIGIN } from "../scripts/publish.mjs";
+import { cleanSheet, indexEntry, upsertIndex, loadWebConfig, storeIdFromToken, publish, STORE_ID, PUBLISHED_FIELDS, listBlobs, weeksInListing, reindex, STORE_ORIGIN, sideManifestFrom, buildSide, backfillSide } from "../scripts/publish.mjs";
 
 const TOKEN = "vercel_blob_rw_wOGdAqvPmTFjKrmY_s3cr3tpart";
 const STORE = "https://wogdaqvpmtfjkrmy.public.blob.vercel-storage.com";
@@ -52,6 +52,7 @@ test("indexEntry and upsertIndex", () => {
     parashah: "Bereshit", parashahHe: "בְּרֵאשִׁית", parashahKey: "bereshit", cycle: "5787", special: "Shabbat Machar Chodesh",
     readings: [{ id: "haftarah", kind: "haftarah", ref: "I Samuel 20:18–42", book: "I Samuel" }],
     parashahKeys: ["bereshit"], tags: ["machar-chodesh"], pdfTorah: null,
+    hasWords: false, hasLinks: false, translations: [],
   });
   const older = { ...e, slug: "2026-10-03-haazinu", civil: "2026-10-03" };
   const newer = { ...e, slug: "2026-10-24-lech-lecha", civil: "2026-10-24" };
@@ -113,7 +114,7 @@ function stubApi({ index = null, failPdf = false, badIndex = false } = {}) {
 test("publish uploads sheet.json, sheet.pdf, then the index, with the SDK's headers", async () => {
   const api = stubApi();
   const lines = [];
-  const r = await publish(week, { config: { token: TOKEN }, fetchImpl: api.fetchImpl, log: l => lines.push(l), now: () => new Date("2026-10-15T20:11:03Z") });
+  const r = await publish(week, { config: { token: TOKEN }, fetchImpl: api.fetchImpl, log: l => lines.push(l), now: () => new Date("2026-10-15T20:11:03Z"), side: false });
   const puts = api.calls.filter(c => c.method === "PUT");
   assert.deepEqual(puts.map(c => new URL(c.url).searchParams.get("pathname")), ["weeks/2026-10-17-noach/sheet.json", "weeks/2026-10-17-noach/sheet.pdf", "index.json"]);
   assert.ok(puts.every(c => c.url.startsWith("https://vercel.com/api/blob/?pathname=")));
@@ -146,14 +147,14 @@ test("publish uploads sheet.json, sheet.pdf, then the index, with the SDK's head
 
 test("publish upserts into an existing index", async () => {
   const api = stubApi({ index: { schema: 1, updated: "2026-10-01T00:00:00Z", weeks: [{ slug: "2026-10-24-lech-lecha", civil: "2026-10-24" }, { slug: "2026-10-17-noach", civil: "2026-10-17", stale: true }] } });
-  await publish(week, { config: { token: TOKEN }, fetchImpl: api.fetchImpl, log: () => {} });
+  await publish(week, { config: { token: TOKEN }, fetchImpl: api.fetchImpl, log: () => {}, side: false });
   assert.deepEqual(api.stored.weeks.map(w => w.slug), ["2026-10-24-lech-lecha", "2026-10-17-noach"]);
   assert.ok(!api.stored.weeks[1].stale);
 });
 
 test("a failed upload names the file and status and leaves the index untouched", async () => {
   const failing = stubApi({ index: { schema: 1, weeks: [{ slug: "old", civil: "2026-01-01" }] }, failPdf: true });
-  const err = await publish(week, { config: { token: TOKEN }, fetchImpl: failing.fetchImpl, log: () => {} }).catch(e => e);
+  const err = await publish(week, { config: { token: TOKEN }, fetchImpl: failing.fetchImpl, log: () => {}, side: false }).catch(e => e);
   assert.match(err.message, /weeks\/2026-10-17-noach\/sheet\.pdf: Blob answered HTTP 503/);
   assert.ok(!err.message.includes(TOKEN));
   assert.deepEqual(failing.stored.weeks.map(w => w.slug), ["old"]);
@@ -162,21 +163,21 @@ test("a failed upload names the file and status and leaves the index untouched",
 
 test("publish refuses a non-JSON index", async () => {
   const api = stubApi({ badIndex: true });
-  const err = await publish(week, { config: { token: TOKEN }, fetchImpl: api.fetchImpl, log: () => {} }).catch(e => e);
+  const err = await publish(week, { config: { token: TOKEN }, fetchImpl: api.fetchImpl, log: () => {}, side: false }).catch(e => e);
   assert.match(err.message, /index\.json: not JSON/);
   assert.equal(api.calls.filter(c => c.method === "PUT" && c.url.includes("index.json")).length, 0);
 });
 
 test("a wrong token is reported without being echoed", async () => {
   const api = stubApi();
-  const err = await publish(week, { config: { token: `vercel_blob_rw_${STORE_ID}_wrong` }, fetchImpl: api.fetchImpl, log: () => {} }).catch(e => e);
+  const err = await publish(week, { config: { token: `vercel_blob_rw_${STORE_ID}_wrong` }, fetchImpl: api.fetchImpl, log: () => {}, side: false }).catch(e => e);
   assert.match(err.message, /sheet\.json: Blob answered HTTP 403/);
   assert.ok(!err.message.includes("wrong"));
 });
 
 test("publish checks the returned url against the pathname", async () => {
   const fetchImpl = async (url, init) => new Response(JSON.stringify({ url: `${STORE}/weeks/2026-10-17-noach/sheet-abc123.json`, pathname: "weeks/2026-10-17-noach/sheet-abc123.json" }), { status: 200 });
-  const err = await publish(week, { config: { token: TOKEN }, fetchImpl, log: () => {} }).catch(e => e);
+  const err = await publish(week, { config: { token: TOKEN }, fetchImpl, log: () => {}, side: false }).catch(e => e);
   assert.match(err.message, /unexpected url/);
 });
 
@@ -275,7 +276,7 @@ test("every field README documents is published, and every published field is do
 
 test("a schema-2 week publishes as before: three uploads, no Torah PDF asked for, and the index row gains its library fields", async () => {
   const api = stubApi();
-  await publish(week, { config: { token: TOKEN }, fetchImpl: api.fetchImpl, log: () => {} });
+  await publish(week, { config: { token: TOKEN }, fetchImpl: api.fetchImpl, log: () => {}, side: false });
   assert.deepEqual(api.calls.filter(c => c.method === "PUT").map(c => new URL(c.url).searchParams.get("pathname")), ["weeks/2026-10-17-noach/sheet.json", "weeks/2026-10-17-noach/sheet.pdf", "index.json"]);
   const row = api.stored.weeks[0];
   assert.deepEqual([row.parashahKeys, row.tags, row.pdfTorah], [["bereshit"], ["machar-chodesh"], null]);
@@ -291,7 +292,7 @@ test("a week with a Torah reading publishes both PDFs, and its index row points 
   assert.match(missing.message, /is missing sheet-torah\.pdf/);
   await writeFile(join(dir, "sheet-torah.pdf"), "%PDF-1.7\ntorah\n");
   const api = stubApi();
-  const r = await publish(dir, { config: { token: TOKEN }, fetchImpl: api.fetchImpl, log: () => {} });
+  const r = await publish(dir, { config: { token: TOKEN }, fetchImpl: api.fetchImpl, log: () => {}, side: false });
   assert.deepEqual(api.calls.filter(c => c.method === "PUT").map(c => new URL(c.url).searchParams.get("pathname")),
     ["weeks/2026-10-10-bereshit-machar-chodesh/sheet.json", "weeks/2026-10-10-bereshit-machar-chodesh/sheet.pdf", "weeks/2026-10-10-bereshit-machar-chodesh/sheet-torah.pdf", "index.json"]);
   assert.ok(r.urls.pdfTorah.endsWith("/sheet-torah.pdf"));
@@ -319,7 +320,8 @@ test("Chanukah on a Shabbat is tagged for /special/chanukah, with Rosh Chodesh t
   assert.deepEqual(indexEntry(d, "2026-12-12-miketz", "t").tags, ["chanukah"]);
 });
 
-// A stub of the store for --reindex: a listing in two pages, public sheet.json files, the index.
+// A stub of the store for --reindex and --side: a listing in two pages (side files listed like the PDFs),
+// public sheet.json files (GET by public path, any query), the index.
 function storeStub({ weeks, index = null }) {
   const calls = [];
   let stored = index;
@@ -327,14 +329,20 @@ function storeStub({ weeks, index = null }) {
   blobs.push({ pathname: "weeks/not-a-week/sheet.json", url: `${STORE}/weeks/not-a-week/sheet.json`, uploadedAt: "x", size: 1 });
   const fetchImpl = async (url, init = {}) => {
     const u = new URL(url);
-    calls.push({ method: init.method || "GET", url: String(url), headers: init.headers || {} });
+    calls.push({ method: init.method || "GET", url: String(url), headers: init.headers || {}, body: init.body });
     if (u.hostname === "vercel.com" && (init.method || "GET") === "GET") {
       if (init.headers.authorization !== `Bearer ${TOKEN}`) return new Response("forbidden", { status: 403 });
       const first = !u.searchParams.get("cursor");
       const half = Math.ceil(blobs.length / 2);
       return new Response(JSON.stringify(first ? { blobs: blobs.slice(0, half), hasMore: true, cursor: "c2" } : { blobs: blobs.slice(half), hasMore: false }), { status: 200 });
     }
-    if (init.method === "PUT") { stored = JSON.parse(init.body); return new Response(JSON.stringify({ url: `${STORE}/index.json`, pathname: "index.json" }), { status: 200 }); }
+    if (init.method === "PUT") {   // every PUT is recorded; index.json and a week's sheet.json change what is served
+      const pathname = u.searchParams.get("pathname");
+      if (pathname === "index.json") stored = JSON.parse(init.body);
+      const w = /^weeks\/([^/]+)\/sheet\.json$/.exec(pathname);
+      if (w) (weeks[w[1]] = weeks[w[1]] || {})["sheet.json"] = JSON.parse(init.body);
+      return new Response(JSON.stringify({ url: `${STORE}/${pathname}`, pathname }), { status: 200 });
+    }
     if (u.pathname === "/index.json") return stored ? new Response(JSON.stringify(stored), { status: 200 }) : new Response("no", { status: 404 });
     const m = /^\/weeks\/([^/]+)\/sheet\.json$/.exec(u.pathname);
     if (m && weeks[m[1]]) return new Response(JSON.stringify(weeks[m[1]]["sheet.json"]), { status: 200 });
@@ -417,4 +425,121 @@ test("--reindex from the store: pdfTorah only where the store holds sheet-torah.
   const by = Object.fromEntries(index.weeks.map(w => [w.slug, w]));
   assert.equal(by["2026-10-17-noach"].pdfTorah, "weeks/2026-10-17-noach/sheet-torah.pdf");
   assert.equal(by["2025-10-25-noach"].pdfTorah, null, "a Torah reading without its PDF in the store gets no link");
+});
+
+// Side-file builders that write small files instead of calling STEP or Sefaria.
+const fakeBuilders = (made = []) => ({
+  words: async (dir) => { made.push("words"); await writeFile(join(dir, "words.json"), JSON.stringify({ schema: 1, source: "tahot", readings: { haftarah: { verses: {} } }, lemmas: {} })); return { file: join(dir, "words.json"), report: {} }; },
+  translations: async (dir, { customs }) => { made.push(`translations:${(customs && customs.translations || []).join("+")}`); await writeFile(join(dir, "translations.json"), JSON.stringify({ schema: 1, readings: { haftarah: { ref: "x", versions: [{ key: "jps1985", label: "JPS 1985", verses: {} }, { key: "koren", label: "Koren", verses: {} }] } } })); return { file: "", report: {} }; },
+  links: async (dir) => { made.push("links"); await writeFile(join(dir, "links.json"), JSON.stringify({ schema: 1, readings: { haftarah: { verses: {} } } })); return { file: "", report: {} }; },
+});
+
+test("sideManifestFrom reads whichever side files the folder has; null when none", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "side-"));
+  try {
+    assert.equal(await sideManifestFrom(dir), null);
+    await fakeBuilders().words(dir);
+    assert.deepEqual(await sideManifestFrom(dir), { words: "tahot" });
+    await fakeBuilders().translations(dir, { customs: { translations: ["jps1985"] } });
+    await fakeBuilders().links(dir);
+    assert.deepEqual(await sideManifestFrom(dir), { words: "tahot", translations: { haftarah: [{ key: "jps1985", label: "JPS 1985" }, { key: "koren", label: "Koren" }] }, links: true });
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test("publish builds the side files before uploading, uploads them after the PDFs, writes the manifest into the published sheet, and the index row gains hasWords, hasLinks and translations", async () => {
+  const api = stubApi();
+  const made = [];
+  const lines = [];
+  try {
+    await publish(week, { config: { token: TOKEN }, fetchImpl: api.fetchImpl, log: l => lines.push(l), builders: fakeBuilders(made), customs: { translations: ["jps2023", "jps1985"] } });
+    assert.deepEqual(made, ["words", "translations:jps2023+jps1985", "links"]);
+    const puts = api.calls.filter(c => c.method === "PUT").map(c => new URL(c.url).searchParams.get("pathname"));
+    assert.deepEqual(puts, ["weeks/2026-10-17-noach/sheet.json", "weeks/2026-10-17-noach/sheet.pdf", "weeks/2026-10-17-noach/words.json", "weeks/2026-10-17-noach/translations.json", "weeks/2026-10-17-noach/links.json", "index.json"]);
+    const up = JSON.parse(api.calls.find(c => c.method === "PUT" && c.url.includes("sheet.json")).body);
+    assert.deepEqual(up.side, { words: "tahot", translations: { haftarah: [{ key: "jps1985", label: "JPS 1985" }, { key: "koren", label: "Koren" }] }, links: true });
+    const row = api.stored.weeks[0];
+    assert.equal(row.hasWords, true); assert.equal(row.hasLinks, true); assert.deepEqual(row.translations, ["jps1985", "koren"]);
+    assert.match(lines.join("\n"), /web      weeks\/2026-10-17-noach\/words\.json/);
+    const sideHeaders = api.calls.find(c => c.method === "PUT" && c.url.includes("words.json")).headers;
+    assert.equal(sideHeaders["x-content-type"], "application/json");
+    assert.equal(sideHeaders["x-cache-control-max-age"], "60");
+  } finally {
+    // the builders wrote into the shared week folder; later tests expect it without side files
+    for (const f of ["words.json", "translations.json", "links.json"]) await rm(join(week, f), { force: true });
+  }
+});
+
+test("publish --no-side publishes as before: three uploads, no manifest, the index row says so", async () => {
+  const api = stubApi();
+  const made = [];
+  await publish(week, { config: { token: TOKEN }, fetchImpl: api.fetchImpl, log: () => {}, side: false, builders: fakeBuilders(made) });
+  assert.deepEqual(made, []);
+  assert.deepEqual(api.calls.filter(c => c.method === "PUT").map(c => new URL(c.url).searchParams.get("pathname")), ["weeks/2026-10-17-noach/sheet.json", "weeks/2026-10-17-noach/sheet.pdf", "index.json"]);
+  const up = JSON.parse(api.calls.find(c => c.method === "PUT" && c.url.includes("sheet.json")).body);
+  assert.ok(!("side" in up));
+  const row = api.stored.weeks[0];
+  assert.deepEqual([row.hasWords, row.hasLinks, row.translations], [false, false, []]);
+});
+
+test("a side-file builder that fails stops the publish before any upload", async () => {
+  const api = stubApi();
+  const builders = fakeBuilders();
+  builders.words = async () => { throw new Error("words: I Samuel 20:19 has no rows in tahot"); };
+  await assert.rejects(publish(week, { config: { token: TOKEN }, fetchImpl: api.fetchImpl, log: () => {}, builders }), /I Samuel 20:19 has no rows/);
+  assert.equal(api.calls.filter(c => c.method === "PUT").length, 0);
+});
+
+test("dry run lists the side files as made at publish and builds nothing", async () => {
+  const api = stubApi();
+  const made = [];
+  const lines = [];
+  await publish(week, { dryRun: true, fetchImpl: api.fetchImpl, log: l => lines.push(l), builders: fakeBuilders(made) });
+  assert.deepEqual(made, []);
+  assert.equal(api.calls.length, 0);
+  assert.match(lines.join("\n"), /web      weeks\/2026-10-17-noach\/words\.json  \(made at publish\)/);
+  assert.match(lines.join("\n"), /web      weeks\/2026-10-17-noach\/links\.json  \(made at publish\)/);
+});
+
+test("--reindex from the store: hasWords and hasLinks follow the listing, translations the published sheet", async () => {
+  const sheetWith = { ...cleanSheet(sheet), side: { words: "tahot", links: true, translations: { haftarah: [{ key: "koren", label: "Koren" }] } } };
+  const api = storeStub({
+    weeks: {
+      "2026-10-17-noach": { "sheet.json": sheetWith, "sheet.pdf": true, "words.json": true, "translations.json": true, "links.json": true },
+      "2026-10-10-bereshit": { "sheet.json": { ...cleanSheet(sheet), slug: "2026-10-10-bereshit", side: { words: "tahot", links: true } }, "sheet.pdf": true },
+    },
+    index: { schema: 2, weeks: [] },
+  });
+  const { index } = await reindex({ config: { token: TOKEN }, fetchImpl: api.fetchImpl, log: () => {}, now: () => new Date("2026-10-16T00:00:00Z") });
+  const noach = index.weeks.find(w => w.slug === "2026-10-17-noach"), bereshit = index.weeks.find(w => w.slug === "2026-10-10-bereshit");
+  assert.deepEqual([noach.hasWords, noach.hasLinks, noach.translations], [true, true, ["koren"]]);
+  assert.deepEqual([bereshit.hasWords, bereshit.hasLinks, bereshit.translations], [false, false, []], "the store holds no side files for it, whatever the sheet says");
+});
+
+test("--reindex --from: a local folder's side files set the flags; without them the old row's flags stay", async () => {
+  const api = stubApi({ index: { schema: 2, updated: "2026-10-15T00:00:00Z", weeks: [{ ...indexEntry(cleanSheet(sheet), "2026-10-17-noach", "2026-10-15T20:11:03Z"), hasWords: true, hasLinks: true, translations: ["koren"] }] } });
+  const r1 = await reindex({ from: join(root, "weeks"), dryRun: true, fetchImpl: api.fetchImpl, log: () => {} });
+  assert.deepEqual([r1.index.weeks[0].hasWords, r1.index.weeks[0].hasLinks, r1.index.weeks[0].translations], [true, true, ["koren"]]);
+  await fakeBuilders().words(week);
+  try {
+    const r2 = await reindex({ from: join(root, "weeks"), dryRun: true, fetchImpl: api.fetchImpl, log: () => {} });
+    assert.deepEqual([r2.index.weeks[0].hasWords, r2.index.weeks[0].hasLinks, r2.index.weeks[0].translations], [true, false, []]);
+  } finally { await rm(join(week, "words.json"), { force: true }); }
+});
+
+test("backfillSide: a published week gets its side files from the store's sheet, the manifest and the index row; an unpublished slug is refused", async () => {
+  const published = cleanSheet(sheet);
+  const api = storeStub({ weeks: { "2026-10-17-noach": { "sheet.json": published, "sheet.pdf": true } }, index: { schema: 2, weeks: [indexEntry(published, "2026-10-17-noach", "2026-10-15T20:11:03Z")] } });
+  const made = [];
+  const lines = [];
+  await backfillSide("2026-10-17-noach", { config: { token: TOKEN }, fetchImpl: api.fetchImpl, log: l => lines.push(l), builders: fakeBuilders(made), customs: { translations: ["jps1985"] }, now: () => new Date("2026-10-16T00:00:00Z") });
+  assert.deepEqual(made, ["words", "translations:jps1985", "links"]);
+  const puts = api.calls.filter(c => c.method === "PUT").map(c => new URL(c.url).searchParams.get("pathname"));
+  assert.deepEqual(puts, ["weeks/2026-10-17-noach/words.json", "weeks/2026-10-17-noach/translations.json", "weeks/2026-10-17-noach/links.json", "weeks/2026-10-17-noach/sheet.json", "index.json"]);
+  const up = JSON.parse(api.calls.find(c => c.method === "PUT" && c.url.includes("sheet.json")).body);
+  assert.equal(up.side.words, "tahot");
+  assert.deepEqual(up.verses, published.verses, "the published sheet is re-uploaded unchanged apart from side");
+  const row = api.stored.weeks[0];
+  assert.equal(row.published, "2026-10-15T20:11:03Z");
+  assert.deepEqual([row.hasWords, row.hasLinks, row.translations], [true, true, ["jps1985", "koren"]]);
+  await assert.rejects(backfillSide("2026-10-03-haazinu", { config: { token: TOKEN }, fetchImpl: api.fetchImpl, log: () => {}, builders: fakeBuilders() }), /publish --side: 2026-10-03-haazinu is not published/);
 });

@@ -367,7 +367,7 @@ export async function run() {
   document.body.append(copyStatus);
   rail.addEventListener("click", onAct); text.addEventListener("click", onAct);
 
-  const api = { rows, model, sync, goToHash, closeAll: () => { panel.close(); settings.close(); } };
+  const api = { rows, model, sync, goToHash, slug, side: data.side || null, closeAll: () => { panel.close(); settings.close(); } };
   window.HaftarahPage = api;
   const panel = initPanel({ page: api, L, sefariaUrl, track });
 
@@ -478,6 +478,7 @@ function runCheck(api, L) {
   h.dataset.checkPdfs = String(document.querySelectorAll("#front a.pdf").length);
   const priorLink = document.querySelector("#front a.prior");
   h.dataset.checkPrior = priorLink ? priorLink.getAttribute("href") : "";
+  h.dataset.checkSide = JSON.stringify(api.side ? Object.keys(api.side).sort() : []);
   // Two thirds down: far enough that a rail which scrolls short of its target misses it.
   const target = rows[Math.floor(rows.length * 2 / 3)];
   target.row.scrollIntoView({ block: "start" });

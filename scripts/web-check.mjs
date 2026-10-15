@@ -13,7 +13,7 @@ import { createServer } from "node:http";
 import { join, resolve, basename, extname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildSite } from "./web-build.mjs";
-import { indexEntry, cleanSheet } from "./publish.mjs";
+import { indexEntry, cleanSheet, sideManifestFrom } from "./publish.mjs";
 import { findBrowser } from "./build.mjs";
 import { dumpDom } from "./chrome.mjs";
 import { isSlug, slugFromPath, dataUrl, indexUrl } from "../site/app/contract.js";
@@ -83,6 +83,9 @@ async function main() {
   const wordsExpected = order.reduce((n, r) => n + L.readingModel(raw, r.id).verses.reduce((m, v) => m + L.verseWords(v.heHtml).length, 0), 0);
   const hv = sheet.verses[Math.min(3, sheet.verses.length - 1)];
   const extra = raw.highlights || args.serve ? {} : { highlights: [{ reading: L.primaryReading(raw).id, chapter: hv.chapter, verse: hv.verse, words: [0, 1], note: "A highlight for the check." }] };
+  // The side files the folder has (the fixture has all three; a bare copy none): the page sees the manifest publish would write.
+  const side = await sideManifestFrom(week);
+  if (side) extra.side = side;
   const { server, slug, base } = await serveSite({ dist, week, port, extra });
   if (args.serve) { console.log(`Serving ${slug}:\n  ${base}/\n  ${base}/${slug}\n  ${base}/${slug}?trope=1\nCtrl-C to stop.`); return; }
   const browser = findBrowser();
@@ -131,6 +134,7 @@ async function main() {
       expect(order.length > 1 ? "a heading per reading" : "no reading heading on a one-reading week", a.heads === String(order.length > 1 ? order.length : 0), a.heads);
       expect("a PDF link per reading", Number(a.pdfs) === order.length, a.pdfs);
       expect(raw.prior ? "the Last time link goes to last year's sheet" : "no Last time link without a prior", (a.prior || "") === (raw.prior ? `/${raw.prior.slug}` : ""), a.prior);
+      expect("the page saw the side manifest", a.side === JSON.stringify(side ? Object.keys(side).sort() : []), a.side);
     }
     const lv = sheet.verses[Math.min(5, sheet.verses.length - 1)];
     const t = attrs(await dumpDom(browser, `${base}/${slug}?check=1#v${lv.chapter}-${lv.verse}`, { size: "1440,900" }));

@@ -56,3 +56,8 @@ test("vercel.json routes exactly parashot.js's allow-list to library.html, after
   const first = v.rewrites.findIndex(r => r.destination === "/library.html");
   assert.ok(week >= 0 && first > week);
 });
+
+import { SIDE_FILES } from "../site/app/contract.js";
+test("SIDE_FILES names the three side files", () => {
+  assert.deepEqual(SIDE_FILES, { words: "words.json", translations: "translations.json", links: "links.json" });
+});

@@ -170,11 +170,25 @@ In schema 3 every verse names its `book`, and every commentary entry has an `id`
 
 `highlights` are Daniel's marks for discussion, shown on the web page and never on the printed sheet: the verse gets a rubric bar, the words from `words[0]` to `words[1]` (counting the verse's Hebrew words from 0, as the page counts them) a tint, and `note`, when given, sits in the verse's apparatus. A range past the verse's last word is cut short; a reversed range is ignored.
 
-`publish.mjs` sends to the web exactly the top-level fields shown in the two blocks above (`PUBLISHED_FIELDS`) and nothing else; a test fails when this section and that list disagree. It removes rejected entries and glosses from every reading, rejected glossary items and highlights, and every `status`.
+`publish.mjs` sends to the web exactly the top-level fields shown in the two blocks above (`PUBLISHED_FIELDS`) and nothing else; a test fails when this section and that list disagree. It removes rejected entries and glosses from every reading, rejected glossary items and highlights, and every `status`. A published `sheet.json` also carries a `side` field written by publish (not by the weekly run): see "Side files".
 
 `node scripts/migrate.mjs weeks/<slug>` converts a schema-1 file. There are no discussion questions and no context box: the opening note replaced them.
 
 Every item prints unless its `status` is `rejected`; there is no approval state and no draft build, because Daniel approves a sheet by printing it. Rules the build enforces, refusing to run and naming the entry: every entry outside the critical register needs a Sefaria `sourceRef`; every critical entry names only `works` listed in `bibliography/<book>.md`; the incipit has its English. The renderer sets the divine name as יי, keys JPS footnotes and glosses in one letter series per sheet, shows register by a filled mark and a color from the mural (red square classical, blue circle modern, teal triangle historians, ochre diamond reference), and turns Masoretic paragraph breaks into vertical space.
+
+## Side files
+
+Beside `sheet.json` in the Blob store, publish writes three files the page fetches only when first needed (spec 4.7), and a `side` manifest inside the published `sheet.json` says which are there:
+
+```jsonc
+"side": { "words": "tahot", "translations": { "haftarah": [{ "key": "jps1985", "label": "JPS 1985" }] }, "links": true }   // written by publish; absent on a week published with --no-side
+```
+
+- `words.json` (`scripts/words.mjs`): per reading and verse, each Hebrew word as the page counts it (`verseWords` in `template/lib.js`), its morphemes with STEP's morphology and glosses, its dictionary word, and a `lemmas` table with TBESH's gloss and the whole-Tanakh count from `data/words/frequency.json`. A word that does not align to STEP's text is left out and named in `missing`; a verse with no rows refuses the publish. `--source oshb` uses Open Scriptures' morphology instead (no glosses). STEP's files (about 74 MB) are downloaded once into `~/.haftarah-cache/` (or `$HAFTARAH_CACHE`).
+- `translations.json` (`scripts/translations.mjs`): the English editions in `customs.translations` that Sefaria has for the book, by exact title (JPS 1985, Koren, Metsudah), verse-aligned without their footnotes, each with its title, licence and credit line. JPS 2023 is the sheet's own English and is not repeated here.
+- `links.json` (`scripts/links.mjs`): what Sefaria links to each verse in the textual categories (Commentary, Targum, Midrash, Talmud, Halakhah, Kabbalah, Chasidut, Jewish Thought, Musar, Second Temple, Reference, Liturgy, Tanakh, then Quoting Commentary), grouped by work, Hebrew-only items apart, refs only.
+
+`deliver` and `publish` build the three before any upload (`--no-side` skips them); `node scripts/publish.mjs --side <slug>` adds them to a week that was published without them, from the store's copy of its sheet. The index rows carry `hasWords`, `hasLinks` and `translations`.
 
 ## How a page is laid out
 
