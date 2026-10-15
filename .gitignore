@@ -12,3 +12,5 @@ package-lock.json
 site/dist/
 .playwright-mcp/
 .claude/worktrees/
+tests/fixtures/*/sheet-trope.html
+tests/fixtures/_*/

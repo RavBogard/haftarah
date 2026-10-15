@@ -1,0 +1,18 @@
+{
+  "browser": "HeadlessChrome/155.0.0.0",
+  "platform": "win32",
+  "fixtures": {
+    "week-min": {
+      "html": "eca008919e27f63a6b154cc1e53953363ffeb11a2b73a7bb79f0a36f46fe7a6b",
+      "trope": "71f2c9ebbdec2c94224e68f5d513b26c758b75f50b0ca7e3b69a2f797d33a35d",
+      "dom": "de28270a0290d2d77004a9b145b96d628c4a79860096538f6c15423463f0e427",
+      "tropeDom": "27ceca2a39fedfacc067abcb6f24d88a044ac3a1f17a5a7612c11d75567044fd"
+    },
+    "week-notes": {
+      "html": "50488d64a7cd5b30587f741979205b4fe2822ff26ef3a98d14bbbf7a1536f0d4",
+      "trope": "f067535e4142e014b4f5b22988773b6b74048c277a9b353c0a3dde778ecd0297",
+      "dom": "1ec1b9173cf614bcaa2768ff0df0eefd4ed89fb3dfc99372c2604e0e1e9d5579",
+      "tropeDom": "bf75204cd92a29af4898779a8020467a83075a77bc852c45d31398e55b4c521f"
+    }
+  }
+}

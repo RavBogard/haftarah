@@ -1,0 +1,58 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
+import { PassThrough } from "node:stream";
+import { dumpDom, parseBrowserVersion, printSignature, sha256 } from "../scripts/chrome.mjs";
+
+// A stand-in for a spawned Chrome: `script(child)` decides what it writes and when it exits.
+function fakeSpawn(script) {
+  const calls = [];
+  const spawnImpl = (cmd, args) => {
+    const child = new EventEmitter();
+    child.stdout = new PassThrough(); child.stderr = new PassThrough();
+    child.killed = false;
+    child.kill = () => { child.killed = true; setTimeout(() => child.emit("close", null), 5); return true; };
+    calls.push({ cmd, args, child });
+    setImmediate(() => script(child));
+    return child;
+  };
+  return { spawnImpl, calls };
+}
+
+test("dumpDom decodes UTF-8 once, so a chunk boundary inside a Hebrew letter is harmless", async () => {
+  const body = Buffer.from("<html><body>שָׁלוֹם</body></html>", "utf8");
+  const { spawnImpl, calls } = fakeSpawn(child => {
+    child.stdout.write(body.subarray(0, 13));   // "<html><body>" is 12 bytes; byte 13 is the first half of ש
+    child.stdout.write(body.subarray(13));
+    child.stdout.end();
+    setTimeout(() => child.emit("close", 0), 20);
+  });
+  const dom = await dumpDom("chrome", "file:///x.html", { size: "1440,900", spawnImpl });
+  assert.equal(dom, "<html><body>שָׁלוֹם</body></html>");
+  assert.ok(calls[0].args.includes("--window-size=1440,900"));
+  assert.ok(calls[0].args.includes("--dump-dom"));
+  assert.equal(calls[0].args.at(-1), "file:///x.html");
+});
+
+test("dumpDom kills a Chrome that does not finish", async () => {
+  const { spawnImpl, calls } = fakeSpawn(() => {});   // never writes, never exits
+  await assert.rejects(dumpDom("chrome", "file:///hang.html", { timeoutMs: 50, spawnImpl }), /did not finish file:\/\/\/hang\.html within 50ms; killed/);
+  assert.equal(calls[0].child.killed, true);
+});
+
+test("dumpDom reports Chrome's exit code and the end of its stderr", async () => {
+  const { spawnImpl } = fakeSpawn(child => { child.stderr.write("GPU process crashed"); child.stderr.end(); setTimeout(() => child.emit("close", 21), 10); });
+  await assert.rejects(dumpDom("chrome", "file:///x.html", { spawnImpl }), /dump-dom exited 21[\s\S]*GPU process crashed/);
+});
+
+test("parseBrowserVersion names Chrome, and Edge when it is Edge", () => {
+  assert.equal(parseBrowserVersion("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36"), "HeadlessChrome/155.0.0.0");
+  assert.equal(parseBrowserVersion("AppleWebKit/537.36 HeadlessChrome/131.0.0.0 Safari/537.36 Edg/131.0.2903.70"), "HeadlessChrome/131.0.0.0 Edg/131.0.2903.70");
+  assert.equal(parseBrowserVersion(""), "unknown");
+});
+
+test("printSignature keeps the stamped <html> tag and the sheet, nothing else", () => {
+  const dom = '<html lang="en" data-pages="2" data-keys="a,b"><head><title>t</title></head><body><p class="review-note">n</p><main id="sheet" aria-label="Haftarah sheet"><section class="page">x</section></main><div id="stage">measuring</div></body></html>';
+  assert.equal(printSignature(dom), '<html lang="en" data-pages="2" data-keys="a,b">\n<main id="sheet" aria-label="Haftarah sheet"><section class="page">x</section></main>');
+  assert.match(sha256("x"), /^[0-9a-f]{64}$/);
+});
