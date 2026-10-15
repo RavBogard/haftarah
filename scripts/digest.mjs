@@ -17,6 +17,9 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
+
+const L = createRequire(import.meta.url)("../template/lib.js");
 
 const OPENING_CHARS = 100;
 const OPENINGS_PER_VERSE = 6;
@@ -206,6 +209,13 @@ async function readJSON(p) {
   try { return JSON.parse(await readFile(p, "utf8")); } catch { return null; }
 }
 
+// What the digest needs from sheet.json: the book and the verse refs, read through readingView so a
+// schema-3 week gives the same answer as its schema-2 original.
+export function digestInput(sheet) {
+  const view = sheet && L.readingView(sheet);
+  return { book: view?.haftarah?.book, verses: (view?.verses || []).map(v => v.ref).filter(Boolean) };
+}
+
 async function main() {
   const dir = process.argv[2];
   if (!dir) { console.error("usage: node scripts/digest.mjs weeks/<slug>"); process.exit(1); }
@@ -213,7 +223,7 @@ async function main() {
   const candidates = await readJSON(join(dir, "candidates.json"));
   const sheet = await readJSON(join(dir, "sheet.json"));
   if (!texts && !candidates) { console.error(`No texts.json or candidates.json in ${dir}; run fetch.mjs first.`); process.exit(1); }
-  const md = buildDigest({ texts, candidates, book: sheet?.haftarah?.book, verses: (sheet?.verses || []).map(v => v.ref).filter(Boolean) });
+  const md = buildDigest({ texts, candidates, ...digestInput(sheet) });
   await writeFile(join(dir, "digest.md"), md, "utf8");
   process.stdout.write(md);
 }

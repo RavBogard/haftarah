@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { buildDigest, classify, opening, englishOpening, alsoLine } from "../scripts/digest.mjs";
+import { buildDigest, classify, opening, englishOpening, alsoLine, digestInput } from "../scripts/digest.mjs";
+import { migrate3 } from "../scripts/migrate.mjs";
 
 const load = async f => JSON.parse(await readFile(new URL(`./fixtures/digest/${f}`, import.meta.url), "utf8"));
 const texts = await load("texts.json");
@@ -76,4 +77,15 @@ test("alsoLine counts kinds when it has to cut", () => {
   const items = Array.from({ length: 7 }, (_, i) => ({ ref: `Zohar ${i}`, kind: "Zohar" }));
   assert.equal(alsoLine(items.slice(0, 2)), "Also: Zohar 0; Zohar 1.");
   assert.equal(alsoLine(items), "Also: 7 Zohar. Zohar 0; Zohar 1; Zohar 2; Zohar 3; Zohar 4; +2 more.");
+});
+
+test("a schema-3 copy of a sheet gives the digest the same input and the same digest as the schema-2 file", async () => {
+  const two = JSON.parse(await readFile(new URL("./fixtures/week-notes/sheet.json", import.meta.url), "utf8"));
+  const three = migrate3(two);
+  assert.equal(three.schema, 3);
+  const a = digestInput(two), b = digestInput(three);
+  assert.ok(a.book && a.verses.length > 1);
+  assert.deepEqual(b, a);
+  assert.equal(buildDigest({ texts, candidates, ...b }), buildDigest({ texts, candidates, ...a }));
+  assert.deepEqual(digestInput(null), { book: undefined, verses: [] });
 });
