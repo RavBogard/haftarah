@@ -54,6 +54,7 @@ export function migrate3(d) {
     return out;
   }
   const two = Number(d.schema) === 2 ? d : migrate(d);
+  if (!two.haftarah?.book) console.error(`migrate3: ${d.slug || "this week"} has no haftarah.book; verses get no book`);
   const { haftarah = {}, verses = [], glosses = [], commentary = [], ...rest } = structuredClone(two);
   const reading = {
     id: "haftarah", kind: "haftarah", ...haftarah,
@@ -73,6 +74,7 @@ async function main() {
   if (!dirArg || ![2, 3].includes(to)) { console.error("usage: node scripts/migrate.mjs weeks/<slug> [--to 2|3]"); process.exit(1); }
   const p = join(resolve(dirArg), "sheet.json");
   const d = JSON.parse(await readFile(p, "utf8"));
+  if (to === 2 && Number(d.schema) >= 3) { console.error(`${p} is schema ${d.schema}; migrating it to 2 would lose its readings, so nothing was written`); process.exit(1); }
   const out = to === 3 ? migrate3(d) : migrate(d);
   await writeFile(p, JSON.stringify(out, null, 2) + "\n", "utf8");
   const view = L.readingView(out);

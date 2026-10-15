@@ -1,6 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { mock } from "node:test";
+import { fileURLToPath } from "node:url";
+import { isolatedEnv } from "./helpers/isolatedEnv.mjs";
 import { createRequire } from "node:module";
 import { migrate, migrate3 } from "../scripts/migrate.mjs";
 const L = createRequire(import.meta.url)("../template/lib.js");
@@ -95,4 +101,27 @@ test("parashahKey slugs a parashah name the way fetch slugs the week", () => {
 
 test("schema 3 is opt-in: migrate still writes schema 2", () => {
   assert.equal(migrate(fixture("week-min")).schema, 2);
+});
+
+test("migrate.mjs --to 2 refuses a schema-3 file, names it, and writes nothing", async () => {
+  const iso = await isolatedEnv();
+  const dir = mkdtempSync(join(tmpdir(), "mig-"));
+  try {
+    const body = JSON.stringify(migrate3(fixture("week-notes")), null, 2);
+    writeFileSync(join(dir, "sheet.json"), body);
+    const r = spawnSync(process.execPath, [fileURLToPath(new URL("../scripts/migrate.mjs", import.meta.url)), dir], { env: iso.env, encoding: "utf8" });
+    assert.equal(r.status, 1);
+    assert.match(r.stderr, /sheet\.json is schema 3/);
+    assert.equal(readFileSync(join(dir, "sheet.json"), "utf8"), body);
+  } finally { rmSync(dir, { recursive: true, force: true }); await iso.cleanup(); }
+});
+
+test("migrate3 warns on stderr when a schema-2 file has no haftarah.book, and still migrates", () => {
+  const d = fixture("week-notes"); delete d.haftarah.book;
+  const m = mock.method(console, "error", () => {});
+  let out;
+  try { out = migrate3(d); } finally { m.mock.restore(); }
+  assert.equal(m.mock.calls.length, 1);
+  assert.match(String(m.mock.calls[0].arguments[0]), /no haftarah\.book; verses get no book/);
+  assert.ok(out.readings[0].verses.every(v => !("book" in v)));
 });
