@@ -2,7 +2,7 @@
 // the model comes from lib.js's sheetModel, so the page prepares verses exactly as the print does.
 import { applyStored, initSettings } from "./settings.js";
 import { initPanel } from "./panel.js";
-import { slugFromPath, dataUrl, verseAnchor, parseVerseAnchor, PDF_FILES } from "./contract.js";
+import { slugFromPath, dataUrl, verseAnchor, parseVerseAnchor, PDF_FILES, isSlug } from "./contract.js";
 
 export { slugFromPath, dataUrl };
 import { initRoving, focusables } from "./a11y.js";
@@ -145,7 +145,7 @@ export async function run() {
   const pdfs = torahPart
     ? `The printed sheets (PDF): <a class="pdf" href="${dataUrl(slug, PDF_FILES.torah)}">Torah</a> · <a class="pdf" href="${dataUrl(slug, PDF_FILES.haftarah)}">Haftarah</a>`
     : `<a class="pdf" href="${dataUrl(slug, "sheet.pdf")}">The printed sheet (PDF)</a>`;
-  const prior = data.prior && data.prior.slug ? `<br><a class="prior" href="/${esc(data.prior.slug)}">Last time: the ${esc(data.prior.cycle || "")} sheet</a>` : "";
+  const prior = data.prior && isSlug(data.prior.slug) ? `<br><a class="prior" href="/${esc(data.prior.slug)}">Last time: the ${esc(data.prior.cycle || "")} sheet</a>` : "";
   const front = $("front");
   front.innerHTML = `
     <div class="hero">

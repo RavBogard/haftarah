@@ -3,6 +3,7 @@
 // is an index.json week; rows written before index v2 are read through weekKeys and fall back to
 // their v1 fields (publish.mjs --reindex fills them in).
 import { PARASHOT, COMBINED, TORAH_BOOKS, PROPHET_BOOKS, SPECIALS, keyOf, isParashahKey, parashahName, weekKeys } from "./parashot.js";
+import { isSlug } from "./contract.js";
 
 /** Newest Shabbat first; two sheets on one Shabbat: the plainer (shorter) slug first. */
 export const newestFirst = (a, b) => String(b.civil || "").localeCompare(String(a.civil || "")) || String(a.slug).length - String(b.slug).length || String(a.slug).localeCompare(String(b.slug));
@@ -23,11 +24,17 @@ export function parseAlias(pathname) {
   return null;
 }
 
-/** A week alias → the latest sheet for that parashah (that year's, with a year); a combined pair and its halves find each other. */
+/**
+ * A week alias → the latest sheet for that parashah (that year's, with a year); a combined pair and its
+ * halves find each other. A combined alias prefers the newest week that holds both halves, and falls
+ * back to either half only when there is none. A row whose slug is not a week slug is never a result.
+ */
 export function resolveWeekAlias(alias, weeks) {
   const want = COMBINED[alias.key] || [alias.key];
-  const hits = (weeks || []).filter(w => weekKeys(w).some(k => want.includes(k)) && (!alias.year || String(w.cycle || "") === alias.year)).sort(newestFirst);
-  return hits.length ? { slug: hits[0].slug } : { missing: { key: alias.key, year: alias.year, en: parashahName(alias.key) } };
+  const hits = (weeks || []).filter(w => isSlug(w.slug) && weekKeys(w).some(k => want.includes(k)) && (!alias.year || String(w.cycle || "") === alias.year)).sort(newestFirst);
+  const both = want.length > 1 ? hits.filter(w => want.every(k => weekKeys(w).includes(k))) : [];
+  const best = both[0] || hits[0];
+  return best ? { slug: best.slug } : { missing: { key: alias.key, year: alias.year, en: parashahName(alias.key) } };
 }
 
 /** The Torah book a week belongs to: its parashah's, else its Torah reading's; null for a festival without one. */

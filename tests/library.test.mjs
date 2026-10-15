@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { parseAlias, resolveWeekAlias, weeksFor, parashahGrid, byBook, specials, chaptersOf } from "../site/app/library.js";
 import { cellHtml, gridHtml, bookHtml, specialHtml } from "../site/app/library-view.js";
-import { aliasRewrites, isAliasPath } from "../site/app/parashot.js";
+import { aliasRewrites, isAliasPath, PARASHOT, COMBINED, TORAH_BOOKS, PROPHET_BOOKS, SPECIALS, keyOf } from "../site/app/parashot.js";
 
 const W = (slug, civil, cycle, keys, extra = {}) => ({ slug, civil, cycle, parashahKeys: keys, tags: [], ...extra });
 export const WEEKS = [
@@ -34,6 +34,34 @@ test("resolveWeekAlias: either half of a combined parashah finds the combined we
   assert.deepEqual(resolveWeekAlias(parseAlias("/vayakhel"), WEEKS), { slug: "2025-03-22-vayakhel-pekudei" });
   assert.deepEqual(resolveWeekAlias(parseAlias("/pekudei"), WEEKS), { slug: "2025-03-22-vayakhel-pekudei" });
   assert.deepEqual(resolveWeekAlias(parseAlias("/vayakhel-pekudei"), [W("2027-03-06-vayakhel-shekalim", "2027-03-06", "5787", ["vayakhel"])]), { slug: "2027-03-06-vayakhel-shekalim" });
+});
+
+test("resolveWeekAlias: a combined alias prefers the newest week holding both halves; a half alias takes the newest week with that half", () => {
+  const weeks = [W("2025-03-22-vayakhel-pekudei", "2025-03-22", "5785", ["vayakhel", "pekudei"]), W("2027-03-13-pekudei", "2027-03-13", "5787", ["pekudei"])];
+  assert.deepEqual(resolveWeekAlias(parseAlias("/vayakhel-pekudei"), weeks), { slug: "2025-03-22-vayakhel-pekudei" });
+  assert.deepEqual(resolveWeekAlias(parseAlias("/pekudei"), weeks), { slug: "2027-03-13-pekudei" });
+  assert.deepEqual(resolveWeekAlias(parseAlias("/5787/vayakhel-pekudei"), weeks), { slug: "2027-03-13-pekudei" }, "no combined week that year: either half");
+});
+
+test("resolveWeekAlias never returns a row whose slug is not a week slug", () => {
+  const bad = { slug: "//evil.com", civil: "2026-10-17", parashahKeys: ["noach"] };
+  assert.deepEqual(resolveWeekAlias(parseAlias("/noach"), [bad]), { missing: { key: "noach", year: null, en: "Noach" } });
+  assert.deepEqual(resolveWeekAlias(parseAlias("/noach"), [bad, ...WEEKS]), { slug: "2026-10-17-noach" });
+});
+
+test("every parashah, combined pair, book and special the tables hold is an alias path that parseAlias reads", () => {
+  const paths = [
+    ...PARASHOT.flatMap(p => [`/${p.key}`, `/5787/${p.key}`]),
+    ...Object.keys(COMBINED).flatMap(k => [`/${k}`, `/5787/${k}`]),
+    ...TORAH_BOOKS.map(b => `/torah/${keyOf(b)}`),
+    ...PROPHET_BOOKS.map(b => `/prophets/${keyOf(b)}`),
+    ...SPECIALS.map(s => `/special/${s.tag}`),
+  ];
+  assert.equal(paths.length, 54 * 2 + 7 * 2 + 5 + 21 + SPECIALS.length);
+  for (const p of paths) {
+    assert.equal(isAliasPath(p), true, `isAliasPath ${p}`);
+    assert.notEqual(parseAlias(p), null, `parseAlias ${p}`);
+  }
 });
 
 test("resolveWeekAlias: a parashah or a year with no sheet says which, by name", () => {

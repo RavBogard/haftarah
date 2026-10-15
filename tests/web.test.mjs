@@ -239,6 +239,12 @@ test("startIndex: the verse in the address, an old v-anchor, else the first", ()
   assert.equal(startIndex(rows, "#torah-20-19"), 0);
   assert.equal(startIndex(rows, "#haftarah-99-1"), 0);
   assert.equal(startIndex(rows, ""), 0);
+  // A Torah row with the same chapter and verse comes first on a two-reading page: the old anchor still means the haftarah.
+  const both = [{ reading: "torah", chapter: 20, verse: 18 }, { reading: "torah", chapter: 20, verse: 19 }, ...rows];
+  assert.equal(startIndex(both, "#v20-19"), 3);
+  assert.equal(startIndex(both, "#torah-20-19"), 1);
+  assert.equal(startIndex(both, "#haftarah-20-18"), 2);
+  assert.equal(startIndex([{ reading: "torah", chapter: 6, verse: 9 }], "#v6-9"), 0, "no haftarah row: the first");
 });
 
 test("stripKeys removes the JPS and gloss letters and nothing else", () => {

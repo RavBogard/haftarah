@@ -3,7 +3,7 @@
 // with location.replace, so the alias leaves no history entry. A list alias (a book, a special
 // Shabbat) shows its weeks here with the landing's rows. ?check=1 reports instead of moving on.
 import { applyStored, initSettings } from "./settings.js";
-import { indexUrl } from "./contract.js";
+import { indexUrl, isSlug } from "./contract.js";
 import { parseAlias, resolveWeekAlias, weeksFor } from "./library.js";
 import { rowHtml } from "./landing.js";
 
@@ -42,6 +42,7 @@ export async function run() {
 
   if (alias.kind === "week") {
     const r = resolveWeekAlias(alias, weeks);
+    if (r.slug && !isSlug(r.slug)) { say(`No sheet at this address. <a href="/">All sheets</a>`); return done({ checkMissing: "address" }); }
     if (r.slug) {
       if (check) return done({ checkResolved: r.slug });
       location.replace(`/${r.slug}${location.hash}`);

@@ -35,7 +35,9 @@ export const isPresent = search => new URLSearchParams(search || "").has("presen
 export function startIndex(rows, hash) {
   const a = parseVerseAnchor(hash);
   if (!a) return 0;
-  const i = rows.findIndex(r => r.chapter === a.chapter && r.verse === a.verse && (a.reading == null || a.reading === r.reading));
+  // The first release's #vC-V names no reading: it meant the haftarah (the primary reading), never a Torah verse.
+  const reading = a.reading == null ? "haftarah" : a.reading;
+  const i = rows.findIndex(r => r.chapter === a.chapter && r.verse === a.verse && r.reading === reading);
   return i < 0 ? 0 : i;
 }
 

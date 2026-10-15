@@ -60,10 +60,22 @@ export function initSettings({ host, button, pdfHref = null, trope = true, langs
   if (pb) pb.addEventListener("click", () => { close(); onPresent(); });
   sync();
   // A second printed sheet (the Torah's), added once the week's data says there is one.
+  // Built node by node: href and label are set as a property and as text, never parsed as markup.
   const addDownload = (href, label) => {
     const row = document.createElement("div");
     row.className = "row";
-    row.innerHTML = `<a class="dl" href="${href}" download><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 4v11m0 0l-4-4m4 4l4-4M5 20h14"/></svg>${label}</a>`;
+    const a = document.createElement("a");
+    a.className = "dl";
+    a.href = href;
+    a.download = "";
+    const NS = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(NS, "svg");
+    for (const [k, v] of [["viewBox", "0 0 24 24"], ["width", "18"], ["height", "18"], ["aria-hidden", "true"]]) svg.setAttribute(k, v);
+    const path = document.createElementNS(NS, "path");
+    path.setAttribute("d", "M12 4v11m0 0l-4-4m4 4l4-4M5 20h14");
+    svg.append(path);
+    a.append(svg, document.createTextNode(label));
+    row.append(a);
     const first = host.querySelector("a.dl");
     if (first) first.closest(".row").after(row); else host.append(row);
   };
