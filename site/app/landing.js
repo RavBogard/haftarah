@@ -1,5 +1,6 @@
 // The landing page: the welcome, this week's sheet set like the sheet's own hero, the index.
 import { applyStored, initSettings } from "./settings.js";
+import { indexUrl } from "./contract.js";
 
 const DAY = 86400000;
 
@@ -27,7 +28,7 @@ export async function run() {
   const status = (msg) => { $("status").innerHTML = msg; $("status").hidden = false; };
   let index;
   try {
-    const res = await fetch("/data/index.json");
+    const res = await fetch(indexUrl());
     if (res.status === 404) index = { schema: 1, weeks: [] };
     else if (!res.ok) throw new Error(`HTTP ${res.status}`);
     else {

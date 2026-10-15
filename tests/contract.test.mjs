@@ -1,0 +1,41 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { SLUG, isSlug, weekPath, dataUrl, indexUrl, INDEX_PATH, slugFromPath, VERCEL_WEEK_SOURCE } from "../site/app/contract.js";
+
+const ROOT = fileURLToPath(new URL("..", import.meta.url));
+
+test("a week slug is a date and a parashah, lowercase", () => {
+  for (const s of ["2026-10-17-noach", "2026-10-10-bereshit-machar-chodesh", "2027-03-06-vayakhel-pekudei"]) assert.ok(isSlug(s), s);
+  for (const s of ["noach", "2026-10-17", "2026-10-17-Noach", "2026-10-17-noach/", "../2026-10-17-noach", "", null]) assert.equal(isSlug(s), false, String(s));
+  assert.ok(SLUG.test("2026-10-17-noach"));
+});
+
+test("paths: the Blob pathname, the same-origin data URL, the index", () => {
+  assert.equal(weekPath("2026-10-17-noach", "sheet.json"), "weeks/2026-10-17-noach/sheet.json");
+  assert.equal(dataUrl("2026-10-17-noach", "sheet.pdf"), "/data/weeks/2026-10-17-noach/sheet.pdf");
+  assert.equal(INDEX_PATH, "index.json");
+  assert.equal(indexUrl(), "/data/index.json");
+});
+
+test("slugFromPath normalizes case and one trailing slash", () => {
+  assert.equal(slugFromPath("/2026-10-17-noach"), "2026-10-17-noach");
+  assert.equal(slugFromPath("/2026-10-17-Noach/"), "2026-10-17-noach");
+  assert.equal(slugFromPath("/"), null);
+  assert.equal(slugFromPath("/sheet.html"), null);
+  assert.equal(slugFromPath("/2026-10-17-noach/extra"), null);
+});
+
+test("vercel.json routes exactly the contract's slug to the week page", () => {
+  const v = JSON.parse(readFileSync(join(ROOT, "vercel.json"), "utf8"));
+  const week = v.rewrites.find(r => r.destination === "/sheet.html");
+  assert.equal(week.source, VERCEL_WEEK_SOURCE);
+});
+
+test("no other script or page module keeps its own copy of the slug pattern", () => {
+  const files = [["scripts"], ["site", "app"]].flatMap(d => readdirSync(join(ROOT, ...d)).map(f => join(ROOT, ...d, f)))
+    .filter(f => /\.(mjs|js)$/.test(f) && !f.endsWith("contract.js"));
+  assert.deepEqual(files.filter(f => readFileSync(f, "utf8").includes("d{4}-")), []);
+});

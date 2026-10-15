@@ -17,6 +17,7 @@ import { homedir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
+import { SLUG, weekPath, INDEX_PATH } from "../site/app/contract.js";
 
 const L = createRequire(import.meta.url)("../template/lib.js");
 
@@ -25,7 +26,6 @@ export const BLOB_API = "https://vercel.com/api/blob";
 // The site's Blob store. Its lowercase form is the host in vercel.json's /data rewrite, so a token
 // for any other store would publish where the site never reads.
 export const STORE_ID = "wOGdAqvPmTFjKrmY";
-const SLUG = /^\d{4}-\d{2}-\d{2}-[a-z0-9-]+$/;
 const API_VERSION = "13";
 const MAX_AGE = { json: 60, pdf: 3600 };
 // Schema 2's top-level fields; anything else (candidates, drafts) stays home.
@@ -62,7 +62,7 @@ export function indexEntry(sheet, slug, published) {
     shabbat: L.shabbatName(sheet), ref: L.enDash(h.ref || ""), book: h.book || "",
     incipit: { he: (h.incipit && h.incipit.he) || "", en: (h.incipit && h.incipit.en) || "" },
     defaultHaftarah: h.defaultHaftarah ? L.enDash(h.defaultHaftarah) : null,
-    pdf: `weeks/${slug}/sheet.pdf`, published,
+    pdf: weekPath(slug, "sheet.pdf"), published,
   };
 }
 
@@ -158,7 +158,7 @@ export async function publish(dir, { dryRun = false, config, log = console.log, 
   const clean = cleanSheet(raw);
   const json = Buffer.from(JSON.stringify(clean), "utf8");
   const pdf = await readFile(join(dir, "sheet.pdf"));
-  const paths = { sheet: `weeks/${slug}/sheet.json`, pdf: `weeks/${slug}/sheet.pdf`, index: "index.json" };
+  const paths = { sheet: weekPath(slug, "sheet.json"), pdf: weekPath(slug, "sheet.pdf"), index: INDEX_PATH };
   const page = `${SITE}/${slug}`;
   const removed = (raw.commentary || []).filter(rejected).length;
 

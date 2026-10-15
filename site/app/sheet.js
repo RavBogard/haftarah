@@ -2,15 +2,13 @@
 // the model comes from lib.js's sheetModel, so the page prepares verses exactly as the print does.
 import { applyStored, initSettings } from "./settings.js";
 import { initPanel } from "./panel.js";
+import { slugFromPath, dataUrl } from "./contract.js";
+
+export { slugFromPath, dataUrl };
 
 const DRIVE = "https://drive.google.com/drive/folders/1TbSmoeBaCSLciL_-_HSCuKWkJMSZvGwd";
 const errorsSeen = [];   // filled in check mode (?check=1) by the error listeners in run()
 
-export function slugFromPath(pathname) {
-  const m = /^\/(\d{4}-\d{2}-\d{2}-[a-z0-9-]+)\/?$/i.exec(pathname || "");
-  return m ? m[1].toLowerCase() : null;
-}
-export const dataUrl = (slug, file) => `/data/weeks/${slug}/${file}`;
 export function rangeLabel(book, a, z) {
   const head = `${book} ${a.chapter}:${a.verse}`;
   if (a === z || (a.chapter === z.chapter && a.verse === z.verse)) return head;

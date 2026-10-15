@@ -9,7 +9,7 @@ import { buildSite, checkOut } from "../scripts/web-build.mjs";
 test("buildSite copies the site, lib, trope.css, voices, fonts and the mural", async () => {
   const out = await mkdtemp(join(tmpdir(), "site-"));
   const r = await buildSite({ out });
-  for (const f of ["index.html", "sheet.html", "404.html", "web.css", "app/sheet.js", "app/landing.js", "app/settings.js", "lib.js", "trope.css", "voices.json", "mural.png", "fonts/EzraSIL.ttf", "fonts/Literata[opsz,wght].ttf", "fonts/Literata-Italic[opsz,wght].ttf", "fonts/NotoSerifHebrew[wdth,wght].ttf", "fonts/OFL-literata.txt"]) {
+  for (const f of ["index.html", "sheet.html", "404.html", "web.css", "app/sheet.js", "app/landing.js", "app/settings.js", "app/contract.js","lib.js", "trope.css", "voices.json", "mural.png", "fonts/EzraSIL.ttf", "fonts/Literata[opsz,wght].ttf", "fonts/Literata-Italic[opsz,wght].ttf", "fonts/NotoSerifHebrew[wdth,wght].ttf", "fonts/OFL-literata.txt"]) {
     assert.ok((await stat(join(out, f))).isFile(), f);
     assert.ok(r.files.includes(f), `${f} reported`);
   }

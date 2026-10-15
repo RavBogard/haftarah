@@ -16,6 +16,7 @@ import { buildSite } from "./web-build.mjs";
 import { indexEntry, cleanSheet } from "./publish.mjs";
 import { findBrowser } from "./build.mjs";
 import { dumpDom } from "./chrome.mjs";
+import { isSlug, slugFromPath, dataUrl, indexUrl } from "../site/app/contract.js";
 
 const ROOT = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const MIME = { ".html": "text/html; charset=utf-8", ".css": "text/css", ".js": "text/javascript", ".json": "application/json", ".png": "image/png", ".ttf": "font/ttf", ".pdf": "application/pdf", ".txt": "text/plain" };
@@ -23,19 +24,19 @@ const MIME = { ".html": "text/html; charset=utf-8", ".css": "text/css", ".js": "
 export async function serveSite({ dist, week, port = 0 }) {
   // The page only routes dated slugs; an undated folder (the fixture) is served under a made-up dated one.
   const name = basename(resolve(week));
-  const slug = /^\d{4}-\d{2}-\d{2}-[a-z0-9-]+$/i.test(name) ? name : `2026-01-01-${name}`;
+  const slug = isSlug(name) ? name : `2026-01-01-${name}`;
   const sheet = cleanSheet(JSON.parse(await readFile(join(week, "sheet.json"), "utf8")));
   const index = { schema: 1, updated: new Date().toISOString(), weeks: [indexEntry(sheet, slug, new Date().toISOString())] };
   const server = createServer(async (req, res) => {
     const p = new URL(req.url, "http://x").pathname;
     const send = (code, type, body) => { res.writeHead(code, { "content-type": type }); res.end(body); };
-    if (p === "/data/index.json") return send(200, MIME[".json"], JSON.stringify(index));
-    if (p === `/data/weeks/${slug}/sheet.json`) return send(200, MIME[".json"], JSON.stringify(sheet));
+    if (p === indexUrl()) return send(200, MIME[".json"], JSON.stringify(index));
+    if (p === dataUrl(slug, "sheet.json")) return send(200, MIME[".json"], JSON.stringify(sheet));
     if (p.startsWith("/data/")) {
       // Read first, write headers after: a missing file (the fixture has no sheet.pdf) must be a 404, not a crash.
       try { return send(200, MIME[extname(p)] || "application/octet-stream", await readFile(join(week, basename(p)))); } catch { return send(404, "text/plain", "Not found"); }
     }
-    let file = /^\/\d{4}-\d{2}-\d{2}-[a-z0-9-]+\/?$/i.test(p) ? join(dist, "sheet.html") : join(dist, p === "/" ? "index.html" : p);
+    let file = slugFromPath(p) ? join(dist, "sheet.html") : join(dist, p === "/" ? "index.html" : p);
     try { send(200, MIME[extname(file)] || "application/octet-stream", await readFile(file)); }
     catch { send(404, MIME[".html"], await readFile(join(dist, "404.html")).catch(() => "Not found")); }
   });
