@@ -99,7 +99,7 @@ function slugify(s) {
 const BREAK_TRAIL_RE = /(?:&nbsp;|\s)*<span class="mam-spi-(samekh|pe)">\{[ספ]\}<\/span>(?:&nbsp;|\s|<br\s*\/?>)*$/;
 const BREAK_MID_RE = /(?:&nbsp;|\s)*<span class="mam-spi-(samekh|pe)">\{[ספ]\}<\/span>(?:&nbsp;|\s|<br\s*\/?>)*/g;
 
-function cleanHebrew(html) {
+export function cleanHebrew(html) {
   let brk = null;
   let out = html.replace(/(?:&nbsp;|\s)+$/g, "").replace(/(<br\s*\/?>\s*)+$/g, "").trim();
   // trailing marker = Masoretic paragraph break after this verse
@@ -109,6 +109,9 @@ function cleanHebrew(html) {
   });
   // mid-verse marker (pisqa be'emtza pasuq) = visible gap inside the line
   out = out.replace(BREAK_MID_RE, ' <span class="pisqa"></span> ');
+  // A MAM footnote inside the Hebrew (Genesis 7:11: a note on the spelling in other manuscripts) is
+  // neither printed nor a word of the reading.
+  out = out.replace(/<sup class="footnote-marker">[^<]*<\/sup>/g, "").replace(/<i class="footnote">(?:<i>.*?<\/i>|(?!<\/i>)[\s\S])*?<\/i>/g, "");
   out = out.replace(/<br\s*\/?>/g, " ").replace(/\s{2,}/g, " ").trim();
   return { he: out, break: brk };
 }

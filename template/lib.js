@@ -53,6 +53,20 @@
     return out;
   }
 
+  // The words of a verse as the web page counts them (spec 4.3): every Hebrew word of the reading,
+  // not the keyed letters (<sup>), not the ketiv (Sefaria's mam-kq-k span; the page's .ketiv), not a
+  // MAM footnote. Tags are stripped, thin and no-break spaces become spaces. DOM-free, so publish
+  // can number the words exactly as the page does.
+  function verseWords(heHtml) {
+    const s = String(heHtml == null ? "" : heHtml)
+      .replace(/<sup\b[^>]*>[\s\S]*?<\/sup>/g, "")
+      .replace(/<span class="(?:mam-kq-k|ketiv)">[\s\S]*?<\/span>/g, "")
+      .replace(/<i class="footnote">[\s\S]*?<\/i>/g, "")
+      .replace(/<[^>]+>/g, "")
+      .replace(/&thinsp;|&nbsp;| | /g, " ");
+    return hebrewWords(s);
+  }
+
   // Where a Hebrew lemma sits in a verse's HTML. Returns { start, end, text, level } or null;
   // level is "exact" (the string itself), "normalized" (same pointing, different mark order,
   // accents or meteg) or "consonantal" (same letters, different pointing). `text` is the exact
@@ -564,5 +578,5 @@
     return map;
   }
 
-  return { TETRA, divineName, stripMarks, splitPoetry, nowrapKeys, letterFor, isDeadRef, normalizeRefs, assignKeys, SIGLA, REGISTER_ORDER, REGISTER_NAMES, voicesFor, voiceKey, hebrewKey, hebrewWords, findHebrew, plainText, findEnglish, fitIncipitSize, parseBibliography, tropePhrases, tropeHtml, tropeFamiliesUsed, TROPE_FAMILIES, escapeHtml, enDash, shabbatName, sheetModel, readings, primaryReading, readingView, parashahKey, entryId, assignEntryIds, readingModel };
+  return { TETRA, divineName, stripMarks, splitPoetry, nowrapKeys, letterFor, isDeadRef, normalizeRefs, assignKeys, SIGLA, REGISTER_ORDER, REGISTER_NAMES, voicesFor, voiceKey, hebrewKey, hebrewWords, verseWords, findHebrew, plainText, findEnglish, fitIncipitSize, parseBibliography, tropePhrases, tropeHtml, tropeFamiliesUsed, TROPE_FAMILIES, escapeHtml, enDash, shabbatName, sheetModel, readings, primaryReading, readingView, parashahKey, entryId, assignEntryIds, readingModel };
 });

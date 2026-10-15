@@ -187,13 +187,14 @@ export async function run() {
       s.innerHTML = `<button type="button" data-key="${k}" aria-expanded="false">${k}</button>`;
     });
   }
-  // Every Hebrew word becomes a focusable target for the word panel; footnote letters and the
-  // ketiv are not words of the reading, so they are left alone.
+  // Every Hebrew word becomes a focusable target for the word panel; footnote letters, the ketiv
+  // (Sefaria's mam-kq-k span) and a MAM footnote are not words of the reading, so they are left
+  // alone: lib.js's verseWords counts exactly these, and publish numbers the words the same way.
   function wrapWords(node) {
     const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
     const texts = []; let t; while ((t = walker.nextNode())) texts.push(t);
     for (const tn of texts) {
-      if (tn.parentElement.closest("sup, .ketiv")) continue;
+      if (tn.parentElement.closest("sup, .ketiv, .mam-kq-k, .footnote")) continue;
       const words = L.hebrewWords(tn.data); if (!words.length) continue;
       const frag = document.createDocumentFragment(); let at = 0;
       for (const w of words) {

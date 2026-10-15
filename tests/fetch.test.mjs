@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { withPrior, missingValue, buildTexts, withEntryIds, withRetry, getJSON, fetchPassage, candidatesFrom, capToBudget, readingFrom, freshSheet, mergeWeek, leyningUrl, TORAH_CORE } from "../scripts/fetch.mjs";
+import { withPrior, cleanHebrew, missingValue, buildTexts, withEntryIds, withRetry, getJSON, fetchPassage, candidatesFrom, capToBudget, readingFrom, freshSheet, mergeWeek, leyningUrl, TORAH_CORE } from "../scripts/fetch.mjs";
 import { migrate3 } from "../scripts/migrate.mjs";
 import { makeWeekTorah } from "./helpers/makeWeekTorah.mjs";
 
@@ -226,4 +226,12 @@ test("withEntryIds fills the ids a schema-3 sheet's entries lack, keeps the ones
   assert.equal(new Set(out.sheet.readings[0].commentary.map(e => e.id)).size, out.sheet.readings[0].commentary.length);
   const old = withEntryIds(min);
   assert.equal(old.sheet, min, "a schema-2 sheet is not touched");
+});
+
+test("cleanHebrew drops a MAM Hebrew footnote and keeps the break and pisqa handling", () => {
+  const { he, break: brk } = cleanHebrew('נִבְקְעוּ֙ כׇּֽל־מַעְיְנֹת֙<sup class="footnote-marker">*</sup><i class="footnote">(בספרי ספרד ואשכנז מַעְיְנוֹת֙)</i> תְּה֣וֹם רַבָּ֔ה׃ <span class="mam-spi-samekh">{ס}</span>');
+  assert.equal(he, "נִבְקְעוּ֙ כׇּֽל־מַעְיְנֹת֙ תְּה֣וֹם רַבָּ֔ה׃");
+  assert.equal(brk, "setumah");
+  assert.equal(cleanHebrew('א <i class="footnote">(x <i>y</i>)</i> ב').he, "א ב");
+  assert.deepEqual(cleanHebrew("שָׁלוֹם"), { he: "שָׁלוֹם", break: null });
 });

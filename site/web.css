@@ -134,7 +134,7 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .row .gut button:hover { background: var(--hover); }
 .row .he { font-family: var(--hebrew); font-size: 1.18em; line-height: 1.75; direction: rtl; unicode-bidi: isolate; text-align: right; }
 .he .pisqa { display: inline-block; width: 1.6em; }
-.he .ketiv { font-size: .72em; color: var(--ink-2); }
+.he .ketiv, .he .mam-kq-k { font-size: .72em; color: var(--ink-2); }
 .he .w { cursor: pointer; border-radius: 0; transition: background .12s ease-out; padding: 0 .04em; margin: 0 -.04em; }
 .he .w:hover, .he .w:focus-visible { background: var(--hover); outline-offset: 0; }
 .he .w.active { background: var(--wash); box-shadow: 0 1px 0 0 var(--rubric); }

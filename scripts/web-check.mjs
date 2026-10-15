@@ -79,6 +79,8 @@ async function main() {
   // Every verse on the page in page order (a Torah selection first), each with its reading and book.
   const order = L.readings(raw).filter(r => (r.verses || []).length);
   const flat = order.flatMap(r => L.readingView(raw, r.id).verses.map(v => ({ ...v, reading: r.id, book: r.book })));
+  // The page's Hebrew words, counted DOM-free from the same models the page builds (spec 4.3).
+  const wordsExpected = order.reduce((n, r) => n + L.readingModel(raw, r.id).verses.reduce((m, v) => m + L.verseWords(v.heHtml).length, 0), 0);
   const hv = sheet.verses[Math.min(3, sheet.verses.length - 1)];
   const extra = raw.highlights || args.serve ? {} : { highlights: [{ reading: L.primaryReading(raw).id, chapter: hv.chapter, verse: hv.verse, words: [0, 1], note: "A highlight for the check." }] };
   const { server, slug, base } = await serveSite({ dist, week, port, extra });
@@ -96,7 +98,7 @@ async function main() {
       expect("no script errors", a.errors === "0", a.errors);
       expect("verse count", Number(a.verses) === flat.length, a.verses);
       expect("key series present", (a.keys || "").length > 0 && /^a,b/.test(a.keys), a.keys);
-      expect("Hebrew words are buttons", Number(a.words) > flat.length * 3, a.words);
+      expect("the page counts words as lib does", Number(a.words) === wordsExpected, `${a.words} (lib: ${wordsExpected})`);
       expect("wide layout detected", a.wide === String(wide), a.wide);
       if (wide) { expect("rail holds every verse", Number(a.rail) === flat.length, a.rail); expect("no inline details", Number(a.details) === 0, a.details); }
       else { expect("rail empty", Number(a.rail) === 0, a.rail); expect("inline details for verses with commentary", Number(a.details) > 0, a.details); }

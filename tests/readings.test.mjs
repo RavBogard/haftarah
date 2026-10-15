@@ -148,3 +148,18 @@ test("readingModel: a haftarah's is sheetModel's; a Torah reading ends on sof pa
   assert.deepEqual(t.reading, { id: "torah", kind: "torah", selection: "aliyah 1, its first verses" });
   assert.deepEqual(L.readingModel(min, "haftarah").verses, L.sheetModel(min).verses, "a schema-2 week is unchanged");
 });
+
+test("verseWords: the page's Hebrew words, DOM-free; the ketiv, keyed letters and a MAM footnote are not words", () => {
+  const he = 'וַיֵּ֧שֶׁב הַמֶּ֛לֶךְ <span class="mam-kq"><span class="mam-kq-k">(על)</span> <span class="mam-kq-q">[אֶל־]</span></span>הַלֶּ֖חֶם<sup class="fn he">a</sup> לֶאֱכֽוֹל׃';
+  assert.deepEqual(L.verseWords(he).map(w => w.text), ["וַיֵּ֧שֶׁב", "הַמֶּ֛לֶךְ", "אֶל", "הַלֶּ֖חֶם", "לֶאֱכֽוֹל"]);
+  const note = 'נִבְקְעוּ֙ כׇּֽל־מַעְיְנֹת֙<sup class="footnote-marker">*</sup><i class="footnote">(בספרי ספרד ואשכנז מַעְיְנוֹת֙)</i> תְּה֣וֹם';
+  assert.deepEqual(L.verseWords(note).map(w => w.text), ["נִבְקְעוּ֙", "כׇּֽל", "מַעְיְנֹת֙", "תְּה֣וֹם"]);
+  const trope = '<span class="tr tr-a">כְּפַ֣עַם&thinsp;<b>׀</b> בְּפַ֗עַם</span> <span class="pisqa"></span> אֶל־מוֹשַׁב֙';
+  assert.deepEqual(L.verseWords(trope).map(w => w.text), ["כְּפַ֣עַם", "בְּפַ֗עַם", "אֶל", "מוֹשַׁב֙"]);
+  assert.deepEqual(L.verseWords(""), []);
+  assert.deepEqual(L.verseWords(null), []);
+  // The model's verses count the same whether or not trope spans and gloss keys were added.
+  const d = fixture("week-notes");
+  const m = L.sheetModel(d);
+  for (const [i, v] of m.verses.entries()) assert.equal(L.verseWords(v.heHtml).length, L.verseWords(d.verses[i].he.replace(/&thinsp;| /g, " ")).length, v.ref);
+});
