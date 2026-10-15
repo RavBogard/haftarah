@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * publish.mjs — put one week on the web: its cleaned sheet.json and its PDF into the Vercel Blob
+ * publish.mjs — put one week on the web: its cleaned sheet.json and its PDFs (sheet.pdf, and sheet-torah.pdf
+ * when the week has a Torah reading) into the Vercel Blob
  * store the site reads, then the index of every published week.
  *
  *   node scripts/publish.mjs weeks/<slug> [--dry-run] [--token TOKEN] [--store URL] [--api URL]
@@ -17,7 +18,8 @@ import { homedir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
-import { SLUG, weekPath, INDEX_PATH } from "../site/app/contract.js";
+import { SLUG, weekPath, INDEX_PATH, PDF_FILES } from "../site/app/contract.js";
+import { parashahKeysOf, weekTags } from "../site/app/parashot.js";
 
 const L = createRequire(import.meta.url)("../template/lib.js");
 
@@ -58,6 +60,8 @@ export function cleanSheet(data) {
   return dropStatus(out);
 }
 
+const hasTorah = sheet => L.readings(sheet).some(r => r.kind === "torah" && (r.verses || []).length);
+
 /** One row of index.json (v2: the v1 fields, plus what the library groups by). */
 export function indexEntry(sheet, slug, published) {
   const s = sheet.shabbat || {}, p = s.parashah || {}, h = L.primaryReading(sheet) || {};
@@ -66,11 +70,14 @@ export function indexEntry(sheet, slug, published) {
     shabbat: L.shabbatName(sheet), ref: L.enDash(h.ref || ""), book: h.book || "",
     incipit: { he: (h.incipit && h.incipit.he) || "", en: (h.incipit && h.incipit.en) || "" },
     defaultHaftarah: h.defaultHaftarah ? L.enDash(h.defaultHaftarah) : null,
-    pdf: weekPath(slug, "sheet.pdf"), published,
+    pdf: weekPath(slug, PDF_FILES.haftarah), published,
     parashah: p.en || "", parashahHe: p.he || "", parashahKey: L.parashahKey(p.en || ""),
     cycle: String((sheet.series && sheet.series.year) || (s.hebrewEn || "").split(/\s+/).pop() || ""),
     special: s.special || null,
-    readings: L.readings(sheet).map(r => ({ id: r.id, kind: r.kind, ref: L.enDash(r.ref || ""), book: r.book || "" })),
+    readings: L.readings(sheet).map(r => ({ id: r.id, kind: r.kind, ref: L.enDash(r.ref || ""), book: r.book || "", ...(r.selection ? { selection: r.selection } : {}) })),
+    parashahKeys: parashahKeysOf(p.en || ""),
+    tags: weekTags({ parashah: p.en || "", special: s.special || null }),
+    pdfTorah: hasTorah(sheet) ? weekPath(slug, PDF_FILES.torah) : null,
   };
 }
 
@@ -160,13 +167,18 @@ export async function publish(dir, { dryRun = false, config, log = console.log, 
   const slug = basename(resolve(dir));
   // The folder name becomes the page address and the Blob path: it must be a real week slug.
   if (!SLUG.test(slug)) throw new Error(`publish: folder name "${slug}" is not a week slug (YYYY-MM-DD-parashah[-special])`);
-  for (const f of ["sheet.json", "sheet.pdf"]) if (!(await exists(join(dir, f)))) throw new Error(`${dir} is missing ${f}`);
+  if (!(await exists(join(dir, "sheet.json")))) throw new Error(`${dir} is missing sheet.json`);
   const raw = JSON.parse(await readFile(join(dir, "sheet.json"), "utf8"));
+  // The printed sheets: the haftarah's always, the Torah's when the week has a Torah reading.
+  const pdfs = [["pdf", PDF_FILES.haftarah], ...(hasTorah(raw) ? [["pdfTorah", PDF_FILES.torah]] : [])];
+  for (const [, f] of pdfs) if (!(await exists(join(dir, f)))) throw new Error(`${dir} is missing ${f}`);
   if (raw.slug && raw.slug !== slug) throw new Error(`publish: folder "${slug}" does not match sheet.json slug "${raw.slug}"`);
   const clean = cleanSheet(raw);
   const json = Buffer.from(JSON.stringify(clean), "utf8");
-  const pdf = await readFile(join(dir, "sheet.pdf"));
-  const paths = { sheet: weekPath(slug, "sheet.json"), pdf: weekPath(slug, "sheet.pdf"), index: INDEX_PATH };
+  const pdfBytes = {};
+  for (const [k, f] of pdfs) pdfBytes[k] = await readFile(join(dir, f));
+  const paths = { sheet: weekPath(slug, "sheet.json"), index: INDEX_PATH };
+  for (const [k, f] of pdfs) paths[k] = weekPath(slug, f);
   const page = `${SITE}/${slug}`;
   const removed = L.readings(raw).reduce((n, r) => n + (r.commentary || []).filter(rejected).length, 0);
   const shown = L.readings(clean).reduce((n, r) => n + (r.commentary || []).length, 0);
@@ -174,7 +186,7 @@ export async function publish(dir, { dryRun = false, config, log = console.log, 
 
   if (dryRun) {
     log(`web      ${paths.sheet}  (${human(json.length)}; ${shown} entries, ${glossCount} glosses, ${(clean.glossary || []).length} glossary terms; ${removed} rejected entr${removed === 1 ? "y" : "ies"} removed)`);
-    log(`web      ${paths.pdf}  (${human(pdf.length)})`);
+    for (const [k] of pdfs) log(`web      ${paths[k]}  (${human(pdfBytes[k].length)})`);
     log(`web      ${paths.index}  (upsert ${slug})`);
     log(`Page:    ${page}`);
     return { urls: {}, page };
@@ -189,9 +201,11 @@ export async function publish(dir, { dryRun = false, config, log = console.log, 
   const r1 = await putBlob({ pathname: paths.sheet, body: json, contentType: "application/json", maxAge: MAX_AGE.json, token, fetchImpl, api });
   urls.sheet = r1.url;
   log(`web      ${paths.sheet}  ${human(json.length)}  ${r1.url}`);
-  const r2 = await putBlob({ pathname: paths.pdf, body: pdf, contentType: "application/pdf", maxAge: MAX_AGE.pdf, token, fetchImpl, api });
-  urls.pdf = r2.url;
-  log(`web      ${paths.pdf}  ${human(pdf.length)}  ${r2.url}`);
+  for (const [k] of pdfs) {
+    const r2 = await putBlob({ pathname: paths[k], body: pdfBytes[k], contentType: "application/pdf", maxAge: MAX_AGE.pdf, token, fetchImpl, api });
+    urls[k] = r2.url;
+    log(`web      ${paths[k]}  ${human(pdfBytes[k].length)}  ${r2.url}`);
+  }
 
   const origin = store || new URL(r1.url).origin;
   const stamp = now().toISOString().replace(/\.\d{3}Z$/, "Z");

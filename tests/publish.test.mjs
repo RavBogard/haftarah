@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { migrate3 } from "../scripts/migrate.mjs";
+import { makeWeekTorah } from "./helpers/makeWeekTorah.mjs";
 import { cleanSheet, indexEntry, upsertIndex, loadWebConfig, storeIdFromToken, publish, STORE_ID, PUBLISHED_FIELDS } from "../scripts/publish.mjs";
 
 const TOKEN = "vercel_blob_rw_wOGdAqvPmTFjKrmY_s3cr3tpart";
@@ -50,6 +51,7 @@ test("indexEntry and upsertIndex", () => {
     defaultHaftarah: "Isaiah 42:5–43:10", pdf: "weeks/2026-10-17-noach/sheet.pdf", published: "2026-10-15T20:11:03Z",
     parashah: "Bereshit", parashahHe: "בְּרֵאשִׁית", parashahKey: "bereshit", cycle: "5787", special: "Shabbat Machar Chodesh",
     readings: [{ id: "haftarah", kind: "haftarah", ref: "I Samuel 20:18–42", book: "I Samuel" }],
+    parashahKeys: ["bereshit"], tags: ["machar-chodesh"], pdfTorah: null,
   });
   const older = { ...e, slug: "2026-10-03-haazinu", civil: "2026-10-03" };
   const newer = { ...e, slug: "2026-10-24-lech-lecha", civil: "2026-10-24" };
@@ -269,4 +271,51 @@ function documentedFields(readme) {
 test("every field README documents is published, and every published field is documented", () => {
   const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8");
   assert.deepEqual(documentedFields(readme), [...PUBLISHED_FIELDS].sort());
+});
+
+test("a schema-2 week publishes as before: three uploads, no Torah PDF asked for, and the index row gains its library fields", async () => {
+  const api = stubApi();
+  await publish(week, { config: { token: TOKEN }, fetchImpl: api.fetchImpl, log: () => {} });
+  assert.deepEqual(api.calls.filter(c => c.method === "PUT").map(c => new URL(c.url).searchParams.get("pathname")), ["weeks/2026-10-17-noach/sheet.json", "weeks/2026-10-17-noach/sheet.pdf", "index.json"]);
+  const row = api.stored.weeks[0];
+  assert.deepEqual([row.parashahKeys, row.tags, row.pdfTorah], [["bereshit"], ["machar-chodesh"], null]);
+});
+
+test("a week with a Torah reading publishes both PDFs, and its index row points at the Torah sheet", async () => {
+  const dir = join(root, "two", "2026-10-10-bereshit-machar-chodesh");
+  await mkdir(dir, { recursive: true });
+  const two = makeWeekTorah(JSON.parse(await readFile(new URL("./fixtures/week-notes/sheet.json", import.meta.url), "utf8")));
+  two.slug = "2026-10-10-bereshit-machar-chodesh";
+  await writeFile(join(dir, "sheet.json"), JSON.stringify(two));
+  await writeFile(join(dir, "sheet.pdf"), "%PDF-1.7\nhaftarah\n");
+  const missing = await publish(dir, { dryRun: true, log: () => {} }).catch(e => e);
+  assert.match(missing.message, /is missing sheet-torah\.pdf/);
+  await writeFile(join(dir, "sheet-torah.pdf"), "%PDF-1.7\ntorah\n");
+  const api = stubApi();
+  const r = await publish(dir, { config: { token: TOKEN }, fetchImpl: api.fetchImpl, log: () => {} });
+  assert.deepEqual(api.calls.filter(c => c.method === "PUT").map(c => new URL(c.url).searchParams.get("pathname")),
+    ["weeks/2026-10-10-bereshit-machar-chodesh/sheet.json", "weeks/2026-10-10-bereshit-machar-chodesh/sheet.pdf", "weeks/2026-10-10-bereshit-machar-chodesh/sheet-torah.pdf", "index.json"]);
+  assert.ok(r.urls.pdfTorah.endsWith("/sheet-torah.pdf"));
+  const row = api.stored.weeks[0];
+  assert.equal(row.pdfTorah, "weeks/2026-10-10-bereshit-machar-chodesh/sheet-torah.pdf");
+  assert.deepEqual(row.readings.map(x => [x.id, x.ref, x.selection]), [["torah", "Genesis 6:9–33", "aliyah 1, its first verses"], ["haftarah", "I Samuel 20:18–42", undefined]]);
+  const lines = [];
+  await publish(dir, { dryRun: true, log: l => lines.push(l) });
+  assert.ok(lines.some(l => /sheet-torah\.pdf/.test(l)));
+});
+
+test("indexEntry lists both halves of a combined parashah, for /vayakhel and /pekudei and both grid cells", () => {
+  const d = structuredClone(sheet); d.shabbat.parashah = { en: "Vayakhel-Pekudei", he: "וַיַּקְהֵל־פְקוּדֵי" }; d.shabbat.special = null;
+  const e = indexEntry(d, "2028-03-25-vayakhel-pekudei", "t");
+  assert.equal(e.parashahKey, "vayakhel-pekudei");
+  assert.deepEqual(e.parashahKeys, ["vayakhel", "pekudei"]);
+  assert.deepEqual(e.tags, []);
+});
+
+test("Chanukah on a Shabbat is tagged for /special/chanukah, with Rosh Chodesh too when both fall together", () => {
+  const d = structuredClone(sheet); d.shabbat.parashah = { en: "Miketz", he: "מקץ" };
+  d.shabbat.special = "Shabbat Rosh Chodesh Chanukah";
+  assert.deepEqual(indexEntry(d, "2026-12-12-miketz", "t").tags, ["chanukah", "rosh-chodesh"]);
+  d.shabbat.special = "Chanukah Day 1 (on Shabbat)";
+  assert.deepEqual(indexEntry(d, "2026-12-12-miketz", "t").tags, ["chanukah"]);
 });

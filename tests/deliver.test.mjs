@@ -2,7 +2,8 @@ import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { createHash, randomBytes } from "node:crypto";
-import { mkdtemp, mkdir, writeFile, readFile, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, readFile, rm, utimes } from "node:fs/promises";
+import { makeWeekTorah } from "./helpers/makeWeekTorah.mjs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFile } from "node:child_process";
@@ -242,4 +243,46 @@ test("planFiles names the PDF from the haftarah of a schema-3 week", async () =>
   await writeFile(join(w3, "sheet.pdf"), "%PDF-1.7\n");
   const plan = await planFiles(w3);
   assert.equal(plan.publicName, "2026-10-24 Lech-Lecha — Isaiah 40.27-41.16.pdf");
+});
+
+test("a week with a Torah reading sends both PDFs, each named with its reading, and refuses without the Torah PDF", async () => {
+  const w = join(root, "weeks", "2026-10-17-noach-torah");
+  await mkdir(w, { recursive: true });
+  const one = JSON.parse(await readFile(join(week, "sheet.json"), "utf8"));
+  await writeFile(join(w, "sheet.json"), JSON.stringify(makeWeekTorah(one), null, 2));
+  await writeFile(join(w, "candidates.json"), "{}");
+  await writeFile(join(w, "candidates-torah.json"), "{}");
+  await writeFile(join(w, "sheet.pdf"), "%PDF-1.7\nh\n");
+  await assert.rejects(planFiles(w), /missing sheet-torah\.pdf \(the sheet has a Torah reading; run build\.mjs\)/);
+  await writeFile(join(w, "sheet-torah.pdf"), "%PDF-1.7\nt\n");
+  const plan = await planFiles(w);
+  assert.deepEqual(plan.files.map(f => `${f.target}:${f.name}`), [
+    "public:2026-10-17 Noach Torah — Genesis 6.9-11.pdf",
+    "public:2026-10-17 Noach Haftarah — Isaiah 54.1-55.5.pdf",
+    "working:sheet.json",
+    "working:candidates.json",
+    "working:candidates-torah.json",
+    "working:2026-10-17 Noach Torah — Genesis 6.9-11.pdf",
+    "working:2026-10-17 Noach Haftarah — Isaiah 54.1-55.5.pdf",
+  ]);
+  assert.equal(plan.publicName, "2026-10-17 Noach Haftarah — Isaiah 54.1-55.5.pdf");
+});
+
+test("deliver never ships a stale PDF: a PDF older than sheet.json is refused with a one-line message", async () => {
+  const w = join(root, "weeks", "2026-10-17-noach-stale");
+  await mkdir(w, { recursive: true });
+  const one = JSON.parse(await readFile(join(week, "sheet.json"), "utf8"));
+  await writeFile(join(w, "sheet.json"), JSON.stringify(makeWeekTorah(one), null, 2));
+  await writeFile(join(w, "candidates.json"), "{}");
+  await writeFile(join(w, "sheet.pdf"), "%PDF-1.7\nh\n");
+  await writeFile(join(w, "sheet-torah.pdf"), "%PDF-1.7\nt\n");
+  await planFiles(w);   // fresh: fine
+  const past = new Date(Date.now() - 60_000), now = new Date();
+  await utimes(join(w, "sheet-torah.pdf"), past, past);
+  await utimes(join(w, "sheet.json"), now, now);
+  await assert.rejects(planFiles(w), err => /^.*sheet-torah\.pdf is older than sheet\.json; run build\.mjs$/.test(err.message) && !err.message.includes("\n"));
+  await utimes(join(w, "sheet-torah.pdf"), now, now);
+  await utimes(join(w, "sheet.pdf"), past, past);
+  await assert.rejects(planFiles(w), /sheet\.pdf is older than sheet\.json; run build\.mjs/);
+  await assert.rejects(deliver(w, { config: { url: `${base}/exec`, token: TOKEN }, log: () => {} }), /older than sheet\.json/);
 });

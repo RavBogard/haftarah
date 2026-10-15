@@ -10,24 +10,26 @@
  * HAFTARAH_DROPBOX_TOKEN; the JSON file at $HAFTARAH_DROPBOX_CONFIG or
  * ~/.haftarah-dropbox.json ({"url": "...", "token": "..."}).
  *
- * Public folder: sheet.pdf as "<date> <parashah> — <ref with ':' as '.'>.pdf".
- * Working folder, subfolder <slug>: sheet.json, candidates.json, texts.json,
- * digest.md, briefing.md (the last three when present) and the PDF under the
- * public name.
+ * Public folder: sheet.pdf as "<date> <parashah> — <ref with ':' as '.'>.pdf"; a week with a Torah
+ * reading sends sheet-torah.pdf too, and both names gain the reading ("<date> <parashah> Torah — …",
+ * "… Haftarah — …"). A PDF older than sheet.json is refused (run build.mjs again).
+ * Working folder, subfolder <slug>: sheet.json, candidates.json, texts.json, digest.md, briefing.md,
+ * candidates-torah.json, texts-torah.json, prior.json (those present) and the PDFs under their public names.
  *
  * After the Drive uploads the week goes to the web through publish.mjs when a Blob token is configured (~/.haftarah-web.json); --no-web skips it.
  */
-import { readFile, access } from "node:fs/promises";
+import { readFile, access, stat } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { homedir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { publish, loadWebConfig } from "./publish.mjs";
+import { PDF_FILES, READING_FILES, PRIOR_FILE } from "./week-files.mjs";
 import { createRequire } from "node:module";
 const L = createRequire(import.meta.url)("../template/lib.js");
 
-const REQUIRED = ["sheet.json", "candidates.json", "sheet.pdf"];
-const OPTIONAL = ["texts.json", "digest.md", "briefing.md"];
+const REQUIRED = ["sheet.json", "candidates.json", PDF_FILES.haftarah];
+const OPTIONAL = ["texts.json", "digest.md", "briefing.md", READING_FILES.torah.candidates, READING_FILES.torah.texts, PRIOR_FILE];
 const MIME = { ".pdf": "application/pdf", ".json": "application/json", ".md": "text/markdown" };
 
 function mimeOf(name) {
@@ -39,8 +41,8 @@ async function exists(p) {
   try { await access(p); return true; } catch { return false; }
 }
 
-/** "2026-10-17 Noach — Isaiah 54.1-55.5.pdf" */
-export function publicName(sheet) {
+/** "2026-10-17 Noach — Isaiah 54.1-55.5.pdf"; with a label (a week with two readings), "2026-10-17 Noach Haftarah — …". */
+export function publicName(sheet, { label = null } = {}) {
   const date = sheet?.shabbat?.civil;
   const parashah = sheet?.shabbat?.parashah?.en;
   const ref = sheet?.haftarah?.ref;
@@ -48,7 +50,7 @@ export function publicName(sheet) {
     throw new Error("sheet.json needs shabbat.civil, shabbat.parashah.en and haftarah.ref to name the PDF");
   }
   const clean = s => String(s).replace(/:/g, ".").replace(/[\/\\]/g, "-").replace(/\s+/g, " ").trim();
-  return `${clean(date)} ${clean(parashah)} — ${clean(ref)}.pdf`;
+  return `${clean(date)} ${clean(parashah)}${label ? ` ${label}` : ""} — ${clean(ref)}.pdf`;
 }
 
 /** What goes where. `only` is "public", "working" or undefined for both. */
@@ -59,11 +61,23 @@ export async function planFiles(dir, { only } = {}) {
 
   const sheet = JSON.parse(await readFile(join(dir, "sheet.json"), "utf8"));
   const slug = basename(resolve(dir));
-  const pdfName = publicName(L.readingView(sheet));
+  // A week with a Torah reading has two PDFs; each name says which reading it is. A week with one keeps the old name.
+  const torah = L.readings(sheet).find(r => r.kind === "torah" && (r.verses || []).length) || null;
+  const pdfs = [];
+  if (torah) {
+    if (!(await exists(join(dir, PDF_FILES.torah)))) throw new Error(`${dir} is missing ${PDF_FILES.torah} (the sheet has a Torah reading; run build.mjs)`);
+    pdfs.push({ path: join(dir, PDF_FILES.torah), name: publicName(L.readingView(sheet, torah.id), { label: "Torah" }) });
+  }
+  pdfs.push({ path: join(dir, PDF_FILES.haftarah), name: publicName(L.readingView(sheet, L.primaryReading(sheet).id), torah ? { label: "Haftarah" } : {}) });
+  // Never ship a stale PDF: each must be at least as new as the sheet it was built from.
+  const sheetTime = (await stat(join(dir, "sheet.json"))).mtimeMs;
+  for (const p of pdfs) {
+    if ((await stat(p.path)).mtimeMs < sheetTime) throw new Error(`${basename(p.path)} is older than sheet.json; run build.mjs`);
+  }
   const files = [];
 
   if (only !== "working") {
-    files.push({ target: "public", name: pdfName, path: join(dir, "sheet.pdf"), mimeType: "application/pdf" });
+    for (const p of pdfs) files.push({ target: "public", name: p.name, path: p.path, mimeType: "application/pdf" });
   }
   if (only !== "public") {
     for (const f of ["sheet.json", "candidates.json"]) {
@@ -72,9 +86,9 @@ export async function planFiles(dir, { only } = {}) {
     for (const f of OPTIONAL) {
       if (await exists(join(dir, f))) files.push({ target: "working", slug, name: f, path: join(dir, f), mimeType: mimeOf(f) });
     }
-    files.push({ target: "working", slug, name: pdfName, path: join(dir, "sheet.pdf"), mimeType: "application/pdf" });
+    for (const p of pdfs) files.push({ target: "working", slug, name: p.name, path: p.path, mimeType: "application/pdf" });
   }
-  return { slug, publicName: pdfName, files };
+  return { slug, publicName: pdfs[pdfs.length - 1].name, publicNames: pdfs.map(p => p.name), files };
 }
 
 /** {url, token}; throws when either is missing. Never includes the token in a message. */
