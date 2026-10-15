@@ -16,7 +16,8 @@
  * --store is the public store origin (https://<id>.public.blob.vercel-storage.com); without it the
  * origin of the first upload's url is used. --api overrides the Blob API base (tests, outages).
  *
- * The side files (words.json, translations.json, links.json) are built first and uploaded beside the sheet; --no-side skips them; --side <slug> adds them to a week already published.
+ * The side files (words.json, translations.json, links.json) are built first and uploaded beside the sheet; --no-side
+ * rebuilds none but still uploads those the folder has; --side <slug> adds them to a week already published.
  */
 import { readFile, access, readdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
@@ -46,7 +47,12 @@ export const SIDE_BUILDERS = { words: buildWords, translations: buildTranslation
 
 /** The side manifest the page reads: which of the three files the folder has, and what each offers. */
 export async function sideManifestFrom(dir) {
-  const read = async name => { try { return JSON.parse(await readFile(join(dir, SIDE_FILES[name]), "utf8")); } catch { return null; } };
+  // A missing file is simply not offered; one that is there and cannot be read stops the publish.
+  const read = async name => {
+    let text;
+    try { text = await readFile(join(dir, SIDE_FILES[name]), "utf8"); } catch (err) { if (err.code === "ENOENT") return null; throw new Error(`side: cannot read ${SIDE_FILES[name]}: ${err.message}`); }
+    try { return JSON.parse(text); } catch (err) { throw new Error(`side: cannot read ${SIDE_FILES[name]}: ${err.message}`); }
+  };
   const words = await read("words"), translations = await read("translations"), links = await read("links");
   if (!words && !translations && !links) return null;
   const side = {};
@@ -56,13 +62,24 @@ export async function sideManifestFrom(dir) {
   return side;
 }
 
-/** Build the three side files in the week folder (each builder logs its own line) and return the manifest. */
+/**
+ * Build the three side files in the week folder (each builder logs its own line) and return the manifest.
+ * Words is required (a verse it cannot analyse stops the publish); translations and links degrade: a
+ * failure is logged and that file is left out (an older copy removed), so the page simply lacks the tool.
+ */
 export async function buildSide(dir, { customs, cache, log = console.log, fetchImpl = globalThis.fetch, builders = SIDE_BUILDERS } = {}) {
   await builders.words(dir, { cache, fetchImpl, log });
-  await builders.translations(dir, { customs, log });
-  await builders.links(dir, { log });
+  for (const [name, run] of [["translations", () => builders.translations(dir, { customs, log })], ["links", () => builders.links(dir, { log })]]) {
+    try { await run(); }
+    catch (err) {
+      await rm(join(dir, SIDE_FILES[name]), { force: true });
+      log(`side: ${name} not built: ${err.message}`);
+    }
+  }
   return sideManifestFrom(dir);
 }
+/** The side files present in a folder, in SIDE_FILES order. */
+async function sideFilesIn(dir) { const out = []; for (const f of Object.values(SIDE_FILES)) if (await exists(join(dir, f))) out.push(f); return out; }
 const translationKeys = side => { const seen = []; for (const list of Object.values((side && side.translations) || {})) for (const v of list) if (!seen.includes(v.key)) seen.push(v.key); return seen; };
 // The top-level fields that reach the web; anything else (candidates, drafts, a stray status) stays
 // home. README.md's "Data file" section documents exactly these, and tests/publish.test.mjs holds
@@ -275,6 +292,7 @@ export async function reindex({ from = null, dryRun = false, config = null, log 
       const entry = indexEntry(await res.json(), slug, published);
       if (!files[PDF_FILES.torah]) entry.pdfTorah = null;   // the link only where the store holds the PDF
       entry.hasWords = !!files[SIDE_FILES.words]; entry.hasLinks = !!files[SIDE_FILES.links];   // the store is the record of what is there
+      if (!files[SIDE_FILES.translations]) entry.translations = [];
       index = upsertIndex(index, entry, stamp);
       log(`index    ${slug}`);
     }
@@ -308,12 +326,14 @@ export async function publish(dir, { dryRun = false, config, log = console.log, 
   // A token for another store is refused before anything is built or uploaded.
   const token = dryRun ? null : config.token;
   if (!dryRun) assertSiteStore(token);
-  // The side files are built first (words refuses on a verse it cannot analyse, translations on a
-  // Sefaria failure), so a failed build uploads nothing. The manifest rides in the published sheet.
-  const sideFiles = side ? Object.values(SIDE_FILES) : [];
-  if (side && !dryRun) {
-    const manifest = await buildSide(dir, { customs: customs || (await loadCustoms("crc")), cache, log, fetchImpl, builders });
+  // The side files are built first (words refuses on a verse it cannot analyse), so a failed build
+  // uploads nothing. With side false nothing is rebuilt, but the files the folder already has still go
+  // up and stay in the manifest: --no-side never strips a tool a week has. The manifest rides in the sheet.
+  let sideFiles = side ? Object.values(SIDE_FILES) : await sideFilesIn(dir);
+  if (!dryRun) {
+    const manifest = side ? await buildSide(dir, { customs: customs || (await loadCustoms("crc")), cache, log, fetchImpl, builders }) : await sideManifestFrom(dir);
     if (manifest) clean.side = manifest;
+    sideFiles = await sideFilesIn(dir);
   }
   const json = Buffer.from(JSON.stringify(clean), "utf8");
   const pdfBytes = {};
@@ -329,16 +349,15 @@ export async function publish(dir, { dryRun = false, config, log = console.log, 
   if (dryRun) {
     log(`web      ${paths.sheet}  (${human(json.length)}; ${shown} entries, ${glossCount} glosses, ${(clean.glossary || []).length} glossary terms; ${removed} rejected entr${removed === 1 ? "y" : "ies"} removed)`);
     for (const [k] of pdfs) log(`web      ${paths[k]}  (${human(pdfBytes[k].length)})`);
-    for (const f of sideFiles) log(`web      ${paths[f]}  (made at publish)`);
+    for (const f of sideFiles) log(`web      ${paths[f]}  (${side ? "made at publish" : "already in the folder"})`);
     log(`web      ${paths.index}  (upsert ${slug})`);
     log(`Page:    ${page}`);
     return { urls: {}, page };
   }
 
+  // The PDFs, then the side files, then sheet.json, then the index: a sheet never goes live naming
+  // side files that failed to upload, and a failed week never changes the index.
   const urls = {};
-  const r1 = await putBlob({ pathname: paths.sheet, body: json, contentType: "application/json", maxAge: MAX_AGE.json, token, fetchImpl, api });
-  urls.sheet = r1.url;
-  log(`web      ${paths.sheet}  ${human(json.length)}  ${r1.url}`);
   for (const [k] of pdfs) {
     const r2 = await putBlob({ pathname: paths[k], body: pdfBytes[k], contentType: "application/pdf", maxAge: MAX_AGE.pdf, token, fetchImpl, api });
     urls[k] = r2.url;
@@ -350,6 +369,9 @@ export async function publish(dir, { dryRun = false, config, log = console.log, 
     urls[f] = r.url;
     log(`web      ${paths[f]}  ${human(body.length)}  ${r.url}`);
   }
+  const r1 = await putBlob({ pathname: paths.sheet, body: json, contentType: "application/json", maxAge: MAX_AGE.json, token, fetchImpl, api });
+  urls.sheet = r1.url;
+  log(`web      ${paths.sheet}  ${human(json.length)}  ${r1.url}`);
 
   const origin = store || new URL(r1.url).origin;
   const stamp = now().toISOString().replace(/\.\d{3}Z$/, "Z");
@@ -386,7 +408,7 @@ export async function backfillSide(slug, { dryRun = false, config = null, log = 
     assertSiteStore(token);
     const manifest = await buildSide(dir, { customs: customs || (await loadCustoms("crc")), cache, log, fetchImpl, builders });
     const stamp = now().toISOString().replace(/\.\d{3}Z$/, "Z");
-    for (const f of Object.values(SIDE_FILES)) {
+    for (const f of await sideFilesIn(dir)) {   // a translations or links failure leaves its file out
       const body = await readFile(join(dir, f));
       const r = await putBlob({ pathname: paths[f], body, contentType: "application/json", maxAge: MAX_AGE.json, token, fetchImpl, api });
       log(`web      ${paths[f]}  ${human(body.length)}  ${r.url}`);
@@ -403,7 +425,8 @@ export async function backfillSide(slug, { dryRun = false, config = null, log = 
   } finally { await rm(dir, { recursive: true, force: true }); }
 }
 
-function parseArgs(argv) {
+/** The CLI's arguments: { flags, dir, reindex, dryRun, noSide, side: [slugs] }; throws on a bad combination. */
+export function parseArgs(argv) {
   const out = { flags: {} };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -419,7 +442,8 @@ function parseArgs(argv) {
     out.dir = a;
   }
   const usage = "usage: node scripts/publish.mjs weeks/<slug> [--dry-run] [--token TOKEN] [--store URL] [--api URL] [--no-side] [--customs crc]\n       node scripts/publish.mjs --reindex [--from weeks] [--dry-run]\n       node scripts/publish.mjs --side <slug> [<slug>…] [--dry-run]";
-  if (out.side && (!out.side.length || out.dir)) throw new Error(usage);
+  if (out.side && (out.dir || out.reindex)) throw new Error("--side takes slugs only (not a week folder or --reindex)");
+  if (out.side && !out.side.length) throw new Error("--side needs at least one slug");
   if (!out.dir && !out.reindex && !out.side) throw new Error(usage);
   return out;
 }

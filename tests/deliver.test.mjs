@@ -225,6 +225,15 @@ test("deliver runs publish after the Drive uploads when a web config is given", 
   assert.ok(lines.findIndex(l => l.startsWith("Public folder:")) < lines.findIndex(l => l.startsWith("web ")), "Drive first, then the web");
 });
 
+test("deliver passes side through to publish: true by default, false for --no-side", async () => {
+  drive.clear(); mode = "ok";
+  const seen = [];
+  const publishImpl = async (dir, o) => { seen.push(o.side); };
+  await deliver(week, { only: "public", config: config(), log: () => {}, webConfig: { token: "webtok" }, publishImpl });
+  await deliver(week, { only: "public", config: config(), log: () => {}, webConfig: { token: "webtok" }, publishImpl, side: false });
+  assert.deepEqual(seen, [true, false]);
+});
+
 test("deliver skips the web without a web config", async () => {
   drive.clear(); mode = "ok";
   let called = 0;
