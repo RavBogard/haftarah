@@ -43,7 +43,7 @@ export function initPanel({ page, L, sefariaUrl, track = () => {} }) {
     // below the letter, unless that runs off the bottom and there is room above it
     let top = rb.bottom + 6; if (top + h > innerHeight - 8 && rb.top - 6 - h > 8) top = rb.top - 6 - h;
     node.style.left = (left + scrollX) + "px"; node.style.top = (top + scrollY) + "px";
-    b.setAttribute("aria-expanded", "true"); b.setAttribute("aria-controls", "notepop"); pop ={ node, anchor: b };
+    b.setAttribute("aria-expanded", "true"); b.setAttribute("aria-controls", "notepop"); pop = { node, anchor: b };
   });
 
   // ---- the side panel ----

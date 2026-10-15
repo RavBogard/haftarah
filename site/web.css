@@ -75,14 +75,16 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .settings .row + .row { border-top: .5px solid var(--legend-unused); }
 .settings .label { color: var(--ink); }
 .settings .seg { display: inline-flex; border: .5px solid var(--frame); }
-.settings .seg button { padding: .3rem .7rem; color: var(--ink-2); }
+.settings .seg button { padding: .3rem .7rem; color: var(--ink-2); min-height: max(2.75rem, 44px); }
+.settings .seg #sizeDown, .settings .seg #sizeUp { min-width: max(2.75rem, 44px); }
 .settings .seg button + button { border-left: .5px solid var(--frame); }
 .settings .seg button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
 .settings .seg button:hover:not([aria-pressed="true"]) { background: var(--hover); color: var(--ink); }
 .settings .switch { width: 2.6rem; height: 1.45rem; border: .5px solid var(--frame); position: relative; }
+.settings .switch::before { content: ""; position: absolute; inset: -.75rem 0; }   /* hit area: 44px tall, the look is unchanged */
 .settings .switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: calc(1.45rem - 5px); height: calc(1.45rem - 5px); background: var(--frame); transition: transform .18s ease-out; }
 .settings .switch[aria-checked="true"] { border-color: var(--ink); } .settings .switch[aria-checked="true"]::after { background: var(--ink); transform: translateX(1.15rem); }
-.settings .dl { display: flex; align-items: center; gap: .5rem; color: var(--rubric); font-weight: 500; text-decoration: none; }
+.settings .dl { min-height: max(2.75rem, 44px); display: flex; align-items: center; gap: .5rem; color: var(--rubric); font-weight: 500; text-decoration: none; }
 .settings .dl:hover { text-decoration: underline; }
 .settings .hint { color: var(--ink-2); font-size: .85em; } .settings .seg button:disabled { color: var(--legend-unused); cursor: default; }
 
@@ -127,7 +129,8 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .row .en.poetry .ln:has(> .indentAll) { padding-left: 2.2em; }
 .row .gut { text-align: center; font-weight: 600; font-feature-settings: "lnum", "tnum"; line-height: 1.5; }
 .row .gut .ch { display: block; color: var(--rubric); font-weight: 400; font-size: .82rem; line-height: 1.2; margin-bottom: .1rem; }
-.row .gut button { font: inherit; font-weight: 600; padding: 0 .3rem; }
+.row .gut button { font: inherit; font-weight: 600; padding: 0 .3rem; position: relative; }
+.row .gut button::after { content: ""; position: absolute; left: 50%; top: 50%; width: max(2.75rem, 44px); height: max(2.75rem, 44px); transform: translate(-50%, -50%); }   /* hit area only */
 .row .gut button:hover { background: var(--hover); }
 .row .he { font-family: var(--hebrew); font-size: 1.18em; line-height: 1.75; direction: rtl; unicode-bidi: isolate; text-align: right; }
 .he .pisqa { display: inline-block; width: 1.6em; }
@@ -288,11 +291,11 @@ sup.fn button::after { content: ""; position: absolute; inset: -.7em -.35em; }
 .settings .dl svg { flex: none; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 
 /* Show: Hebrew, Both or English (the Aa card sets html[data-lang]) */
-html[data-lang="he"] .row .en, html[data-lang="en"] .row .he { display: none; }
+html[data-lang="he"] .text .row .en, html[data-lang="en"] .text .row .he { display: none; }
 @media (min-width: 1100px) {
-  html[data-lang="he"] .row, html[data-lang="en"] .row { grid-template-columns: 2.8rem minmax(0, 1fr); }
-  html[data-lang="en"] .row .gut { order: -1; }
-  html[data-lang="en"] .row .en { max-width: 42em; }
+  html[data-lang="he"] .text .row, html[data-lang="en"] .text .row { grid-template-columns: 2.8rem minmax(0, 1fr); }
+  html[data-lang="en"] .text .row .gut { order: -1; }
+  html[data-lang="en"] .text .row .en { max-width: 42em; }
 }
 
 /* verse header actions: copy link, copy verse, Sefaria */

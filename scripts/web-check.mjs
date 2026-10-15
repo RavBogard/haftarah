@@ -120,6 +120,8 @@ async function main() {
       expect("every source button names the panel", a["src-uncontrolled"] === "0", a["src-uncontrolled"]);
       expect("a note popover is named while open and gone after", a.pop === "ok", a.pop);
       expect("the settings card keeps Tab inside", a.trap === "ok", a.trap);
+      expect("every control in the settings card is a 44px target", Number(a["settings-min"]) >= 44, a["settings-min"]);
+      expect("the verse number has a 44px hit area", Number(a["verse-hit"]) >= 44, a["verse-hit"]);
     }
     const lv = sheet.verses[Math.min(5, sheet.verses.length - 1)];
     const t = attrs(await dumpDom(browser, `${base}/${slug}?check=1#v${lv.chapter}-${lv.verse}`, { size: "1440,900" }));

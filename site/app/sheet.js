@@ -95,7 +95,8 @@ export async function run() {
     addEventListener("unhandledrejection", e => errorsSeen.push(String(e.reason)));
     document.addEventListener("securitypolicyviolation", e => errorsSeen.push(`CSP blocked ${e.blockedURI || "inline"} (${e.violatedDirective})`));
   }
-  const fail = (msg) => { const s = $("status"); s.innerHTML = msg; s.hidden = false; if (check) { html.dataset.checkErrors = String(errorsSeen.length + 1) + ": " + s.textContent; html.dataset.checkDone = "1"; } };
+  const fail = (msg) => { const pb = $("presentBtn"); if (pb) pb.closest(".row").remove();   // nothing to present on an error page
+  const s = $("status"); s.innerHTML = msg; s.hidden = false; if (check) { html.dataset.checkErrors = String(errorsSeen.length + 1) + ": " + s.textContent; html.dataset.checkDone = "1"; } };
 
   applyStored();
   const slug = slugFromPath(location.pathname);
@@ -307,6 +308,7 @@ export async function run() {
     return r;
   }
   goToHash();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { if (location.hash) goToHash(); });   // the font swap moves the layout; land on the verse again
   addEventListener("hashchange", () => goToHash());
 
   // verse number: jump to its commentary (the rail when wide, the fold below the verse otherwise)
@@ -356,7 +358,7 @@ export async function run() {
     return presenter;
   };
   if (isPresent(location.search)) startPresent();
-  if (check) { if (presenter) runPresentCheck(); else runCheck(api, L); }
+  if (check) { if (presenter) runPresentCheck().catch(e => { const h = document.documentElement; h.dataset.checkErrors = "1: " + String(e && e.message || e); h.dataset.checkDone = "1"; }); else runCheck(api, L); }
 }
 
 // ?present&check=1: what the presenter shows once the web fonts are in, then PageDown, B twice, Escape,
@@ -412,6 +414,11 @@ function runCheck(api, L) {
   controls.at(-1).focus();
   controls.at(-1).dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true }));
   h.dataset.checkTrap = document.activeElement === controls[0] ? "ok" : "fail";
+  // The smallest control in the open card: a button or the link by its box, the switch by its ::before hit area.
+  const sizes = [...document.querySelectorAll("#settings button:not(.switch), #settings a.dl")].map(x => Math.min(x.getBoundingClientRect().height, x.getBoundingClientRect().width < 44 ? x.getBoundingClientRect().width : 1e9));
+  const sw = document.getElementById("tropeSw");
+  if (sw) sizes.push(parseFloat(getComputedStyle(sw, "::before").height));
+  h.dataset.checkSettingsMin = sizes.length ? String(Math.floor(Math.min(...sizes))) : "none";
   document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
   // Show: Hebrew alone hides the English, English alone the Hebrew.
   const r0 = rows[0].row;
@@ -433,6 +440,8 @@ function runCheck(api, L) {
   const fold = document.querySelector("#text details.vapp:not([open])"); if (fold) fold.open = true;
   const acts = [...document.querySelectorAll(".vapp .vh .act, .vapp .vh .acts a")].filter(x => x.getClientRects().length);
   h.dataset.checkActHeight = acts.length ? String(Math.floor(Math.min(...acts.map(x => x.getBoundingClientRect().height)))) : "none";
+  const vb = document.querySelector("#text .row .gut button");
+  if (vb) { const a = getComputedStyle(vb, "::after"); h.dataset.checkVerseHit = String(Math.floor(Math.min(parseFloat(a.width), parseFloat(a.height)))); }
   if (fold) fold.open = false;
   // Two thirds down: far enough that a rail which scrolls short of its target misses it.
   const target = rows[Math.floor(rows.length * 2 / 3)];
