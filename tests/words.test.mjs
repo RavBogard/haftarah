@@ -15,7 +15,7 @@ const TAHOT = [
   "1Sa.20.18#07=L\tכִּ֥י\tki\tif\t{H3588A}\tHTc\t\t\tH3588A\t\t\t{H3588A=כִּי=for}",
   "1Sa.20.18#08=L\tיִפָּקֵ֖ד\tyi.pa.Ked\tit will be empty\t{H6485K}\tHVNi3ms\t\t\tH6485K\t\t\t{H6485K=פָּקַד=: missing»to reckon:6_missing;_empty}",
   "1Sa.20.18#09=L\tמוֹשָׁבֶֽ/ךָ\\׃\tmo.sha.Ve./kha\tseat/ your\t{H4186}/H9021\\H9016\tHNcmsc/Sp2ms\t\t\tH4186\t\t\t{H4186=מוֹשָׁב=seat}/H9021=Ps2m=your\\H9016=׃=verseEnd",
-  "1Sa.20.38#12=Q(K)\tהַ֣/חִצִּ֔ים\tha./chi.Tzim\tthe/ arrows\tH9009/{H2671}\tHTd/Ncmpa\tK= ha./chi.Tzim (הַ/חִצִּים) \"the/ arrows\" (H9009/H2671=HTd/Ncmpa)\tL= החצי ¦ ;\tH2671\t\t\tH9009=ה=the/{H2671=חֵץ=arrow}",
+  "1Sa.20.38#13=Q(K)\tהַ֣/חִצִּ֔ים\tha./che.tzi\tthe/ arrows\tH9009/{H2671}\tHTd/Ncmpa\tK= ha./che.tzi (הַ/חֵצִי) \"the/ arrow\" (H9009/H2678=HTd/Ncmsa)\tL= הַ֣/חִצִּ֔י ¦ ;\tH2671\tH2678\t\tH9009=ה=the/{H2671=חֵץ=arrow}",
   "Isa.63.19#01=L\tהָיִ֗ינוּ\tha.Yi.nu\twe have been\t{H1961}\tHVqp1cp\t\t\tH1961\t\t\t{H1961=הָיָה=to be}",
   "Isa.64.1(63.19)#10=L\tלוּא\\־\tlu'-\tif\t{H3863}\\H9014\tHTc\t\t\tH3863\t\t\t{H3863=לוּא=if only}\\H9014=־=link",
   "Isa.64.1(63.19)#11=L\tקָרַ֤עְתָּ\tka.Ra'.ta\tyou tore\t{H7167}\tHVqp2ms\t\t\tH7167\t\t\t{H7167=קָרַע=to tear}",
@@ -61,12 +61,28 @@ test("parseTahot keys rows by the Hebrew chapter and verse, in word order, witho
   const q = sam.get("20:38")[0];
   assert.equal(q.type, "Q(K)");
   assert.equal(q.he, "הַ֣/חִצִּ֔ים");
-  assert.equal(q.ketiv, "הַ/חִצִּים");
+  assert.equal(q.n, 13);
+  assert.equal(q.ketiv, "הַ/חֵצִי", "the ketiv, not the qere");
   assert.equal(sam.get("13:1"), undefined, "an X row is not Masoretic text");
   const isa = parseTahot(TAHOT, "Isa");
   assert.deepEqual(isa.get("63:19").map(r => r.n), [1, 10, 11], "English 64:1 is Hebrew 63:19, after its first half");
   assert.equal(isa.get("64:1"), undefined);
   assert.equal(parseTahot(TAHOT, "Gen").size, 0);
+});
+
+// Four more real TAHOT rows (CC BY 4.0, as above): a Q(K) ketiv with punctuation, a ketiv-only row and
+// the word before it, and a Q(k) row whose ketiv sits in the spelling variants.
+const TAHOT_KETIV = [
+  "Gen.9.21#07=Q(K)\tאָהֳלֽ/וֹ\\׃\t'o.ho.L/o\ttent/ his\t{H0168G}/H9023\\H9016\tHNcmsc/Sp3ms\tK= 'o.ho.Lo/h (אָהֳלֹ/ה\\׃) \"tent/ his\" (H0168G/H9023\\H9016=HNcbsc/Sp3ms)\tL= אָהֳלֹֽ/ה\\׃ ¦ ;\tH0168G\t\t\t{H0168G=אֹ֫הֶל=: tent»tent:1_tent}/H9023=Ps3m=his\\H9016=׃=verseEnd",
+  "Jdg.16.25#01=L\tוַֽ/יְהִי֙\tva/y.Hi\tand/ it was\tH9001/{H1961}\tHc/Vqw3ms\t\t\tH1961\t\t\tH9001=ו=&/{H1961=הָיָה=to be}",
+  "Jdg.16.25#02=Q(K)\t\t[ ]\t[ ]\t\t\tK= ki (כִּי) \"for\" (H3588A=HR)\tL= כְּי ¦ ;\t\tH3588A\t\t",
+  "Isa.10.6#12=Q(k)\tוּ/לְ/שׂוּמ֥/וֹ\tu./le./si.mo/v\tand/ to/ make/ it\tH9002/H9005/{H7760A}/H9033\tHC/R/Vqcc/Sp3ms\t\tL= וּ/לְ/שׂיּמ֥/וֹ ¦ ;K= וּ/לְ/שִׂימ/וֹ\tH7760A\t\t\tH9002=ו=and/H9005=ל=to/{H7760A=שׂוּם=: make»to set:1_make;_establish}/H9033=Os3m=him",
+].join("\n");
+
+test("parseTahot: a Q(k) ketiv from the spelling variants, the ketiv without punctuation, a ketiv-only row skipped", () => {
+  assert.equal(parseTahot(TAHOT_KETIV, "Isa").get("10:6")[0].ketiv, "וּ/לְ/שִׂימ/וֹ");
+  assert.equal(parseTahot(TAHOT_KETIV, "Gen").get("9:21")[0].ketiv, "אָהֳלֹ/ה");
+  assert.deepEqual(parseTahot(TAHOT_KETIV, "Jdg").get("16:25").map(r => r.n), [1], "a row with no Hebrew is not a word on the page");
 });
 
 test("parseTbesh keys entries by dStrong with its letter", () => {
@@ -105,6 +121,10 @@ test("decodeMorph: verbs, nouns, prefixes, suffixes, particles; unknown letters 
   assert.deepEqual(decodeMorph("HC/Vhv2fs"), [{ k: "C" }, { k: "V", stem: "h", form: "v", p: 2, g: "f", n: "s" }]);
   assert.deepEqual(decodeMorph("HVqrmsc/Sp3mp"), [{ k: "V", stem: "q", form: "r", g: "m", n: "s", st: "c" }, { k: "S", kind: "p", p: 3, g: "m", n: "p" }]);
   assert.deepEqual(decodeMorph("HVqcc"), [{ k: "V", stem: "q", form: "c" }]);
+  assert.deepEqual(decodeMorph("HVqaa"), [{ k: "V", stem: "q", form: "a" }]);
+  assert.deepEqual(decodeMorph("HVqc1cs"), [{ k: "V", stem: "q", form: "h", p: 1, g: "c", n: "s" }], "TAHOT's cohortative: c with a person");
+  assert.deepEqual(decodeMorph("HVqc1cp"), [{ k: "V", stem: "q", form: "h", p: 1, g: "c", n: "p" }]);
+  assert.deepEqual(decodeMorph("HC/Vqu1cs"), [{ k: "C" }, { k: "V", stem: "q", form: "u", p: 1, g: "c", n: "s" }]);
   assert.deepEqual(decodeMorph("HAomsa"), [{ k: "A", kind: "o", g: "m", n: "s", st: "a" }]);
   assert.deepEqual(decodeMorph("HPp1bs"), [{ k: "P", kind: "p", p: 1, g: "b", n: "s" }]);
   assert.deepEqual(decodeMorph("HTn"), [{ k: "T", kind: "n" }]);
@@ -115,6 +135,7 @@ test("decodeMorph: verbs, nouns, prefixes, suffixes, particles; unknown letters 
   assert.deepEqual(decodeMorph(""), []);
   assert.equal(STEMS.q, "Qal"); assert.equal(STEMS.N, "Niphal"); assert.equal(STEMS.h, "Hiphil"); assert.equal(STEMS.t, "Hithpael");
   assert.deepEqual(FORMS.w, ["narrative past (wayyiqtol)", "the usual past tense of a story"]);
+  assert.deepEqual(FORMS.u, ["conjunctive imperfect (weyiqtol)", "so that …, may …"]);
 });
 
 test("segmentsOf zips the morph parts with the Hebrew pieces, glosses and dStrongs; rootOf names the root", () => {

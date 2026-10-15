@@ -45,9 +45,18 @@ export const skeleton = s => L.stripMarks(L.divineName(String(s == null ? "" : s
 // The ref is the English numbering with the Hebrew in brackets when it differs; rows are keyed here by
 // the Hebrew. Punctuation follows a backslash in the Hebrew and the dStrongs. Type X rows are words
 // from the Septuagint that are not in the Masoretic text.
-const TAHOT_ROW = /^([A-Za-z0-9]+)\.(\d+)\.(\d+)(?:\((\d+)\.(\d+)\))?#(\d+)=(\S*)\t([^\t\n]*)\t[^\t\n]*\t([^\t\n]*)\t([^\t\n]*)\t([^\t\n]*)\t([^\t\n]*)/gm;
-// groups: 1 book, 2 ch, 3 v, 4 heCh, 5 heV, 6 n, 7 type, 8 hebrew, (transliteration skipped), 9 gloss, 10 dStrongs, 11 morph, 12 meaning variants
+const TAHOT_ROW = /^([A-Za-z0-9]+)\.(\d+)\.(\d+)(?:\((\d+)\.(\d+)\))?#(\d+)=(\S*)\t([^\t\n]*)\t[^\t\n]*\t([^\t\n]*)\t([^\t\n]*)\t([^\t\n]*)\t([^\t\n]*)(?:\t([^\t\n]*))?/gm;
+// groups: 1 book, 2 ch, 3 v, 4 heCh, 5 heV, 6 n, 7 type, 8 hebrew, (transliteration skipped), 9 gloss, 10 dStrongs, 11 morph, 12 meaning variants, 13 spelling variants
+// A Q(K) row names its ketiv in the meaning variants ("K= translit (hebrew) ..."); a Q(k) row, where the
+// ketiv differs only in spelling, names it in the spelling variants ("L= ... ¦ ;K= hebrew").
 const KETIV_IN_VARIANT = /K=\s*\S+\s*\(([^)]*)\)/;
+const KETIV_IN_SPELLING = /K=\s*([^¦;\t]+)/;
+
+function ketivOf(meaning, spelling) {
+  const kv = KETIV_IN_VARIANT.exec(meaning || "") || KETIV_IN_SPELLING.exec(spelling || "");
+  const k = kv ? kv[1].split("\\")[0].trim() : "";
+  return k || null;
+}
 
 export function parseTahot(text, stepCode) {
   const out = new Map();
@@ -55,11 +64,13 @@ export function parseTahot(text, stepCode) {
   let m;
   while ((m = TAHOT_ROW.exec(text))) {
     if (m[1] !== stepCode || m[7].startsWith("X")) continue;
+    const he = m[8].split("\\")[0];
+    if (!he.trim()) continue;   // a ketiv-only row (no qere word): not a word of the reading as the page shows it
     const ch = m[4] ? +m[4] : +m[2], v = m[5] ? +m[5] : +m[3];
     const key = `${ch}:${v}`;
     if (!out.has(key)) out.set(key, []);
-    const kv = m[7].startsWith("Q") ? KETIV_IN_VARIANT.exec(m[12]) : null;
-    out.get(key).push({ n: +m[6], type: m[7], he: m[8].split("\\")[0], gloss: m[9], strongs: m[10].split("\\")[0], morph: m[11], ketiv: kv ? kv[1] : null });
+    const ketiv = m[7].startsWith("Q") ? ketivOf(m[12], m[13]) : null;
+    out.get(key).push({ n: +m[6], type: m[7], he, gloss: m[9], strongs: m[10].split("\\")[0], morph: m[11], ketiv });
   }
   for (const rows of out.values()) rows.sort((a, b) => a.n - b.n);
   return out;
@@ -134,7 +145,7 @@ export const STEMS = { q: "Qal", N: "Niphal", p: "Piel", P: "Pual", h: "Hiphil",
 export const STEM_HINTS = { q: "simple action", N: "passive or reflexive", p: "intensive", P: "intensive, passive", h: "causing", H: "causing, passive", t: "reflexive", Q: "simple action, passive", o: "intensive", O: "intensive, passive", r: "reflexive", v: "reflexive" };
 export const FORMS = {
   p: ["perfect", "completed action, usually past"], q: ["sequential perfect (weqatal)", "carries the story on; usually future or a command"],
-  i: ["imperfect", "ongoing or future"], w: ["narrative past (wayyiqtol)", "the usual past tense of a story"],
+  i: ["imperfect", "ongoing or future"], u: ["conjunctive imperfect (weyiqtol)", "so that …, may …"], w: ["narrative past (wayyiqtol)", "the usual past tense of a story"],
   h: ["cohortative", "let me, let us"], j: ["jussive", "let it; a wish or a command"], v: ["imperative", "a command"],
   r: ["active participle", "-ing; one who"], s: ["passive participle", "-ed; being"],
   a: ["infinitive absolute", "the bare verb, for emphasis"], c: ["infinitive construct", "to …"],
@@ -159,7 +170,10 @@ export function decodeMorph(code) {
       case "D": return { k: "D" };
       case "R": return rest === "d" ? { k: "R", def: true } : { k: "R" };
       case "T": return { k: "T", kind: rest[0] || "" };
-      case "V": { const seg = { k: "V", stem: rest[0], form: rest[1] }; const tail = rest.slice(2); if (seg.form === "r" || seg.form === "s") gns(tail, seg); else if (seg.form !== "a" && seg.form !== "c") pgn(tail, seg); return seg; }   // an infinitive has no person, gender or number
+      case "V": { const seg = { k: "V", stem: rest[0], form: rest[1] }; const tail = rest.slice(2); if (seg.form === "r" || seg.form === "s") gns(tail, seg);
+        else if (seg.form === "c" && /^[123]/.test(tail)) { seg.form = "h"; pgn(tail, seg); }   // TAHOT writes the cohortative as c + person (Vqc1cs)
+        else if (!((seg.form === "a" || seg.form === "c") && /^[ac]?$/.test(tail))) pgn(tail, seg);   // an infinitive (Vqcc, Vqaa) has no person, gender or number
+        return seg; }
       case "N": { const seg = { k: "N", kind: rest[0] }; const tail = rest.slice(1); if (seg.kind === "p") { if (tail[0]) seg.pk = tail[0]; } else gns(tail, seg); return seg; }
       case "A": { const seg = { k: "A", kind: rest[0] }; gns(rest.slice(1), seg); return seg; }
       case "P": { const seg = { k: "P", kind: rest[0] }; pgn(rest.slice(1), seg); return seg; }
