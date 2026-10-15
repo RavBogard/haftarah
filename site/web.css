@@ -81,7 +81,7 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .settings .seg button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
 .settings .seg button:hover:not([aria-pressed="true"]) { background: var(--hover); color: var(--ink); }
 .settings .switch { width: 2.6rem; height: 1.45rem; border: .5px solid var(--frame); position: relative; }
-.settings .switch::before { content: ""; position: absolute; inset: -.75rem 0; }   /* hit area: 44px tall, the look is unchanged */
+.settings .switch::before { content: ""; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: max(2.75rem, 44px); height: max(2.75rem, 44px); }   /* hit area: 44px at every text size, the look is unchanged */
 .settings .switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: calc(1.45rem - 5px); height: calc(1.45rem - 5px); background: var(--frame); transition: transform .18s ease-out; }
 .settings .switch[aria-checked="true"] { border-color: var(--ink); } .settings .switch[aria-checked="true"]::after { background: var(--ink); transform: translateX(1.15rem); }
 .settings .dl { min-height: max(2.75rem, 44px); display: flex; align-items: center; gap: .5rem; color: var(--rubric); font-weight: 500; text-decoration: none; }

@@ -28,7 +28,7 @@ test("site pages load scripts only from files", () => {
 test("no setAttribute('style') and no inline event handler in the site's markup or scripts", () => {
   const files = [...readdirSync(site()).filter(f => f.endsWith(".html")).map(f => site(f)), ...readdirSync(site("app")).filter(f => f.endsWith(".js")).map(f => site("app", f))];
   // an on*= attribute inside a tag (a quote after the = tells it from a destructuring default such as onExit = () => {})
-  const bad = /setAttribute\(\s*["'`]style["'`]|<[a-z][^<>]*\son[a-z]+\s*=\s*["'`]/i;
+  const bad = /setAttribute\(\s*["'`](style|on[a-z]+)["'`]|<[a-z][^<>]*\son[a-z]+\s*=\s*["'`]/i;
   assert.deepEqual(files.filter(f => bad.test(readFileSync(f, "utf8"))), []);
 });
 
