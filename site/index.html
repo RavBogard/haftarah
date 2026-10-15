@@ -30,7 +30,13 @@
     <noscript><p class="status">This page needs JavaScript to list the sheets. The printed sheets are on <a href="https://drive.google.com/drive/folders/1TbSmoeBaCSLciL_-_HSCuKWkJMSZvGwd">Google Drive</a>.</p></noscript>
     <p class="status" id="status" hidden></p>
     <section class="thisweek" id="thisweek" hidden></section>
-    <section class="index" id="index" hidden><h2>All sheets</h2><ol id="weeks"></ol></section>
+    <section class="index" id="index" hidden><h2>All sheets</h2>
+      <div class="doors" role="group" aria-label="Browse the sheets"><button type="button" data-door="week" aria-pressed="true">By week</button><button type="button" data-door="parashah" aria-pressed="false">By parashah</button><button type="button" data-door="book" aria-pressed="false">By book</button><button type="button" data-door="special" aria-pressed="false">Special Shabbatot</button></div>
+      <div class="door" id="door-week"><ol id="weeks"></ol></div>
+      <div class="door pgrid" id="door-parashah" hidden></div>
+      <div class="door" id="door-book" hidden></div>
+      <div class="door" id="door-special" hidden></div>
+    </section>
   </section>
   <footer class="foot">
     <span>Hebrew: Miqra according to the Masorah. English: THE JPS TANAKH: Gender-Sensitive Edition (JPS, 2023). Sources from Sefaria.</span>

@@ -252,3 +252,10 @@ test("isPresent reads ?present with or without a value", () => {
   assert.equal(isPresent("?trope=1"), false);
   assert.equal(isPresent(""), false);
 });
+
+test("rowHtml shows a week with a Torah reading on two lines: the Torah's ref, then the haftarah's", () => {
+  const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const html = rowHtml({ slug: "s", shabbat: "S", ref: "Isaiah 54:1–55:5", readings: [{ kind: "torah", ref: "Genesis 6:9–7:16" }, { kind: "haftarah", ref: "Isaiah 54:1–55:5" }] }, false, esc);
+  assert.match(html, /<span class="r two"><span>Genesis 6:9–7:16<\/span><span>Isaiah 54:1–55:5<\/span><\/span>/);
+  assert.match(rowHtml({ slug: "s", shabbat: "S", ref: "R" }, false, esc), /<span class="r">R<\/span>/);
+});

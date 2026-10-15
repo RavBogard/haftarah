@@ -346,3 +346,29 @@ html[data-present] { overflow: hidden; }
 .settings .present-btn { color: var(--rubric); font-weight: 500; min-height: max(2.75rem, 44px); text-align: left; }
 .settings .present-btn:hover { text-decoration: underline; }
 @media print { .present { display: none !important; } }
+
+/* ---- the library's doors (landing) ---- */
+.doors { display: flex; flex-wrap: wrap; gap: .5rem; margin: 0 0 1.25rem; }
+.doors button { min-height: 2.75rem; padding: 0 1rem; border: .5px solid var(--frame); border-radius: 999px; color: var(--ink-2); font-size: .95rem; }
+.doors button:hover { color: var(--ink); background: var(--hover); }
+.doors button[aria-pressed="true"] { color: var(--paper); background: var(--ink); border-color: var(--ink); }
+.index li .r.two { display: flex; flex-direction: column; }
+.pgrid .band { margin: 0 0 1.5rem; }
+.pgrid h3, .books h3 { font-size: .88rem; font-weight: 600; color: var(--ink-2); margin: 0 0 .5rem; }
+.pgrid .cells { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr)); gap: .5rem; }
+.pgrid .cell a, .pgrid .cell.empty { display: flex; flex-direction: column; min-height: 3.75rem; padding: .45rem .6rem; border: .5px solid var(--legend-unused); text-decoration: none; }
+.pgrid .cell a:hover { background: var(--hover); }
+.pgrid .cell .he { font-family: var(--hebrew); color: var(--ink-2); direction: rtl; text-align: left; }
+.pgrid .cell.empty { color: var(--legend-unused); }
+.pgrid .cell.empty .he { color: var(--legend-unused); }
+.pgrid .cell.current a { outline: 1.5px solid var(--rubric); outline-offset: -1.5px; }
+.pgrid .dots { display: flex; gap: 3px; margin-top: .3rem; }
+.pgrid .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--rubric); }
+.books { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
+.books ol, .specials { list-style: none; margin: 0; padding: 0; }
+.books li, .specials li { display: flex; gap: .75rem; align-items: baseline; padding: .5rem 0; border-bottom: .5px solid var(--legend-unused); }
+.books li a, .specials li a { min-height: 2.75rem; display: inline-flex; align-items: center; text-decoration: none; }
+.books li a:hover, .specials li a:hover { text-decoration: underline; }
+.books .ch { color: var(--ink-2); font-feature-settings: "lnum"; flex: 1; }
+.books .n, .specials .n { color: var(--ink-2); font-size: .88rem; margin-left: auto; }
+@media (max-width: 640px) { .books { grid-template-columns: 1fr; } }

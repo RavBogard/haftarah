@@ -151,6 +151,10 @@ async function main() {
     expect("landing errors", l.errors === "0", l.errors);
     expect("one week listed", l.weeks === "1", l.weeks);
     expect("hero is the week", l.hero === slug, l.hero);
+    expect("four doors", l.doors === "4", l.doors);
+    expect("the grid has a cell for every parashah", l.cells === "54", l.cells);
+    expect("the week's parashah holds a sheet", l.held === "1", l.held);
+    expect("a door shows its view and hides the others", l["door-switch"] === "ok", l["door-switch"]);
     // The library's short addresses: the fixture week is filed under its parashah and year.
     const key = L.parashahKey(raw.shabbat.parashah.en), cycle = String(raw.series.year);
     const book = (PARASHOT.find(x => x.key === key) || { book: "Genesis" }).book;

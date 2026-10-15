@@ -50,3 +50,47 @@ export function weeksFor(alias, weeks) {
   if (alias.kind === "special") return { title: alias.en, weeks: list.filter(w => (w.tags || []).includes(alias.tag)) };
   return { title: "", weeks: [] };
 }
+
+/** The by-parashah grid: five book bands, a cell per parashah in Torah order with its years and latest sheet. */
+export function parashahGrid(weeks, { currentSlug = null } = {}) {
+  return TORAH_BOOKS.map(book => ({
+    book,
+    cells: PARASHOT.filter(p => p.book === book).map(p => {
+      const mine = (weeks || []).filter(w => weekKeys(w).includes(p.key)).sort(newestFirst);
+      return {
+        key: p.key, en: p.en, he: p.he,
+        years: [...new Set(mine.map(w => String(w.cycle || "")).filter(Boolean))].sort(),
+        latest: mine.length ? mine[0].slug : null,
+        current: !!currentSlug && mine.some(w => w.slug === currentSlug),
+      };
+    }),
+  }));
+}
+
+/** The chapters a list of refs covers, sorted: "Isaiah 54:1–55:5" → 54, 55; "…; 29:22–23" adds 29. */
+export function chaptersOf(refs) {
+  const out = new Set();
+  for (const ref of refs || []) for (const m of String(ref).matchAll(/(\d+):\d+(?:[–-](\d+):\d+)?/g)) {
+    const a = Number(m[1]), z = m[2] ? Number(m[2]) : a;
+    for (let c = a; c <= z; c++) out.add(c);
+  }
+  return [...out].sort((a, b) => a - b);
+}
+
+/** The by-book door: the Torah books with their weeks; the haftarah books that hold sheets, Joshua to Malachi, with the chapters covered. */
+export function byBook(weeks) {
+  const list = (weeks || []).slice().sort(newestFirst);
+  return {
+    torah: TORAH_BOOKS.map(book => ({ book, key: keyOf(book), weeks: list.filter(w => torahBookOf(w) === book) })),
+    prophets: PROPHET_BOOKS.map(book => {
+      const ws = list.filter(w => haftarahBookOf(w) === book);
+      return { book, key: keyOf(book), weeks: ws, chapters: chaptersOf(ws.map(haftarahRefOf)) };
+    }).filter(b => b.weeks.length),
+  };
+}
+
+/** The special-Shabbat door: the specials that hold sheets, in SPECIALS order. */
+export function specials(weeks) {
+  const list = (weeks || []).slice().sort(newestFirst);
+  return SPECIALS.map(s => ({ tag: s.tag, en: s.en, weeks: list.filter(w => (w.tags || []).includes(s.tag)) })).filter(s => s.weeks.length);
+}
