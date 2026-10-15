@@ -6,7 +6,7 @@
  *
  *   node scripts/publish.mjs weeks/<slug> [--dry-run] [--token TOKEN] [--store URL] [--api URL]
  *   node scripts/publish.mjs --reindex [--dry-run]               # rebuild index.json from the store's weeks (the record)
- *   node scripts/publish.mjs --reindex --from weeks [--dry-run]  # upsert the weeks in a local folder into the index
+ *   node scripts/publish.mjs --reindex --from weeks [--dry-run]  # refresh the index rows of already-published weeks from a local folder
  *
  * Config, first found wins: --token; HAFTARAH_BLOB_TOKEN; the JSON file at
  * $HAFTARAH_WEB_CONFIG or ~/.haftarah-web.json ({"token": "..."}). The token is never printed, and a
@@ -22,6 +22,7 @@ import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import { SLUG, weekPath, INDEX_PATH, PDF_FILES } from "../site/app/contract.js";
 import { parashahKeysOf, weekTags } from "../site/app/parashot.js";
+import { hasTorahReading } from "./week-files.mjs";
 
 const L = createRequire(import.meta.url)("../template/lib.js");
 
@@ -64,7 +65,6 @@ export function cleanSheet(data) {
   return dropStatus(out);
 }
 
-const hasTorah = sheet => L.readings(sheet).some(r => r.kind === "torah" && (r.verses || []).length);
 
 /** One row of index.json (v2: the v1 fields, plus what the library groups by). */
 export function indexEntry(sheet, slug, published) {
@@ -81,7 +81,7 @@ export function indexEntry(sheet, slug, published) {
     readings: L.readings(sheet).map(r => ({ id: r.id, kind: r.kind, ref: L.enDash(r.ref || ""), book: r.book || "", ...(r.selection ? { selection: r.selection } : {}) })),
     parashahKeys: parashahKeysOf(p.en || ""),
     tags: weekTags({ parashah: p.en || "", special: s.special || null }),
-    pdfTorah: hasTorah(sheet) ? weekPath(slug, PDF_FILES.torah) : null,
+    pdfTorah: hasTorahReading(sheet) ? weekPath(slug, PDF_FILES.torah) : null,
   };
 }
 
@@ -196,15 +196,27 @@ export function weeksInListing(blobs) {
   return m;
 }
 
+/** Throws unless the token is for the site's store; the message never contains the token. */
+function assertSiteStore(token) {
+  const id = storeIdFromToken(token);
+  if (!id || id.toLowerCase() !== STORE_ID.toLowerCase()) throw new Error(`publish: the Blob token is for store ${id || "(unknown)"}, not the site's store ${STORE_ID}; nothing uploaded`);
+}
+
 /**
  * Rebuild index.json. With no `from`, the store's listing is the record: a row per weeks/<slug>/sheet.json,
  * made by indexEntry from the published sheet, keeping each week's earlier `published` time; rows whose
- * sheet is gone are dropped and named. With `from` (a local weeks folder), each week found there is
- * upserted into the current index and nothing else changes. The index is uploaded last.
+ * sheet is gone are dropped and named; `pdfTorah` only where the store holds sheet-torah.pdf. A listing
+ * with no weeks never replaces an index that had some. With `from` (a local weeks folder), the index rows
+ * of weeks already published are refreshed from the local sheets; a local week not in the index is
+ * skipped and named (deliver publishes it), and nothing else changes. The index is uploaded last.
  */
 export async function reindex({ from = null, dryRun = false, config = null, log = console.log, fetchImpl = globalThis.fetch, api = BLOB_API, store = null, now = () => new Date() } = {}) {
   const stamp = now().toISOString().replace(/\.\d{3}Z$/, "Z");
   const origin = store || STORE_ORIGIN;
+  if (!from) {
+    if (!config || !config.token) throw new Error("--reindex from the store needs the Blob token (or use --from <weeks folder>)");
+    assertSiteStore(config.token);   // before the listing: a token for another store would list the wrong weeks
+  }
   const current = await fetchIndex(origin, fetchImpl);
   const before = new Map((current.weeks || []).map(w => [w.slug, w]));
   let index;
@@ -212,12 +224,12 @@ export async function reindex({ from = null, dryRun = false, config = null, log 
     index = { schema: 2, updated: stamp, weeks: (current.weeks || []).slice() };
     for (const name of (await readdir(from)).sort()) {
       if (!SLUG.test(name) || !(await exists(join(from, name, "sheet.json")))) continue;
+      if (!before.has(name)) { log(`skip     ${name}  (not published; deliver it first)`); continue; }
       const clean = cleanSheet(JSON.parse(await readFile(join(from, name, "sheet.json"), "utf8")));
-      index = upsertIndex(index, indexEntry(clean, name, (before.get(name) || {}).published || stamp), stamp);
+      index = upsertIndex(index, indexEntry(clean, name, before.get(name).published || stamp), stamp);
       log(`index    ${name}  (from ${join(from, name, "sheet.json")})`);
     }
   } else {
-    if (!config || !config.token) throw new Error("--reindex from the store needs the Blob token (or use --from <weeks folder>)");
     const weeks = weeksInListing(await listBlobs({ token: config.token, prefix: "weeks/", fetchImpl, api }));
     index = { schema: 2, updated: stamp, weeks: [] };
     for (const [slug, files] of [...weeks].sort(([a], [b]) => a.localeCompare(b))) {
@@ -225,15 +237,17 @@ export async function reindex({ from = null, dryRun = false, config = null, log 
       const res = await fetchImpl(`${files["sheet.json"].url}?${Date.now()}`, { method: "GET", headers: { "cache-control": "no-cache" } });
       if (!res.ok) throw new Error(`${slug}/sheet.json: Blob answered HTTP ${res.status}; nothing was changed`);
       const published = (before.get(slug) || {}).published || files["sheet.json"].uploadedAt || stamp;
-      index = upsertIndex(index, indexEntry(await res.json(), slug, published), stamp);
+      const entry = indexEntry(await res.json(), slug, published);
+      if (!files[PDF_FILES.torah]) entry.pdfTorah = null;   // the link only where the store holds the PDF
+      index = upsertIndex(index, entry, stamp);
       log(`index    ${slug}`);
     }
     for (const slug of before.keys()) if (!weeks.has(slug)) log(`dropped  ${slug}  (in the old index, not in the store)`);
+    if (before.size && !index.weeks.length) throw new Error(`publish --reindex: the store listing had no weeks; refusing to replace a ${before.size}-week index (nothing uploaded)`);
   }
   if (dryRun) { log(`index.json  (${index.weeks.length} weeks; dry run, nothing uploaded)`); return { index }; }
   const token = config && config.token;
-  const id = storeIdFromToken(token);
-  if (!id || id.toLowerCase() !== STORE_ID.toLowerCase()) throw new Error(`publish: the Blob token is for store ${id || "(unknown)"}, not the site's store ${STORE_ID}; nothing uploaded`);
+  assertSiteStore(token);
   const body = Buffer.from(JSON.stringify(index), "utf8");
   const r = await putBlob({ pathname: INDEX_PATH, body, contentType: "application/json", maxAge: MAX_AGE.json, token, fetchImpl, api });
   log(`web      ${INDEX_PATH}  ${human(body.length)}  ${r.url}  (${index.weeks.length} week${index.weeks.length === 1 ? "" : "s"})`);
@@ -251,7 +265,7 @@ export async function publish(dir, { dryRun = false, config, log = console.log, 
   if (!(await exists(join(dir, "sheet.json")))) throw new Error(`${dir} is missing sheet.json`);
   const raw = JSON.parse(await readFile(join(dir, "sheet.json"), "utf8"));
   // The printed sheets: the haftarah's always, the Torah's when the week has a Torah reading.
-  const pdfs = [["pdf", PDF_FILES.haftarah], ...(hasTorah(raw) ? [["pdfTorah", PDF_FILES.torah]] : [])];
+  const pdfs = [["pdf", PDF_FILES.haftarah], ...(hasTorahReading(raw) ? [["pdfTorah", PDF_FILES.torah]] : [])];
   for (const [, f] of pdfs) if (!(await exists(join(dir, f)))) throw new Error(`${dir} is missing ${f}`);
   if (raw.slug && raw.slug !== slug) throw new Error(`publish: folder "${slug}" does not match sheet.json slug "${raw.slug}"`);
   const clean = cleanSheet(raw);
@@ -274,10 +288,7 @@ export async function publish(dir, { dryRun = false, config, log = console.log, 
   }
 
   const token = config.token;
-  const id = storeIdFromToken(token);
-  if (!id || id.toLowerCase() !== STORE_ID.toLowerCase()) {
-    throw new Error(`publish: the Blob token is for store ${id || "(unknown)"}, not the site's store ${STORE_ID}; nothing uploaded`);
-  }
+  assertSiteStore(token);
   const urls = {};
   const r1 = await putBlob({ pathname: paths.sheet, body: json, contentType: "application/json", maxAge: MAX_AGE.json, token, fetchImpl, api });
   urls.sheet = r1.url;

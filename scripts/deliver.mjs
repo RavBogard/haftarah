@@ -12,7 +12,8 @@
  *
  * Public folder: sheet.pdf as "<date> <parashah> — <ref with ':' as '.'>.pdf"; a week with a Torah
  * reading sends sheet-torah.pdf too, and both names gain the reading ("<date> <parashah> Torah — …",
- * "… Haftarah — …"). A PDF older than sheet.json is refused (run build.mjs again).
+ * "… Haftarah — …"). In a week with a Torah reading, either PDF (sheet.pdf or sheet-torah.pdf) older
+ * than sheet.json is refused (run build.mjs again); a haftarah-only week's sheet.pdf is not checked.
  * Working folder, subfolder <slug>: sheet.json, candidates.json, texts.json, digest.md, briefing.md,
  * candidates-torah.json, texts-torah.json, prior.json (those present) and the PDFs under their public names.
  *
@@ -24,7 +25,7 @@ import { homedir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { publish, loadWebConfig } from "./publish.mjs";
-import { PDF_FILES, READING_FILES, PRIOR_FILE } from "./week-files.mjs";
+import { PDF_FILES, READING_FILES, PRIOR_FILE, torahReading } from "./week-files.mjs";
 import { createRequire } from "node:module";
 const L = createRequire(import.meta.url)("../template/lib.js");
 
@@ -62,16 +63,17 @@ export async function planFiles(dir, { only } = {}) {
   const sheet = JSON.parse(await readFile(join(dir, "sheet.json"), "utf8"));
   const slug = basename(resolve(dir));
   // A week with a Torah reading has two PDFs; each name says which reading it is. A week with one keeps the old name.
-  const torah = L.readings(sheet).find(r => r.kind === "torah" && (r.verses || []).length) || null;
+  const torah = torahReading(sheet);
   const pdfs = [];
   if (torah) {
     if (!(await exists(join(dir, PDF_FILES.torah)))) throw new Error(`${dir} is missing ${PDF_FILES.torah} (the sheet has a Torah reading; run build.mjs)`);
     pdfs.push({ path: join(dir, PDF_FILES.torah), name: publicName(L.readingView(sheet, torah.id), { label: "Torah" }) });
   }
   pdfs.push({ path: join(dir, PDF_FILES.haftarah), name: publicName(L.readingView(sheet, L.primaryReading(sheet).id), torah ? { label: "Haftarah" } : {}) });
-  // Never ship a stale Torah PDF: it must be at least as new as the sheet it was built from. (The haftarah PDF has no such check.)
+  // In a two-reading week, never ship a stale PDF: both must be at least as new as the sheet they were
+  // built from (a `build --reading torah` after a haftarah edit leaves sheet.pdf behind). A haftarah-only week is not checked.
   const sheetTime = (await stat(join(dir, "sheet.json"))).mtimeMs;
-  for (const p of torah ? pdfs.slice(0, 1) : []) {
+  for (const p of torah ? pdfs : []) {
     if ((await stat(p.path)).mtimeMs < sheetTime) throw new Error(`${basename(p.path)} is older than sheet.json; run build.mjs`);
   }
   const files = [];

@@ -284,7 +284,10 @@ test("deliver never ships a stale PDF: a PDF older than sheet.json is refused wi
   await assert.rejects(deliver(w, { config: { url: `${base}/exec`, token: TOKEN }, log: () => {} }), /older than sheet\.json/);
   await utimes(join(w, "sheet-torah.pdf"), now, now);
   await utimes(join(w, "sheet.pdf"), past, past);
-  await planFiles(w);   // only the Torah PDF is checked
+  // A Torah week checks both: `build --reading torah` after a haftarah edit leaves sheet.pdf stale.
+  await assert.rejects(planFiles(w), err => /^sheet\.pdf is older than sheet\.json; run build\.mjs$/.test(err.message));
+  await utimes(join(w, "sheet.pdf"), now, now);
+  await planFiles(w);   // both fresh again: fine
 });
 
 test("a haftarah-only week whose sheet.pdf is older than sheet.json still plans and dry-runs (no mtime check on that path)", async () => {

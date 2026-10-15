@@ -21,7 +21,7 @@ import { createRequire } from "node:module";
 
 import { lintSheet, formatLint } from "./lint.mjs";
 import { loadCustoms } from "./customs.mjs";
-import { HTML_FILES, PDF_FILES, TROPE_HTML } from "./week-files.mjs";
+import { HTML_FILES, PDF_FILES, TROPE_HTML, readingsWithVerses } from "./week-files.mjs";
 
 const HaftarahLib = createRequire(import.meta.url)("../template/lib.js");
 
@@ -62,7 +62,7 @@ export function haftarahColophonData(data) {
 
 /** The readings this build makes: every reading with verses, in the sheet's order, or only the one --reading names. */
 export function readingsToBuild(file, only = null) {
-  const all = HaftarahLib.readings(file).filter(r => (r.verses || []).length);
+  const all = readingsWithVerses(file);
   const pick = only ? all.filter(r => r.kind === only) : all;
   if (!pick.length) throw new Error(only ? `this sheet has no ${only} reading with verses` : "this sheet has no reading with verses");
   return pick.map(r => ({ id: r.id, kind: r.kind }));

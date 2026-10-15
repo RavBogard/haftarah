@@ -12,7 +12,7 @@ import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { findBrowser } from "./build.mjs";
 import { dumpDom } from "./chrome.mjs";
-import { HTML_FILES, TROPE_HTML } from "./week-files.mjs";
+import { HTML_FILES, TROPE_HTML, readingsWithVerses } from "./week-files.mjs";
 import { createRequire } from "node:module";
 const L = createRequire(import.meta.url)("../template/lib.js");
 
@@ -106,6 +106,19 @@ export function gapReport(n, p, next) {
   return lines.join("\n");
 }
 
+/**
+ * What to check: every reading with verses, or the one --reading names (torah or haftarah; anything
+ * else is refused), or the haftarah's chanter's copy with trope. Throws when there is nothing to check.
+ */
+export function checkTargets(file, { only = null, trope = false } = {}) {
+  if (only != null && !Object.prototype.hasOwnProperty.call(HTML_FILES, only)) throw new Error(`--reading takes torah or haftarah${only ? `, not "${only}"` : ""}`);
+  // The chanter's copy exists for the haftarah only.
+  if (trope) return [{ id: L.primaryReading(file).id, kind: "haftarah", html: TROPE_HTML }];
+  const targets = readingsWithVerses(file).filter(r => !only || r.kind === only).map(r => ({ id: r.id, kind: r.kind, html: HTML_FILES[r.kind] }));
+  if (!targets.length) throw new Error(only ? `no ${only} reading with verses to check` : "no reading with verses to check");
+  return targets;
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const dirArg = args.find((a, i) => !a.startsWith("--") && args[i - 1] !== "--reading");
@@ -113,13 +126,10 @@ async function main() {
   const weekDir = resolve(dirArg);
   const trope = args.includes("--trope");
   const ri = args.indexOf("--reading");
-  const only = ri >= 0 ? args[ri + 1] : null;
+  const only = ri >= 0 ? (args[ri + 1] && !args[ri + 1].startsWith("--") ? args[ri + 1] : "") : null;
   const file = JSON.parse(await readFile(join(weekDir, "sheet.json"), "utf8"));
-  // The chanter's copy exists for the haftarah only.
-  const targets = trope
-    ? [{ id: L.primaryReading(file).id, kind: "haftarah", html: TROPE_HTML }]
-    : L.readings(file).filter(r => (r.verses || []).length && (!only || r.kind === only)).map(r => ({ id: r.id, kind: r.kind, html: HTML_FILES[r.kind] }));
-  if (!targets.length) { console.error(`${dirArg}: no ${only || ""} reading with verses to check`); process.exit(1); }
+  let targets;
+  try { targets = checkTargets(file, { only, trope }); } catch (err) { console.error(`${dirArg}: ${err.message}`); process.exit(1); }
   const browser = findBrowser();
   if (!browser) { console.error("No Chrome or Edge found."); process.exit(1); }
   console.log(`Browser: ${browser}`);

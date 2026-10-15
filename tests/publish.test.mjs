@@ -368,17 +368,53 @@ test("--reindex from the store: one v2 row per published sheet, earlier publish 
   assert.ok(lines.every(l => !l.includes("s3cr3tpart")));
 });
 
-test("--reindex --from a weeks folder upserts only those weeks; --dry-run uploads nothing", async () => {
+test("--reindex --from a weeks folder refreshes only weeks already in the index; an unpublished one is skipped and named; --dry-run uploads nothing", async () => {
   const from = join(root, "from");
   await mkdir(join(from, "2026-10-17-noach"), { recursive: true });
   await writeFile(join(from, "2026-10-17-noach", "sheet.json"), JSON.stringify({ ...sheet, slug: "2026-10-17-noach" }));
+  await mkdir(join(from, "2026-10-31-vayera"), { recursive: true });   // the coming week's draft, never delivered
+  await writeFile(join(from, "2026-10-31-vayera", "sheet.json"), JSON.stringify({ ...sheet, slug: "2026-10-31-vayera" }));
   await mkdir(join(from, "scratch"), { recursive: true });
-  const st = storeStub({ weeks: {}, index: { schema: 2, weeks: [{ slug: "2026-10-24-lech-lecha", civil: "2026-10-24" }] } });
-  const dry = await reindex({ from, dryRun: true, fetchImpl: st.fetchImpl, store: STORE, log: () => {} });
+  const old = { slug: "2026-10-17-noach", civil: "2026-10-17", published: "2026-10-16T09:00:00Z" };
+  const st = storeStub({ weeks: {}, index: { schema: 2, weeks: [{ slug: "2026-10-24-lech-lecha", civil: "2026-10-24" }, old] } });
+  const lines = [];
+  const dry = await reindex({ from, dryRun: true, fetchImpl: st.fetchImpl, store: STORE, log: l => lines.push(l) });
   assert.deepEqual(dry.index.weeks.map(w => w.slug), ["2026-10-24-lech-lecha", "2026-10-17-noach"]);
+  const row = dry.index.weeks[1];
+  assert.equal(row.published, "2026-10-16T09:00:00Z", "the first publish time is kept");
+  assert.ok(Array.isArray(row.readings) && "parashahKeys" in row, "the row is refreshed with the v2 fields");
+  assert.ok(lines.includes("skip     2026-10-31-vayera  (not published; deliver it first)"));
   assert.equal(st.calls.filter(c => c.method === "PUT").length, 0);
   assert.ok(st.calls.every(c => !c.url.startsWith("https://vercel.com")), "a folder needs no listing");
   await reindex({ from, config: { token: TOKEN }, fetchImpl: st.fetchImpl, store: STORE, log: () => {} });
   assert.deepEqual(st.stored.weeks.map(w => w.slug), ["2026-10-24-lech-lecha", "2026-10-17-noach"]);
   await assert.rejects(reindex({ from, config: { token: "vercel_blob_rw_Other123_x" }, fetchImpl: st.fetchImpl, store: STORE, log: () => {} }), /not the site's store/);
+});
+
+test("--reindex from the store: an empty listing never replaces an index that had weeks", async () => {
+  const st = storeStub({ weeks: {}, index: { schema: 2, weeks: [{ slug: "2026-10-17-noach", civil: "2026-10-17" }] } });
+  await assert.rejects(reindex({ config: { token: TOKEN }, fetchImpl: st.fetchImpl, store: STORE, log: () => {} }),
+    /publish --reindex: the store listing had no weeks; refusing to replace a 1-week index \(nothing uploaded\)/);
+  assert.equal(st.calls.filter(c => c.method === "PUT").length, 0);
+});
+
+test("--reindex from the store: a token for another store is refused before the listing", async () => {
+  const st = storeStub({ weeks: {}, index: { schema: 2, weeks: [] } });
+  await assert.rejects(reindex({ config: { token: "vercel_blob_rw_Other123_x" }, fetchImpl: st.fetchImpl, store: STORE, log: () => {} }), /not the site's store/);
+  assert.equal(st.calls.filter(c => c.url.startsWith("https://vercel.com")).length, 0, "no listing GET");
+  assert.equal(st.calls.filter(c => c.method === "PUT").length, 0);
+});
+
+test("--reindex from the store: pdfTorah only where the store holds sheet-torah.pdf", async () => {
+  const torahWeek = s => cleanSheet({ ...makeWeekTorah(JSON.parse(readFileSync(new URL("./fixtures/week-min/sheet.json", import.meta.url), "utf8"))), slug: s });
+  const withPdf = { ...torahWeek("2026-10-17-noach"), shabbat: { ...sheet.shabbat, civil: "2026-10-17" } };
+  const without = { ...torahWeek("2025-10-25-noach"), shabbat: { ...sheet.shabbat, civil: "2025-10-25" } };
+  const st = storeStub({ weeks: {
+    "2026-10-17-noach": { "sheet.json": withPdf, "sheet.pdf": 1, "sheet-torah.pdf": 1 },
+    "2025-10-25-noach": { "sheet.json": without, "sheet.pdf": 1 },
+  } });
+  const { index } = await reindex({ config: { token: TOKEN }, fetchImpl: st.fetchImpl, store: STORE, log: () => {} });
+  const by = Object.fromEntries(index.weeks.map(w => [w.slug, w]));
+  assert.equal(by["2026-10-17-noach"].pdfTorah, "weeks/2026-10-17-noach/sheet-torah.pdf");
+  assert.equal(by["2025-10-25-noach"].pdfTorah, null, "a Torah reading without its PDF in the store gets no link");
 });
