@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { BOOKS, skeleton, parseTahot, parseTbesh, parseOshb, decodeMorph, segmentsOf, rootOf, alignVerse, STEMS, FORMS, cacheDir, STEP_FILES, oshbFile, ensureFiles, frequencyTable, wordsFor, buildWords } from "../scripts/words.mjs";
+import { BOOKS, skeleton, parseTahot, parseTbesh, parseOshb, decodeMorph, segmentsOf, rootOf, alignVerse, STEMS, FORMS, cacheDir, STEP_FILES, oshbFile, ensureFiles, frequencyTable, wordsFor, buildWords, STEP_SHA, OSHB_SHA, tagInWord, cliMessage, parseWordsArgs, checkRef } from "../scripts/words.mjs";
 import { mkdtemp, writeFile, readFile, rm, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -195,10 +195,13 @@ test("cacheDir: HAFTARAH_CACHE, else ~/.haftarah-cache", () => {
 
 test("STEP_FILES and oshbFile name the files and their sources", () => {
   assert.equal(STEP_FILES["Jos-Est"].file, "step/TAHOT-Jos-Est.txt");
-  assert.match(STEP_FILES["Jos-Est"].url, /^https:\/\/raw\.githubusercontent\.com\/STEPBible\/STEPBible-Data\/master\/Translators%20Amalgamated%20OT%2BNT\/TAHOT%20Jos-Est%20-%20Translators%20Amalgamated%20Hebrew%20OT%20-%20STEPBible\.org%20CC%20BY\.txt$/);
+  assert.match(STEP_FILES["Jos-Est"].url, /^https:\/\/raw\.githubusercontent\.com\/STEPBible\/STEPBible-Data\/bd09545c7a44b39ace20f16c0359915f2aa23a62\/Translators%20Amalgamated%20OT%2BNT\/TAHOT%20Jos-Est%20-%20Translators%20Amalgamated%20Hebrew%20OT%20-%20STEPBible\.org%20CC%20BY\.txt$/);
   assert.equal(STEP_FILES.TBESH.file, "step/TBESH.txt");
   assert.match(STEP_FILES.TBESH.url, /Lexicons\/TBESH%20-%20Translators%20Brief%20lexicon%20of%20Extended%20Strongs%20for%20Hebrew%20-%20STEPBible\.org%20CC%20BY\.txt$/);
-  assert.deepEqual(oshbFile("1Sam"), { file: "oshb/1Sam.xml", url: "https://raw.githubusercontent.com/openscriptures/morphhb/master/wlc/1Sam.xml" });
+  assert.deepEqual(oshbFile("1Sam"), { file: "oshb/1Sam.xml", url: `https://raw.githubusercontent.com/openscriptures/morphhb/${OSHB_SHA}/wlc/1Sam.xml` });
+  // Pinned: no source URL follows a moving branch.
+  for (const url of [...Object.values(STEP_FILES).map(f => f.url), oshbFile("Isa").url]) assert.ok(!url.includes("/master/") && (url.includes(STEP_SHA) || url.includes(OSHB_SHA)), url);
+  assert.match(STEP_SHA, /^[0-9a-f]{40}$/); assert.match(OSHB_SHA, /^[0-9a-f]{40}$/);
 });
 
 test("ensureFiles downloads only what the cache lacks, writes whole files, and names a failed download", async () => {
@@ -217,6 +220,58 @@ test("ensureFiles downloads only what the cache lacks, writes whole files, and n
     await assert.rejects(ensureFiles(["oshb/Isa.xml"], { dir, fetchImpl, log: () => {} }), /oshb\/Isa\.xml: HTTP 503/);
     await assert.rejects(readFile(join(dir, "oshb", "Isa.xml")), "a failed download leaves no file");
   } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test("ensureFiles leaves no .part file when the body cannot be read", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "words-cache-"));
+  try {
+    const fetchImpl = async () => ({ ok: true, status: 200, arrayBuffer: async () => { throw new Error("connection reset"); } });
+    await assert.rejects(ensureFiles(["step/TBESH.txt"], { dir, fetchImpl, log: () => {} }), /connection reset/);
+    const { readdir } = await import("node:fs/promises");
+    assert.deepEqual(await readdir(join(dir, "step")), [], "neither the file nor its .part");
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test("cliMessage prefixes words: once; parseWordsArgs reads --source both ways and refuses a missing value", () => {
+  assert.equal(cliMessage(new Error("words: I Samuel 20:19 has no rows in tahot")), "words: I Samuel 20:19 has no rows in tahot");
+  assert.equal(cliMessage(new Error("HTTP 503")), "words: HTTP 503");
+  const base = { download: false, frequency: false, check: null };
+  assert.deepEqual(parseWordsArgs(["weeks/x"]), { dir: "weeks/x", source: "tahot", ...base });
+  assert.deepEqual(parseWordsArgs(["weeks/x", "--source", "oshb"]), { dir: "weeks/x", source: "oshb", ...base });
+  assert.deepEqual(parseWordsArgs(["--source=oshb", "weeks/x"]), { dir: "weeks/x", source: "oshb", ...base });
+  assert.deepEqual(parseWordsArgs(["--source", "oshb", "oshb"]), { dir: "oshb", source: "oshb", ...base }, "a folder named oshb is still the folder");
+  assert.deepEqual(parseWordsArgs(["tahot", "--source", "tahot"]), { dir: "tahot", source: "tahot", ...base });
+  assert.throws(() => parseWordsArgs(["weeks/x", "--source"]), /--source needs tahot or oshb/);
+  assert.throws(() => parseWordsArgs(["--source", "--download"]), /--source needs tahot or oshb/);
+  assert.throws(() => parseWordsArgs(["--source="]), /--source needs tahot or oshb/);
+  assert.throws(() => parseWordsArgs(["weeks/x", "--source", "lxx"]), /tahot or oshb, not lxx/);
+  assert.deepEqual(parseWordsArgs(["--download"]), { dir: null, source: "tahot", ...base, download: true });
+  assert.deepEqual(parseWordsArgs(["--check", "Isaiah 54:1", "I Samuel 20:18"]).check, ["Isaiah 54:1", "I Samuel 20:18"]);
+});
+
+test("checkRef reads a single verse, which Sefaria returns as a string", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "words-cache-"));
+  try {
+    await mkdir(join(dir, "step"));
+    await writeFile(join(dir, "step", "TAHOT-Jos-Est.txt"), TAHOT);
+    const v18 = fixture("week-min").verses[0].he;
+    const fetchImpl = async () => new Response(JSON.stringify({ book: "I Samuel", sections: [20, 18], versions: [{ text: v18 }] }), { status: 200 });
+    const r = await checkRef("I Samuel 20:18", { cache: dir, fetchImpl, log: () => {} });
+    assert.equal(r.words, 9);
+    assert.equal(r.aligned, 9);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test("tagInWord: a tag between two letters of one word is flagged, and wordsFor names the verse", () => {
+  assert.equal(tagInWord("<big>בְּ</big>רֵאשִׁ֖ית בָּרָ֣א"), true);
+  assert.equal(tagInWord("אֹ֖רֶ<small>ן</small> נָטַ֑ע"), true);
+  assert.equal(tagInWord('<span class="tr">בְּרֵאשִׁ֖ית</span> <span class="tr">בָּרָ֣א</span>'), false);
+  assert.equal(tagInWord("קָחֶ֧נּוּ <small>׀</small> וָבֹ֛אָה"), false, "a paseq between words is not inside one");
+  const sheet = fixture("week-min");
+  sheet.verses = sheet.verses.slice(0, 1);
+  sheet.verses[0].he = sheet.verses[0].he.replace(/^(.)/, "<big>$1</big>");
+  const { report } = wordsFor(sheet, { source: "tahot", rows: { haftarah: parseTahot(TAHOT, "1Sa") }, lexicon: new Map(), frequency: {} });
+  assert.deepEqual(report.readings.haftarah.tagInWord, ["20:18"]);
 });
 
 test("frequencyTable counts rows per dictionary word across the files, without LXX rows", () => {

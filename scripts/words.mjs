@@ -16,7 +16,7 @@
  * (counts per dictionary word) is derived data and is committed.
  */
 import { createRequire } from "node:module";
-import { readFile, writeFile, mkdir, rename, access } from "node:fs/promises";
+import { readFile, writeFile, mkdir, rename, access, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve, dirname, basename } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -118,6 +118,8 @@ const SUFFIX_STRONG = {
   "1bs": ["H9020", "H9030"], "1bp": ["H9025", "H9035"], "3cp": ["H9028", "H9038"],
 };
 
+// Assumes OSHB's order: the type="x-ketiv" <w>s first, then the <note> with no whitespace before it
+// (optional <seg>s only); verified against 1 Samuel alone.
 const KETIV_GROUP = /((?:<w type="x-ketiv"[^>]*>[^<]*<\/w>(?:<seg [^>]*>[^<]*<\/seg>)?)+)<note type="variant"><catchWord>[^<]*<\/catchWord><rdg type="x-qere">([\s\S]*?)<\/rdg><\/note>/g;
 
 export function parseOshb(xml, osisCode) {
@@ -239,7 +241,10 @@ export function alignVerse(pageWords, rows) {
 
 // ---- the cache: STEP's files and OSHB's, outside the repo ----
 export const cacheDir = (env = process.env, home = homedir()) => env.HAFTARAH_CACHE || join(home, ".haftarah-cache");
-const STEP_RAW = "https://raw.githubusercontent.com/STEPBible/STEPBible-Data/master/";
+// Pinned to the commits the cache was downloaded from, so a later upstream change never alters a week unnoticed.
+export const STEP_SHA = "bd09545c7a44b39ace20f16c0359915f2aa23a62";
+export const OSHB_SHA = "3d15126fb1ef74867fc1434be1942e837932691f";
+const STEP_RAW = `https://raw.githubusercontent.com/STEPBible/STEPBible-Data/${STEP_SHA}/`;
 const tahotUrl = group => `${STEP_RAW}Translators%20Amalgamated%20OT%2BNT/${encodeURIComponent(`TAHOT ${group} - Translators Amalgamated Hebrew OT - STEPBible.org CC BY.txt`)}`;
 export const STEP_FILES = {
   "Gen-Deu": { file: "step/TAHOT-Gen-Deu.txt", url: tahotUrl("Gen-Deu") },
@@ -248,7 +253,7 @@ export const STEP_FILES = {
   "Isa-Mal": { file: "step/TAHOT-Isa-Mal.txt", url: tahotUrl("Isa-Mal") },
   TBESH: { file: "step/TBESH.txt", url: `${STEP_RAW}Lexicons/${encodeURIComponent("TBESH - Translators Brief lexicon of Extended Strongs for Hebrew - STEPBible.org CC BY.txt")}` },
 };
-export const oshbFile = osis => ({ file: `oshb/${osis}.xml`, url: `https://raw.githubusercontent.com/openscriptures/morphhb/master/wlc/${osis}.xml` });
+export const oshbFile = osis => ({ file: `oshb/${osis}.xml`, url: `https://raw.githubusercontent.com/openscriptures/morphhb/${OSHB_SHA}/wlc/${osis}.xml` });
 const urlOf = file => Object.values(STEP_FILES).find(f => f.file === file)?.url || (file.startsWith("oshb/") ? oshbFile(basename(file, ".xml")).url : null);
 const exists = p => access(p).then(() => true, () => false);
 
@@ -266,8 +271,10 @@ export async function ensureFiles(files, { dir, fetchImpl = globalThis.fetch, lo
       if (!res.ok) throw new Error(`${file}: HTTP ${res.status} from ${url}`);
       await mkdir(dirname(path), { recursive: true });
       const tmp = `${path}.part`;
-      await writeFile(tmp, Buffer.from(await res.arrayBuffer()));
-      await rename(tmp, path);
+      try {
+        await writeFile(tmp, Buffer.from(await res.arrayBuffer()));
+        await rename(tmp, path);
+      } catch (err) { await rm(tmp, { force: true }); throw err; }
     }
     out.push(path);
   }
@@ -292,6 +299,12 @@ export function frequencyTable(texts) {
 async function loadFrequency() { try { return JSON.parse(await readFile(FREQUENCY_FILE, "utf8")); } catch { return {}; } }
 
 // ---- words.json for one sheet ----
+// A tag between two Hebrew letters of one word (MAM's <big>/<small> letters, a split trope span): the
+// page keeps such a word whole (sheet.js wrapWords); publish names the verse so a split can be looked at.
+const MARKS = "[\\u0591-\\u05BD\\u05BF\\u05C1\\u05C2\\u05C4\\u05C5\\u05C7]*";
+const TAG_IN_WORD = new RegExp(`[א-ת]${MARKS}(?:<[^>]+>)+${MARKS}[א-ת]`);
+export const tagInWord = heHtml => TAG_IN_WORD.test(String(heHtml == null ? "" : heHtml));
+
 /**
  * sheet → { words, report }. `rows` holds, per reading id, the source's rows keyed "<ch>:<v>"; `lexicon`
  * is TBESH (a Map; empty for OSHB); `frequency` the table. A verse with words and no rows is an error
@@ -306,11 +319,12 @@ export function wordsFor(sheet, { source = "tahot", rows, lexicon = new Map(), f
     const model = L.readingModel(sheet, r.id);
     const src = rows[r.id] || new Map();
     const out = { book: r.book || "", verses: {}, missing: [] };
-    const rep = { words: 0, aligned: 0, missing: [] };
+    const rep = { words: 0, aligned: 0, missing: [], tagInWord: [] };
     for (const v of model.verses) {
       const page = L.verseWords(v.heHtml).map(w => w.text);
       if (!page.length) continue;
       const key = `${v.chapter}:${v.verse}`;
+      if (tagInWord(v.heHtml)) rep.tagInWord.push(key);
       const vr = src.get(key);
       if (!vr || !vr.length) throw new Error(`words: ${r.book} ${key} has no rows in ${source}; STEP numbers verses by the English Bible, check the bracketed Hebrew refs`);
       const { pairs, missing } = alignVerse(page, vr);
@@ -343,9 +357,14 @@ export async function buildWords(dir, { source = "tahot", cache = cacheDir(), fe
   const lexicon = source === "oshb" ? new Map() : parseTbesh(await text(STEP_FILES.TBESH.file));
   const { words, report } = wordsFor(sheet, { source, rows, lexicon, frequency: frequency || (await loadFrequency()) });
   const file = join(dir, "words.json");
-  await writeFile(file, JSON.stringify(words));
+  const tmp = `${file}.part`;
+  try {
+    await writeFile(tmp, JSON.stringify(words));
+    await rename(tmp, file);
+  } catch (err) { await rm(tmp, { force: true }); throw err; }
   for (const [id, rep] of Object.entries(report.readings)) {
     log(`words    ${id}  ${rep.words} words, ${rep.aligned} with analysis, ${rep.missing.length} missing${rep.missing.length ? `: ${rep.missing.join(", ")}` : ""}`);
+    if (rep.tagInWord.length) log(`words    ${id}  warning: a tag inside a word in ${rep.tagInWord.join(", ")} (the page keeps the word whole; check its analysis)`);
   }
   return { file, report };
 }
@@ -360,8 +379,9 @@ export async function checkRef(ref, { cache = cacheDir(), fetchImpl = globalThis
   const book = tx.book || ref.replace(/\s+\d.*$/, ""), info = BOOKS[book];
   if (!info) throw new Error(`no word data for the book "${book}"`);
   const startCh = +tx.sections[0], startV = +(tx.sections[1] ?? 1), verses = [];
-  if (he.text.length && Array.isArray(he.text[0])) he.text.forEach((ch, ci) => ch.forEach((t, vi) => verses.push({ chapter: startCh + ci, verse: (ci === 0 ? startV : 1) + vi, he: t })));
-  else he.text.forEach((t, vi) => verses.push({ chapter: startCh, verse: startV + vi, he: t }));
+  const text = Array.isArray(he.text) ? he.text : [he.text];   // a single verse comes back as a string
+  if (text.length && Array.isArray(text[0])) text.forEach((ch, ci) => ch.forEach((t, vi) => verses.push({ chapter: startCh + ci, verse: (ci === 0 ? startV : 1) + vi, he: t })));
+  else text.forEach((t, vi) => verses.push({ chapter: startCh, verse: startV + vi, he: t }));
   const rows = parseTahot(await readFile((await ensureFiles([STEP_FILES[info.group].file], { dir: cache, fetchImpl, log }))[0], "utf8"), info.step);
   let words = 0, aligned = 0; const missing = [];
   for (const v of verses) {
@@ -374,12 +394,32 @@ export async function checkRef(ref, { cache = cacheDir(), fetchImpl = globalThis
   return { words, aligned, missing };
 }
 
+/** The CLI's line for an error: "words: " once, never twice. */
+export const cliMessage = err => { const m = String((err && err.message) || err); return m.startsWith("words: ") ? m : `words: ${m}`; };
+
+/** The CLI's arguments: { dir, source, download, frequency, check } (check: the refs after --check, or null). */
+export function parseWordsArgs(argv) {
+  const args = argv.slice();
+  let source = null, sourceAt = -1;
+  for (let i = 0; i < args.length; i++) {
+    const m = /^--source(?:=(.*))?$/.exec(args[i]);
+    if (!m) continue;
+    if (m[1] != null) source = m[1];
+    else { sourceAt = i + 1; source = args[i + 1] != null && !args[i + 1].startsWith("--") ? args[i + 1] : ""; }
+    if (!source) throw new Error("--source needs tahot or oshb");
+    if (!["tahot", "oshb"].includes(source)) throw new Error(`--source: tahot or oshb, not ${source}`);
+  }
+  const checkAt = args.indexOf("--check");
+  const check = checkAt < 0 ? null : args.slice(checkAt + 1).filter(a => !a.startsWith("--"));
+  const dir = checkAt >= 0 ? null : args.find((a, i) => !a.startsWith("--") && i !== sourceAt) || null;
+  return { dir, source: source || "tahot", download: args.includes("--download"), frequency: args.includes("--frequency"), check };
+}
+
 async function main(argv) {
-  const args = argv.slice(2);
-  const opt = name => { const i = args.indexOf(name); return i < 0 ? null : args[i + 1]; };
+  const a = parseWordsArgs(argv.slice(2));
   const cache = cacheDir();
-  if (args.includes("--download")) { await ensureFiles(Object.values(STEP_FILES).map(f => f.file), { dir: cache }); console.log(`STEP files are in ${cache}`); return; }
-  if (args.includes("--frequency")) {
+  if (a.download) { await ensureFiles(Object.values(STEP_FILES).map(f => f.file), { dir: cache }); console.log(`STEP files are in ${cache}`); return; }
+  if (a.frequency) {
     const paths = await ensureFiles(["Gen-Deu", "Jos-Est", "Job-Sng", "Isa-Mal"].map(g => STEP_FILES[g].file), { dir: cache });
     const table = frequencyTable(await Promise.all(paths.map(p => readFile(p, "utf8"))));
     await mkdir(dirname(FREQUENCY_FILE), { recursive: true });
@@ -387,14 +427,11 @@ async function main(argv) {
     console.log(`${Object.keys(table).length} dictionary words → ${FREQUENCY_FILE}`);
     return;
   }
-  if (args.includes("--check")) { for (const ref of args.slice(args.indexOf("--check") + 1).filter(a => !a.startsWith("--"))) await checkRef(ref, { cache }); return; }
-  const dir = args.find(a => !a.startsWith("--") && a !== opt("--source"));
-  if (!dir) throw new Error("usage: node scripts/words.mjs weeks/<slug> [--source tahot|oshb] | --download | --frequency | --check \"<ref>\" ...");
-  const source = opt("--source") || "tahot";
-  if (!["tahot", "oshb"].includes(source)) throw new Error(`--source: tahot or oshb, not ${source}`);
-  await buildWords(dir, { source, cache });
+  if (a.check) { for (const ref of a.check) await checkRef(ref, { cache }); return; }
+  if (!a.dir) throw new Error("usage: node scripts/words.mjs weeks/<slug> [--source tahot|oshb] | --download | --frequency | --check \"<ref>\" ...");
+  await buildWords(a.dir, { source: a.source, cache });
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
-  main(process.argv).catch(err => { console.error(`words: ${err.message}`); process.exit(1); });
+  main(process.argv).catch(err => { console.error(cliMessage(err)); process.exit(1); });
 }
