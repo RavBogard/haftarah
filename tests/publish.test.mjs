@@ -7,7 +7,7 @@ import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { migrate3 } from "../scripts/migrate.mjs";
 import { makeWeekTorah } from "./helpers/makeWeekTorah.mjs";
-import { cleanSheet, indexEntry, upsertIndex, loadWebConfig, storeIdFromToken, publish, STORE_ID, PUBLISHED_FIELDS } from "../scripts/publish.mjs";
+import { cleanSheet, indexEntry, upsertIndex, loadWebConfig, storeIdFromToken, publish, STORE_ID, PUBLISHED_FIELDS, listBlobs, weeksInListing, reindex, STORE_ORIGIN } from "../scripts/publish.mjs";
 
 const TOKEN = "vercel_blob_rw_wOGdAqvPmTFjKrmY_s3cr3tpart";
 const STORE = "https://wogdaqvpmtfjkrmy.public.blob.vercel-storage.com";
@@ -317,4 +317,68 @@ test("Chanukah on a Shabbat is tagged for /special/chanukah, with Rosh Chodesh t
   assert.deepEqual(indexEntry(d, "2026-12-12-miketz", "t").tags, ["chanukah", "rosh-chodesh"]);
   d.shabbat.special = "Chanukah Day 1 (on Shabbat)";
   assert.deepEqual(indexEntry(d, "2026-12-12-miketz", "t").tags, ["chanukah"]);
+});
+
+// A stub of the store for --reindex: a listing in two pages, public sheet.json files, the index.
+function storeStub({ weeks, index = null }) {
+  const calls = [];
+  let stored = index;
+  const blobs = Object.entries(weeks).flatMap(([slug, files]) => Object.keys(files).map(f => ({ pathname: `weeks/${slug}/${f}`, url: `${STORE}/weeks/${slug}/${f}`, uploadedAt: "2026-10-01T00:00:00.000Z", size: 1 })));
+  blobs.push({ pathname: "weeks/not-a-week/sheet.json", url: `${STORE}/weeks/not-a-week/sheet.json`, uploadedAt: "x", size: 1 });
+  const fetchImpl = async (url, init = {}) => {
+    const u = new URL(url);
+    calls.push({ method: init.method || "GET", url: String(url), headers: init.headers || {} });
+    if (u.hostname === "vercel.com" && (init.method || "GET") === "GET") {
+      if (init.headers.authorization !== `Bearer ${TOKEN}`) return new Response("forbidden", { status: 403 });
+      const first = !u.searchParams.get("cursor");
+      const half = Math.ceil(blobs.length / 2);
+      return new Response(JSON.stringify(first ? { blobs: blobs.slice(0, half), hasMore: true, cursor: "c2" } : { blobs: blobs.slice(half), hasMore: false }), { status: 200 });
+    }
+    if (init.method === "PUT") { stored = JSON.parse(init.body); return new Response(JSON.stringify({ url: `${STORE}/index.json`, pathname: "index.json" }), { status: 200 }); }
+    if (u.pathname === "/index.json") return stored ? new Response(JSON.stringify(stored), { status: 200 }) : new Response("no", { status: 404 });
+    const m = /^\/weeks\/([^/]+)\/sheet\.json$/.exec(u.pathname);
+    if (m && weeks[m[1]]) return new Response(JSON.stringify(weeks[m[1]]["sheet.json"]), { status: 200 });
+    return new Response("no", { status: 404 });
+  };
+  return { calls, fetchImpl, get stored() { return stored; } };
+}
+
+test("weeksInListing keeps week folders only, by slug and file", () => {
+  const m = weeksInListing([{ pathname: "weeks/2026-10-17-noach/sheet.json" }, { pathname: "weeks/2026-10-17-noach/sheet-torah.pdf" }, { pathname: "index.json" }, { pathname: "weeks/junk/sheet.json" }]);
+  assert.deepEqual([...m.keys()], ["2026-10-17-noach"]);
+  assert.deepEqual(Object.keys(m.get("2026-10-17-noach")), ["sheet.json", "sheet-torah.pdf"]);
+  assert.equal(STORE_ORIGIN, STORE);
+});
+
+test("--reindex from the store: one v2 row per published sheet, earlier publish times kept, the vanished dropped and named", async () => {
+  const a = cleanSheet({ ...structuredClone(sheet), slug: "2026-10-10-bereshit-machar-chodesh" });
+  const b = cleanSheet({ ...structuredClone(sheet), slug: "2025-10-25-noach", shabbat: { ...sheet.shabbat, civil: "2025-10-25", parashah: { en: "Noach", he: "נֹחַ" }, special: null } });
+  const st = storeStub({ weeks: { "2026-10-10-bereshit-machar-chodesh": { "sheet.json": a, "sheet.pdf": 1 }, "2025-10-25-noach": { "sheet.json": b, "sheet.pdf": 1 } },
+    index: { schema: 1, weeks: [{ slug: "2026-10-10-bereshit-machar-chodesh", civil: "2026-10-10", published: "2026-10-09T12:00:00Z" }, { slug: "2024-01-01-gone", civil: "2024-01-01" }] } });
+  const lines = [];
+  const { index } = await reindex({ config: { token: TOKEN }, fetchImpl: st.fetchImpl, store: STORE, log: l => lines.push(l), now: () => new Date("2026-10-15T20:00:00Z") });
+  assert.deepEqual(index.weeks.map(w => w.slug), ["2026-10-10-bereshit-machar-chodesh", "2025-10-25-noach"]);
+  assert.equal(index.weeks[0].published, "2026-10-09T12:00:00Z");
+  assert.equal(index.weeks[1].published, "2026-10-01T00:00:00.000Z");
+  assert.deepEqual(index.weeks[1].parashahKeys, ["noach"]);
+  assert.equal(index.weeks[1].cycle, "5787");
+  assert.deepEqual(st.stored, index, "uploaded");
+  assert.ok(lines.some(l => /dropped +2024-01-01-gone/.test(l)));
+  assert.equal(st.calls.filter(c => c.url.includes("cursor=c2")).length, 1, "the listing's second page was read");
+  assert.ok(lines.every(l => !l.includes("s3cr3tpart")));
+});
+
+test("--reindex --from a weeks folder upserts only those weeks; --dry-run uploads nothing", async () => {
+  const from = join(root, "from");
+  await mkdir(join(from, "2026-10-17-noach"), { recursive: true });
+  await writeFile(join(from, "2026-10-17-noach", "sheet.json"), JSON.stringify({ ...sheet, slug: "2026-10-17-noach" }));
+  await mkdir(join(from, "scratch"), { recursive: true });
+  const st = storeStub({ weeks: {}, index: { schema: 2, weeks: [{ slug: "2026-10-24-lech-lecha", civil: "2026-10-24" }] } });
+  const dry = await reindex({ from, dryRun: true, fetchImpl: st.fetchImpl, store: STORE, log: () => {} });
+  assert.deepEqual(dry.index.weeks.map(w => w.slug), ["2026-10-24-lech-lecha", "2026-10-17-noach"]);
+  assert.equal(st.calls.filter(c => c.method === "PUT").length, 0);
+  assert.ok(st.calls.every(c => !c.url.startsWith("https://vercel.com")), "a folder needs no listing");
+  await reindex({ from, config: { token: TOKEN }, fetchImpl: st.fetchImpl, store: STORE, log: () => {} });
+  assert.deepEqual(st.stored.weeks.map(w => w.slug), ["2026-10-24-lech-lecha", "2026-10-17-noach"]);
+  await assert.rejects(reindex({ from, config: { token: "vercel_blob_rw_Other123_x" }, fetchImpl: st.fetchImpl, store: STORE, log: () => {} }), /not the site's store/);
 });

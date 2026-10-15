@@ -5,6 +5,8 @@
  * store the site reads, then the index of every published week.
  *
  *   node scripts/publish.mjs weeks/<slug> [--dry-run] [--token TOKEN] [--store URL] [--api URL]
+ *   node scripts/publish.mjs --reindex [--dry-run]               # rebuild index.json from the store's weeks (the record)
+ *   node scripts/publish.mjs --reindex --from weeks [--dry-run]  # upsert the weeks in a local folder into the index
  *
  * Config, first found wins: --token; HAFTARAH_BLOB_TOKEN; the JSON file at
  * $HAFTARAH_WEB_CONFIG or ~/.haftarah-web.json ({"token": "..."}). The token is never printed, and a
@@ -13,7 +15,7 @@
  * --store is the public store origin (https://<id>.public.blob.vercel-storage.com); without it the
  * origin of the first upload's url is used. --api overrides the Blob API base (tests, outages).
  */
-import { readFile, access } from "node:fs/promises";
+import { readFile, access, readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -28,6 +30,8 @@ export const BLOB_API = "https://vercel.com/api/blob";
 // The site's Blob store. Its lowercase form is the host in vercel.json's /data rewrite, so a token
 // for any other store would publish where the site never reads.
 export const STORE_ID = "wOGdAqvPmTFjKrmY";
+/** The store's public origin (the host vercel.json's /data rewrite points at). */
+export const STORE_ORIGIN = `https://${STORE_ID.toLowerCase()}.public.blob.vercel-storage.com`;
 const API_VERSION = "13";
 const MAX_AGE = { json: 60, pdf: 3600 };
 // The top-level fields that reach the web; anything else (candidates, drafts, a stray status) stays
@@ -159,6 +163,83 @@ async function fetchIndex(store, fetchImpl) {
   return idx;
 }
 
+/** Every blob under `prefix`, following the listing's cursor. The token is never echoed. */
+export async function listBlobs({ token, prefix, fetchImpl = globalThis.fetch, api = BLOB_API }) {
+  const out = [];
+  let cursor = null;
+  do {
+    const q = new URLSearchParams({ prefix, limit: "1000" });
+    if (cursor) q.set("cursor", cursor);
+    const headers = { authorization: `Bearer ${token}`, "x-api-version": API_VERSION };
+    const storeId = storeIdFromToken(token);
+    if (storeId) headers["x-vercel-blob-store-id"] = storeId;
+    let res;
+    try { res = await fetchImpl(`${api}/?${q}`, { method: "GET", headers }); }
+    catch (err) { throw new Error(`listing ${prefix}: network error: ${err.cause?.code || err.message}`); }
+    if (!res.ok) throw new Error(`listing ${prefix}: Blob answered HTTP ${res.status}`);
+    const page = await res.json();
+    out.push(...(page.blobs || []));
+    cursor = page.hasMore ? page.cursor : null;
+  } while (cursor);
+  return out;
+}
+
+/** Week folders in a listing: slug → { "sheet.json": blob, "sheet.pdf": blob, ... }; anything not a week slug is left out. */
+export function weeksInListing(blobs) {
+  const m = new Map();
+  for (const b of blobs) {
+    const x = /^weeks\/([^/]+)\/([^/]+)$/.exec(b.pathname || "");
+    if (!x || !SLUG.test(x[1])) continue;
+    if (!m.has(x[1])) m.set(x[1], {});
+    m.get(x[1])[x[2]] = b;
+  }
+  return m;
+}
+
+/**
+ * Rebuild index.json. With no `from`, the store's listing is the record: a row per weeks/<slug>/sheet.json,
+ * made by indexEntry from the published sheet, keeping each week's earlier `published` time; rows whose
+ * sheet is gone are dropped and named. With `from` (a local weeks folder), each week found there is
+ * upserted into the current index and nothing else changes. The index is uploaded last.
+ */
+export async function reindex({ from = null, dryRun = false, config = null, log = console.log, fetchImpl = globalThis.fetch, api = BLOB_API, store = null, now = () => new Date() } = {}) {
+  const stamp = now().toISOString().replace(/\.\d{3}Z$/, "Z");
+  const origin = store || STORE_ORIGIN;
+  const current = await fetchIndex(origin, fetchImpl);
+  const before = new Map((current.weeks || []).map(w => [w.slug, w]));
+  let index;
+  if (from) {
+    index = { schema: 2, updated: stamp, weeks: (current.weeks || []).slice() };
+    for (const name of (await readdir(from)).sort()) {
+      if (!SLUG.test(name) || !(await exists(join(from, name, "sheet.json")))) continue;
+      const clean = cleanSheet(JSON.parse(await readFile(join(from, name, "sheet.json"), "utf8")));
+      index = upsertIndex(index, indexEntry(clean, name, (before.get(name) || {}).published || stamp), stamp);
+      log(`index    ${name}  (from ${join(from, name, "sheet.json")})`);
+    }
+  } else {
+    if (!config || !config.token) throw new Error("--reindex from the store needs the Blob token (or use --from <weeks folder>)");
+    const weeks = weeksInListing(await listBlobs({ token: config.token, prefix: "weeks/", fetchImpl, api }));
+    index = { schema: 2, updated: stamp, weeks: [] };
+    for (const [slug, files] of [...weeks].sort(([a], [b]) => a.localeCompare(b))) {
+      if (!files["sheet.json"]) { log(`skip     ${slug}  (no sheet.json in the store)`); continue; }
+      const res = await fetchImpl(`${files["sheet.json"].url}?${Date.now()}`, { method: "GET", headers: { "cache-control": "no-cache" } });
+      if (!res.ok) throw new Error(`${slug}/sheet.json: Blob answered HTTP ${res.status}; nothing was changed`);
+      const published = (before.get(slug) || {}).published || files["sheet.json"].uploadedAt || stamp;
+      index = upsertIndex(index, indexEntry(await res.json(), slug, published), stamp);
+      log(`index    ${slug}`);
+    }
+    for (const slug of before.keys()) if (!weeks.has(slug)) log(`dropped  ${slug}  (in the old index, not in the store)`);
+  }
+  if (dryRun) { log(`index.json  (${index.weeks.length} weeks; dry run, nothing uploaded)`); return { index }; }
+  const token = config && config.token;
+  const id = storeIdFromToken(token);
+  if (!id || id.toLowerCase() !== STORE_ID.toLowerCase()) throw new Error(`publish: the Blob token is for store ${id || "(unknown)"}, not the site's store ${STORE_ID}; nothing uploaded`);
+  const body = Buffer.from(JSON.stringify(index), "utf8");
+  const r = await putBlob({ pathname: INDEX_PATH, body, contentType: "application/json", maxAge: MAX_AGE.json, token, fetchImpl, api });
+  log(`web      ${INDEX_PATH}  ${human(body.length)}  ${r.url}  (${index.weeks.length} week${index.weeks.length === 1 ? "" : "s"})`);
+  return { index };
+}
+
 /**
  * Publish the week. Returns { urls: { sheet, pdf, index }, page }. Throws on the first failure;
  * the index is uploaded last, so a failed week never changes it.
@@ -222,20 +303,26 @@ function parseArgs(argv) {
   const out = { flags: {} };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    const m = a.match(/^--(token|store|api)(?:=(.*))?$/);
+    const m = a.match(/^--(token|store|api|from)(?:=(.*))?$/);
     if (m) { out.flags[m[1]] = m[2] ?? argv[++i]; continue; }
+    if (a === "--reindex") { out.reindex = true; continue; }
     if (a === "--dry-run") { out.dryRun = true; continue; }
     if (a.startsWith("--")) throw new Error(`unknown option ${a}`);
     if (out.dir) throw new Error(`one week folder only (got ${out.dir} and ${a})`);
     out.dir = a;
   }
-  if (!out.dir) throw new Error("usage: node scripts/publish.mjs weeks/<slug> [--dry-run] [--token TOKEN] [--store URL] [--api URL]");
+  if (!out.dir && !out.reindex) throw new Error("usage: node scripts/publish.mjs weeks/<slug> [--dry-run] [--token TOKEN] [--store URL] [--api URL]\n       node scripts/publish.mjs --reindex [--from weeks] [--dry-run]");
   return out;
 }
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const opts = { api: args.flags.api || process.env.HAFTARAH_BLOB_API || BLOB_API, store: args.flags.store || null };
+  if (args.reindex) {
+    const config = args.dryRun && args.flags.from ? null : await loadWebConfig({ flags: { token: args.flags.token } });
+    await reindex({ ...opts, from: args.flags.from || null, dryRun: !!args.dryRun, config });
+    return;
+  }
   if (args.dryRun) { await publish(args.dir, { ...opts, dryRun: true }); return; }
   const config = await loadWebConfig({ flags: { token: args.flags.token } });
   await publish(args.dir, { ...opts, config });
