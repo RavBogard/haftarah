@@ -31,8 +31,11 @@ export function parseRange(ref) {
 const formatRange = (book, [c1, v1], [c2, v2]) =>
   c1 === c2 && v1 === v2 ? `${book} ${c1}:${v1}` : c1 === c2 ? `${book} ${c1}:${v1}-${v2}` : `${book} ${c1}:${v1}-${c2}:${v2}`;
 
-/** One Hebcal aliyot set → [{ n, ref, verses?, reason? }], aliyot 1-7 then M. */
-export function aliyotOf(set) {
+/**
+ * One Hebcal aliyot set → [{ n, ref, verses?, reason? }], aliyot 1-7 then M.
+ * `reasons` is the item-level `reason` object: when the maftir carries no reason of its own, `reasons.M` supplies it.
+ */
+export function aliyotOf(set, reasons) {
   if (!set) return [];
   const out = [];
   for (const n of [...ALIYOT, "M"]) {
@@ -40,7 +43,8 @@ export function aliyotOf(set) {
     if (!a) continue;
     const row = { n: n === "M" ? "M" : Number(n), ref: hebcalRef(a) };
     if (a.v != null) row.verses = a.v;
-    if (a.reason) row.reason = a.reason;
+    const reason = a.reason || (n === "M" && reasons && reasons.M) || "";
+    if (reason) row.reason = reason;
     out.push(row);
   }
   return out;
@@ -48,12 +52,13 @@ export function aliyotOf(set) {
 
 /** What the sheet keeps of Hebcal's item (sheet.json `leyning`, working data only; not published). */
 export function leyningOf(item) {
+  const reasons = item && item.reason && typeof item.reason === "object" ? item.reason : null;
   return {
     parashah: (item && item.name && item.name.en) || "",
     type: (item && item.type) || "shabbat",
     summary: (item && item.summary) || "",
-    aliyot: aliyotOf(item && item.fullkriyah),
-    triennial: item && item.triennial ? { year: item.triYear == null ? null : item.triYear, aliyot: aliyotOf(item.triennial) } : null,
+    aliyot: aliyotOf(item && item.fullkriyah, reasons),
+    triennial: item && item.triennial ? { year: item.triYear == null ? null : item.triYear, aliyot: aliyotOf(item.triennial, reasons) } : null,
     source: "Hebcal",
   };
 }
@@ -85,16 +90,30 @@ function joinRows(rows, what) {
   return formatRange(book, ranges[0].from, ranges[ranges.length - 1].to);
 }
 
-/** The Torah selection: { ref, book, selection, maftir }. `pick` comes from parsePick, or is { kind: "ref", ref }. */
+const maftirOf = m => (m ? (m.reason ? { ref: m.ref, reason: m.reason } : { ref: m.ref }) : null);
+const before = ([c1, v1], [c2, v2]) => c1 < c2 || (c1 === c2 && v1 < v2);
+const triennialLabel = t => (t && t.year != null ? `triennial year ${t.year}` : "triennial");
+
+/**
+ * The Torah selection: { ref, book, selection, maftir }. `pick` comes from parsePick, or is { kind: "ref", ref }.
+ * The maftir is the annual one, or the triennial block's own when the pick is triennial; never folded into `ref`.
+ */
 export function selectTorah(leyning, pick) {
+  if (!pick || !pick.kind) throw new Error(`no Torah selection: pass --torah-pick aliyah:N[-M], aliyah:M, triennial or full, or --torah "<ref>"`);
   const rows = (leyning && leyning.aliyot) || [];
   const m = rows.find(r => r.n === "M");
-  const maftir = m ? (m.reason ? { ref: m.ref, reason: m.reason } : { ref: m.ref }) : null;
+  let maftir = maftirOf(m);
   const name = (leyning && leyning.parashah) || "this Shabbat";
   let ref, selection;
   if (pick.kind === "ref") {
-    if (!parseRange(pick.ref)) throw new Error(`--torah "${pick.ref}" is not one range like "Genesis 6:9-7:16"`);
-    ref = String(pick.ref).trim(); selection = "custom";
+    const text = String(pick.ref == null ? "" : pick.ref).trim();
+    const r = parseRange(text);
+    if (!r) {
+      if (/^\d/.test(text)) throw new Error(`--torah "${text}": write the book's number in Roman numerals, as Hebcal does ("I Samuel 3:1", not "1 Samuel 3:1")`);
+      throw new Error(`--torah "${text}" is not one range like "Genesis 6:9-7:16"`);
+    }
+    if (before(r.to, r.from)) throw new Error(`--torah "${text}" ends before it begins (${r.to.join(":")} comes before ${r.from.join(":")})`);
+    ref = text; selection = "custom";
   } else if (pick.kind === "aliyah" && pick.from === "M") {
     if (!m) throw new Error(`Hebcal lists no maftir for ${name}`);
     ref = m.ref; selection = "maftir";
@@ -110,7 +129,10 @@ export function selectTorah(leyning, pick) {
   } else if (pick.kind === "triennial") {
     if (!leyning || !leyning.triennial) throw new Error(`Hebcal gives no triennial reading for ${name}`);
     ref = joinRows(leyning.triennial.aliyot.filter(r => r.n !== "M"), "the triennial reading");
-    selection = `triennial year ${leyning.triennial.year}`;
+    selection = triennialLabel(leyning.triennial);
+    // The triennial reading has its own maftir (inside its own range, or the special one); the annual M only if it has none.
+    const tm = leyning.triennial.aliyot.find(r => r.n === "M");
+    if (tm) maftir = maftirOf(tm);
   } else if (pick.kind === "full") {
     ref = joinRows(rows.filter(r => r.n !== "M"), "the full reading");
     selection = "full reading";
@@ -125,20 +147,37 @@ export function aliyotLines(leyning) {
   const out = [`Torah: ${leyning.parashah} (Hebcal)`];
   for (const r of leyning.aliyot) out.push(`  ${String(r.n).padEnd(2)} ${r.ref}${row(r) ? `  (${row(r)})` : ""}`);
   if (leyning.triennial) {
-    try { out.push(`  triennial year ${leyning.triennial.year}: ${selectTorah(leyning, { kind: "triennial" }).ref}`); } catch {}
+    try { out.push(`  ${triennialLabel(leyning.triennial)}: ${selectTorah(leyning, { kind: "triennial" }).ref}`); } catch {}
   }
   return out;
 }
 
-/** The digest's "Torah calendar" section: the whole list, the triennial range, and the selection or how to make one. */
+/** Does the selection cover this row? Aliyot 1-7 by overlap with the selected range; M only when the maftir is the pick. */
+function covers(torah, r) {
+  if (!torah || !torah.ref) return false;
+  if (r.n === "M") return torah.selection === "maftir";
+  if (torah.selection === "maftir") return false;
+  const s = parseRange(torah.ref), a = parseRange(r.ref);
+  return !!(s && a && s.book === a.book && !before(a.to, s.from) && !before(s.to, a.from));
+}
+
+/**
+ * The digest's "Torah calendar" section: the whole list with the selected aliyot marked ▸, the triennial range,
+ * the selection (or how to make one), and a special maftir named on its own line, since it is read separately.
+ * `torah` is selectTorah's result ({ ref, selection, maftir }) or null.
+ */
 export function aliyotMarkdown(leyning, torah) {
-  const list = leyning.aliyot.map(r => `${r.n} ${r.ref}${r.verses != null || r.reason ? ` (${[r.verses, r.reason].filter(x => x != null).join("; ")})` : ""}`).join(" · ");
-  const out = [`# Torah calendar: ${leyning.parashah}`, "", `From Hebcal: ${list}.`];
+  const marked = leyning.aliyot.some(r => covers(torah, r));
+  const list = leyning.aliyot.map(r => `${covers(torah, r) ? "▸ " : ""}${r.n} ${r.ref}${r.verses != null || r.reason ? ` (${[r.verses, r.reason].filter(x => x != null).join("; ")})` : ""}`).join(" · ");
+  const out = [`# Torah calendar: ${leyning.parashah}`, "", list ? `From Hebcal: ${list}.` : "From Hebcal: no aliyot listed."];
+  if (marked) out.push("▸ marks the aliyot the selection covers.");
   if (leyning.triennial) {
-    try { out.push(`Triennial year ${leyning.triennial.year}: ${selectTorah(leyning, { kind: "triennial" }).ref}.`); } catch {}
+    try { const t = triennialLabel(leyning.triennial); out.push(`${t[0].toUpperCase()}${t.slice(1)}: ${selectTorah(leyning, { kind: "triennial" }).ref}.`); } catch {}
   }
   out.push(torah && torah.ref
     ? `Selection: ${torah.selection || "custom"}, ${torah.ref}.`
     : `Selection: none yet. Pick with fetch.mjs --torah-pick aliyah:N[-M], triennial or full, or --torah "<ref>".`);
+  const m = torah && torah.ref ? torah.maftir : maftirOf(leyning.aliyot.find(r => r.n === "M"));
+  if (m && m.reason) out.push(`Maftir: ${m.ref} — ${m.reason}${torah && torah.selection === "maftir" ? "" : " (read separately, not part of the selection)"}.`);
   return out.join("\n") + "\n";
 }
