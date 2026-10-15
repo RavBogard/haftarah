@@ -27,7 +27,7 @@ export function initPanel({ page, L, sefariaUrl }) {
 
   // ---- note popovers on the keyed letters: one at a time, kept inside the viewport ----
   let pop = null;
-  function closePop() { if (pop) { pop.anchor.setAttribute("aria-expanded", "false"); pop.node.remove(); pop = null; } }
+  function closePop() { if (pop) { pop.anchor.setAttribute("aria-expanded", "false"); pop.anchor.removeAttribute("aria-controls"); pop.node.remove(); pop = null; } }
   document.addEventListener("click", e => {
     const b = e.target.closest("sup.fn button");
     if (!b) { if (pop && !pop.node.contains(e.target)) closePop(); return; }
@@ -36,14 +36,14 @@ export function initPanel({ page, L, sefariaUrl }) {
     const r = page.rows.find(x => x.row === b.closest(".row"));
     const k = r && r.keys.find(k => k.key === b.dataset.key); if (!k) return;
     const node = document.createElement("div");
-    node.className = "notepop"; node.setAttribute("role", "note"); node.innerHTML = noteHtml(k, L);
+    node.className = "notepop"; node.id = "notepop"; node.setAttribute("role", "note"); node.innerHTML = noteHtml(k, L);
     document.body.append(node);
     const rb = b.getBoundingClientRect(), w = node.offsetWidth, h = node.offsetHeight;
     let left = rb.left - 8; if (left + w > innerWidth - 8) left = innerWidth - w - 8; if (left < 8) left = 8;
     // below the letter, unless that runs off the bottom and there is room above it
     let top = rb.bottom + 6; if (top + h > innerHeight - 8 && rb.top - 6 - h > 8) top = rb.top - 6 - h;
     node.style.left = (left + scrollX) + "px"; node.style.top = (top + scrollY) + "px";
-    b.setAttribute("aria-expanded", "true"); pop = { node, anchor: b };
+    b.setAttribute("aria-expanded", "true"); b.setAttribute("aria-controls", "notepop"); pop ={ node, anchor: b };
   });
 
   // ---- the side panel ----
@@ -51,7 +51,8 @@ export function initPanel({ page, L, sefariaUrl }) {
   function openPanel(kind, html, from) {
     if (opener && opener !== from) opener.setAttribute("aria-expanded", "false");
     if (activeWord) { activeWord.classList.remove("active"); activeWord = null; }
-    opener = from || null; if (opener) opener.setAttribute("aria-expanded", "true");
+    opener = from || null; if (opener) { opener.setAttribute("aria-expanded", "true"); opener.setAttribute("aria-controls", "panel"); }
+    panel.inert = false;
     pKind.textContent = kind; panel.setAttribute("aria-label", kind);
     pBody.innerHTML = html; pBody.scrollTop = 0;
     panel.setAttribute("data-open", ""); panel.setAttribute("aria-hidden", "false");
@@ -60,7 +61,7 @@ export function initPanel({ page, L, sefariaUrl }) {
   function closePanel() {
     if (!panel.hasAttribute("data-open")) return;
     seq++;
-    panel.removeAttribute("data-open"); panel.setAttribute("aria-hidden", "true");
+    panel.removeAttribute("data-open"); panel.setAttribute("aria-hidden", "true"); panel.inert = true;
     if (activeWord) { activeWord.classList.remove("active"); activeWord = null; }
     if (opener) { const o = opener; opener = null; o.setAttribute("aria-expanded", "false"); o.focus({ preventScroll: true }); }
   }

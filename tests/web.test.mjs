@@ -81,3 +81,24 @@ test("rowHtml survives an entry with missing fields", () => {
   assert.ok(!html.includes("undefined"));
   assert.match(rowHtml({ slug: "s", shabbat: "S", ref: "R", hebrewEn: "H", civilDisplay: "C" }, true, esc), /class="current"/);
 });
+import { rovingTarget, trapTarget } from "../site/app/a11y.js";
+
+test("rovingTarget: in Hebrew ArrowLeft reads on and ArrowRight goes back; Home, End; the ends hold", () => {
+  assert.equal(rovingTarget(0, 5, "ArrowLeft"), 1);
+  assert.equal(rovingTarget(4, 5, "ArrowLeft"), 4);
+  assert.equal(rovingTarget(3, 5, "ArrowRight"), 2);
+  assert.equal(rovingTarget(0, 5, "ArrowRight"), 0);
+  assert.equal(rovingTarget(2, 5, "Home"), 0);
+  assert.equal(rovingTarget(2, 5, "End"), 4);
+  assert.equal(rovingTarget(2, 5, "Tab"), null);
+  assert.equal(rovingTarget(0, 0, "ArrowLeft"), null);
+});
+
+test("trapTarget wraps Tab at the last control and Shift+Tab at the first, and leaves the middle to the browser", () => {
+  assert.equal(trapTarget(4, 5, false), 0);
+  assert.equal(trapTarget(0, 5, true), 4);
+  assert.equal(trapTarget(2, 5, false), null);
+  assert.equal(trapTarget(2, 5, true), null);
+  assert.equal(trapTarget(-1, 5, true), 4);
+  assert.equal(trapTarget(0, 0, false), null);
+});

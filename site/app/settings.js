@@ -1,6 +1,7 @@
 // The Aa button: text size (five steps), theme, trope colors, the PDF link. Choices persist per
 // device in localStorage; ?trope=1 wins for that load. Shared by the landing and the week page.
-const store = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} };
+import { trapFocus, focusables } from "./a11y.js";
+const store =(k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} };
 const load = k => { try { return localStorage.getItem(k); } catch { return null; } };
 
 export function applyStored() {
@@ -26,7 +27,12 @@ export function initSettings({ host, button, pdfHref = null, trope = true }) {
     host.querySelector("#sizeDown").disabled = html.dataset.size === "1";
     host.querySelector("#sizeUp").disabled = html.dataset.size === "5";
   };
-  const open = v => { host.toggleAttribute("data-open", v); button.setAttribute("aria-expanded", String(v)); };
+  // While open, the card is a dialog: focus moves into it and Tab stays inside.
+  const open = v => {
+    host.toggleAttribute("data-open", v); button.setAttribute("aria-expanded", String(v));
+    if (v) { host.setAttribute("aria-modal", "true"); const first = focusables(host)[0]; if (first) first.focus({ preventScroll: true }); }
+    else host.removeAttribute("aria-modal");
+  };
   const close = () => open(false);
   button.addEventListener("click", () => open(!host.hasAttribute("data-open")));
   document.addEventListener("click", e => { if (!host.contains(e.target) && e.target !== button) close(); });
@@ -34,6 +40,7 @@ export function initSettings({ host, button, pdfHref = null, trope = true }) {
   document.addEventListener("keydown", e => {
     if (e.key === "Escape" && host.hasAttribute("data-open")) { close(); button.focus({ preventScroll: true }); }
   });
+  trapFocus(host, () => host.hasAttribute("data-open"));
   host.querySelector("#sizeDown").addEventListener("click", () => { html.dataset.size = String(Math.max(1, +html.dataset.size - 1)); store("size", html.dataset.size); sync(); });
   host.querySelector("#sizeUp").addEventListener("click", () => { html.dataset.size = String(Math.min(5, +html.dataset.size + 1)); store("size", html.dataset.size); sync(); });
   host.querySelectorAll("#themeSeg button").forEach(b => b.addEventListener("click", () => { html.dataset.theme = b.dataset.theme; store("theme", b.dataset.theme); sync(); }));

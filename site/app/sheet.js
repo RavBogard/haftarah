@@ -5,6 +5,7 @@ import { initPanel } from "./panel.js";
 import { slugFromPath, dataUrl } from "./contract.js";
 
 export { slugFromPath, dataUrl };
+import { initRoving, focusables } from "./a11y.js";
 
 const DRIVE = "https://drive.google.com/drive/folders/1TbSmoeBaCSLciL_-_HSCuKWkJMSZvGwd";
 const errorsSeen = [];   // filled in check mode (?check=1) by the error listeners in run()
@@ -110,7 +111,7 @@ export async function run() {
       const frag = document.createDocumentFragment(); let at = 0;
       for (const w of words) {
         if (w.start > at) frag.append(tn.data.slice(at, w.start));
-        const s = el("span", "w", esc(w.text)); s.tabIndex = 0; s.setAttribute("role", "button"); frag.append(s); at = w.end;
+        const s = el("span", "w", esc(w.text)); s.tabIndex = -1; s.setAttribute("role", "button"); frag.append(s); at = w.end;
       }
       if (at < tn.data.length) frag.append(tn.data.slice(at));
       tn.replaceWith(frag);
@@ -122,7 +123,7 @@ export async function run() {
       ? `<span class="lem${e.lemmaLang === "he" ? ' he-lemma" lang="he" dir="rtl' : ""}">${esc(e.lemma)}</span><span class="brk">]</span>` : "";
     const cls = `src${e.drafted ? " drafted" : ""}`;
     const src = e.sourceRef
-      ? `<button type="button" class="${cls}" data-ref="${esc(e.sourceRef)}" data-reg="${reg}" data-src="${esc(e.source)}" aria-expanded="false">${esc(e.source)}</button>`
+      ? `<button type="button" class="${cls}" data-ref="${esc(e.sourceRef)}" data-reg="${reg}" data-src="${esc(e.source)}" aria-controls="panel" aria-expanded="false">${esc(e.source)}</button>`
       : `<span class="${cls}">${esc(e.source)}</span>`;
     return `<span class="sig" title="${NAMES[reg]}">${SIG[reg]}</span><span class="v">${e.verseLabel}</span>${lemma} ${src}<span class="body">${e.bodyHtml}</span>${e.tail.length ? ` <span class="tail">${e.tail.join("; ")}.</span>` : ""}`;
   }
@@ -136,6 +137,7 @@ export async function run() {
     const he = el("div", "he", v.heHtml); he.lang = "he"; he.dir = "rtl";
     keyButtons(he);
     wrapWords(he);
+    initRoving(he, ".w");   // one tab stop per verse; arrows move between its words
     row.append(en, gut, he);
     const count = countLabel(v.entries.length, v.keys.length);
     // A verse with nothing gets a div: a <details> without a summary shows the browser's own "Details".
@@ -239,6 +241,24 @@ function runCheck(api, L) {
   h.dataset.checkEmptySummaries = String(document.querySelectorAll(".vapp.empty summary").length);
   h.dataset.checkWide = String(wide);
   h.dataset.checkWidth = String(innerWidth);
+  // Accessibility: one tab stop per verse, the closed panel inert, every opener names what it opens,
+  // the settings card keeps Tab inside.
+  h.dataset.checkWordStops = String(document.querySelectorAll("#text .he .w[tabindex='0']").length);
+  h.dataset.checkPanelInert = String(document.getElementById("panel").inert);
+  h.dataset.checkSrcUncontrolled = String(document.querySelectorAll("button.src:not([aria-controls='panel'])").length);
+  const keyBtn = document.querySelector("#text sup.fn button");
+  if (keyBtn) {
+    keyBtn.click();
+    const named = keyBtn.getAttribute("aria-controls") === "notepop" && !!document.getElementById("notepop");
+    keyBtn.click();
+    h.dataset.checkPop = named && !document.getElementById("notepop") && !keyBtn.hasAttribute("aria-controls") ? "ok" : "fail";
+  } else h.dataset.checkPop = "none";
+  document.getElementById("aaBtn").click();
+  const controls = focusables(document.getElementById("settings"));
+  controls.at(-1).focus();
+  controls.at(-1).dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true }));
+  h.dataset.checkTrap = document.activeElement === controls[0] ? "ok" : "fail";
+  document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
   // Two thirds down: far enough that a rail which scrolls short of its target misses it.
   const target = rows[Math.floor(rows.length * 2 / 3)];
   target.row.scrollIntoView({ block: "start" });

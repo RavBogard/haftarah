@@ -97,6 +97,11 @@ async function main() {
       expect("current verse marked", a.current === v.ref, a.current);
       expect("dark paper", a.paper === "rgb(18, 17, 16)", a.paper);
       expect("title", /·/.test(a.title || ""), a.title);
+      expect("one tab stop per verse for the Hebrew words", Number(a["word-stops"]) === sheet.verses.length, a["word-stops"]);
+      expect("the closed panel is inert", a["panel-inert"] === "true", a["panel-inert"]);
+      expect("every source button names the panel", a["src-uncontrolled"] === "0", a["src-uncontrolled"]);
+      expect("a note popover is named while open and gone after", a.pop === "ok", a.pop);
+      expect("the settings card keeps Tab inside", a.trap === "ok", a.trap);
     }
     const l = attrs(await dumpDom(browser, `${base}/?check=1`, { size: "1440,900" }));
     console.log("\nlanding: /");
