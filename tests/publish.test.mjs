@@ -26,7 +26,7 @@ before(async () => {
 });
 after(async () => { await rm(root, { recursive: true, force: true }); });
 
-test("cleanSheet drops rejected items, every status, and fields outside schema 2", () => {
+test("cleanSheet drops rejected items, every status, and fields outside PUBLISHED_FIELDS", () => {
   const out = cleanSheet(structuredClone(sheet));
   assert.deepEqual(Object.keys(out).sort(), ["commentary", "credits", "glossary", "glosses", "haftarah", "nextWeek", "openingNote", "schema", "series", "shabbat", "slug", "verses"].filter(k => k in sheet).sort());
   assert.equal(out.commentary.length, sheet.commentary.length - 1);
