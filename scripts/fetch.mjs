@@ -78,13 +78,13 @@ export async function withRetry(fn, { delays = [1500, 4000], sleepImpl = wait, r
   }
 }
 
-/** GET JSON; a network error or a 5xx is retried, a 4xx is not. */
+/** GET JSON; a network error, a 5xx or a 429 (too many requests) is retried, any other 4xx is not. */
 export async function getJSON(url, { fetchImpl = globalThis.fetch, sleepImpl = wait } = {}) {
   return withRetry(async () => {
     const res = await fetchImpl(url, { headers: HEADERS });
     if (!res.ok) { const e = new Error(`${res.status} ${res.statusText} for ${url}`); e.status = res.status; throw e; }
     return res.json();
-  }, { sleepImpl, retryable: e => !(e.status >= 400 && e.status < 500) });
+  }, { sleepImpl, retryable: e => e.status === 429 || !(e.status >= 400 && e.status < 500) });
 }
 
 /** Hebcal's leyning item for one date, on the customs' calendar (Diaspora: i=off). */
@@ -367,7 +367,12 @@ export function capToBudget(commentaries, budget = TEXTS_BUDGET) {
   return { kept, dropped };
 }
 
-async function buildTexts({ ref, book, verses, links, groups, core = CORE_COMMENTATORS, extras = true, capCommentaries = false }) {
+/**
+ * texts.json for one reading. The budget covers the file as written: the wrapper (ref, verses, the
+ * notFetched lists) is reserved first, and linked texts are let go from the end until the whole file fits.
+ * `getText` is Sefaria's v3 text call (injectable for tests).
+ */
+export async function buildTexts({ ref, book, verses, links, groups, core = CORE_COMMENTATORS, extras = true, capCommentaries = false, budget = TEXTS_BUDGET, getText = sefariaText, now = () => new Date() }) {
   const chapters = new Map();
   for (const v of verses) { if (!chapters.has(v.chapter)) chapters.set(v.chapter, new Set()); chapters.get(v.chapter).add(v.verse); }
 
@@ -377,7 +382,7 @@ async function buildTexts({ ref, book, verses, links, groups, core = CORE_COMMEN
     if (g.category === "Commentary" && g.source.endsWith(` on ${book}`) && !/^Sources and References/.test(g.source) && g.verses.size >= 3 && !indexes.includes(g.source)) indexes.push(g.source);
   }
   const jobs = indexes.flatMap(index => [...chapters.keys()].map(ch => ({ index, ch })));
-  const results = await pool(jobs, 4, async ({ index, ch }) => ({ index, ch, tx: await sefariaText(`${index} ${ch}`) }));
+  const results = await pool(jobs, 4, async ({ index, ch }) => ({ index, ch, tx: await getText(`${index} ${ch}`) }));
 
   let commentaries = {};
   const missing = [];
@@ -391,12 +396,19 @@ async function buildTexts({ ref, book, verses, links, groups, core = CORE_COMMEN
   }
   for (const [k, c] of Object.entries(commentaries)) if (!Object.keys(c.segments).length) { delete commentaries[k]; missing.push(k); }
   const missingNow = missing.filter(m => !commentaries[m]);
+  const fetchedAt = now().toISOString();
+  const verseRefs = verses.map(v => `${book} ${v.chapter}:${v.verse}`);
+  const overCap = list => list.map(e => ({ ref: e.ref, source: e.source, category: e.category, kind: e.kind, anchors: e.anchors }));
+  // The wrapper's share of the file, reserved before the commentaries and linked texts are fitted.
+  const reserve = Buffer.byteLength(JSON.stringify({ ref, fetched: fetchedAt, verses: verseRefs, commentaries: {}, linked: {}, notFetched: {
+    commentaries: missingNow, linkedOverCap: overCap(selectLinked(links, new Set(Object.keys(commentaries))).skipped), linkedOverBudget: [], linkedFailed: [], commentariesOverBudget: [] } }, null, 1));
+  const room = Math.max(0, budget - reserve);
   let overBudgetCommentaries = [];
-  if (capCommentaries) ({ kept: commentaries, dropped: overBudgetCommentaries } = capToBudget(commentaries));
+  if (capCommentaries) ({ kept: commentaries, dropped: overBudgetCommentaries } = capToBudget(commentaries, room));
 
   // Linked texts.
   const { selected, skipped } = selectLinked(links, new Set(Object.keys(commentaries)));
-  const fetched = await pool(selected, 4, async e => ({ e, tx: await sefariaText(e.ref) }));
+  const fetched = await pool(selected, 4, async e => ({ e, tx: await getText(e.ref) }));
   let bytes = Buffer.byteLength(JSON.stringify(commentaries, null, 1));
   const linked = {};
   const overBudget = [], failed = [];
@@ -406,19 +418,30 @@ async function buildTexts({ ref, book, verses, links, groups, core = CORE_COMMEN
     const en = tx.versions.filter(v => v.languageFamilyName === "english").map(v => ({ versionTitle: v.versionTitle, text: Array.isArray(v.text) ? v.text : rtrim(v.text) })).filter(v => textLen(v.text));
     const entry = { source: e.source, category: e.category, kind: e.kind, anchors: e.anchors, he: heV ? (Array.isArray(heV.text) ? heV.text : rtrim(heV.text)) : "", heVersion: heV?.versionTitle || null, en };
     const size = Buffer.byteLength(JSON.stringify({ [e.ref]: entry }, null, 1));
-    if (bytes + size > TEXTS_BUDGET) { overBudget.push(e.ref); continue; }
+    if (bytes + size > room) { overBudget.push(e.ref); continue; }
     bytes += size;
     linked[e.ref] = entry;
   }
 
   const notFetched = {
     commentaries: missingNow,
-    linkedOverCap: skipped.map(e => ({ ref: e.ref, source: e.source, category: e.category, kind: e.kind, anchors: e.anchors })),
+    linkedOverCap: overCap(skipped),
     linkedOverBudget: overBudget,
     linkedFailed: failed,
   };
   if (capCommentaries) notFetched.commentariesOverBudget = overBudgetCommentaries;
-  return { ref, fetched: new Date().toISOString(), verses: verses.map(v => `${book} ${v.chapter}:${v.verse}`), commentaries, linked, notFetched };
+  const out = { ref, fetched: fetchedAt, verses: verseRefs, commentaries, linked, notFetched };
+  // The reserve is an estimate (nesting indents every line once more): let go of linked texts from the
+  // end, then (for the Torah) commentaries, until the file as written fits.
+  const written = () => Buffer.byteLength(JSON.stringify(out, null, 1));
+  while (written() > budget) {
+    const lk = Object.keys(linked);
+    if (lk.length) { const k = lk[lk.length - 1]; delete linked[k]; overBudget.unshift(k); continue; }
+    const ck = Object.keys(commentaries);
+    if (capCommentaries && ck.length > 1) { const k = ck[ck.length - 1]; delete commentaries[k]; overBudgetCommentaries.unshift(k); continue; }
+    break;
+  }
+  return out;
 }
 
 // ---- one reading ------------------------------------------------------------------
@@ -509,14 +532,17 @@ const count = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 /**
  * A kept sheet.json and this run's Torah reading and aliyot. A schema-2 week with no Torah pick is
  * returned untouched. A Torah pick is added first in readings[] (a schema-2 week is migrated to hold
- * it); the same pick again changes nothing; a Torah reading nobody has worked on yet is replaced by a
- * new pick; one with entries or glosses is never replaced here.
+ * it); the same pick again changes nothing; a Torah reading nobody has worked on yet (no entries or
+ * glosses, or only ones carried from last time) is replaced by a new pick, its carried entries with
+ * it; one with any other entry or gloss is never replaced here.
  */
 export function mergeWeek(existing, { torah = null, leyning = null } = {}) {
   const notes = [];
   const has = L.readings(existing).find(r => r.kind === "torah") || null;
   if (torah && has && has.ref === torah.ref) torah = null;
-  if (torah && has && ((has.commentary || []).length || (has.glosses || []).length)) {
+  // Worked on = any entry or gloss that is not a carried copy from last time; carried ones go with the old reading.
+  const worked = r => [...(r.commentary || []), ...(r.glosses || [])].some(e => e.status !== "carried");
+  if (torah && has && worked(has)) {
     throw new Error(`sheet.json's Torah reading (${has.ref}) already has ${count((has.commentary || []).length, "entry", "entries")} and ${count((has.glosses || []).length, "gloss", "glosses")}; --force replaces the whole sheet, or change readings[] by hand`);
   }
   const holdsLeyning = torah || Number(existing.schema) >= 3;
@@ -541,6 +567,16 @@ export function withEntryIds(sheet) {
   const out = structuredClone(sheet);
   for (const r of L.readings(out)) L.assignEntryIds(r.commentary || [], r.id);
   return { sheet: out, changed: true };
+}
+
+/**
+ * fetch's last step on the sheet: ids on every entry, then the prior (applyPrior). Ids come first so an
+ * entry Daniel added by hand, without an id, is recognised as the prior's entry and not carried in again.
+ */
+export function withPrior(sheet, prior, opts = {}) {
+  const ids = withEntryIds(sheet);
+  const ap = applyPrior(ids.sheet, prior, opts);
+  return { sheet: ap.sheet, changed: ids.changed || ap.changed, added: ap.added };
 }
 
 // ---- main -------------------------------------------------------------------
@@ -571,7 +607,17 @@ export function weeksTaken(date, local = [], known = []) {
   return [...new Set([...local, ...known])].filter(d => d.startsWith(date)).sort();
 }
 
+/** A flag that needs a value but was given none (arg() returns true then): the usage error, else null. */
+export function missingValue({ prior = null, torah = null, pick = null } = {}) {
+  if (prior === true) return "--prior needs a folder";
+  if (torah === true) return `--torah needs a range, e.g. --torah "Genesis 6:9-7:16"`;
+  if (pick === true) return "--torah-pick needs a pick: aliyah:N[-M], aliyah:M, triennial or full";
+  return null;
+}
+
 async function main() {
+  const usage = missingValue({ prior: arg("prior", null), torah: arg("torah", null), pick: arg("torah-pick", null) });
+  if (usage) throw new Error(usage);
   const customsArg = arg("customs", null);
   const customs = await loadCustoms(typeof customsArg === "string" ? customsArg : "crc");
   const date = arg("date", nextShabbat());
@@ -584,7 +630,7 @@ async function main() {
   const priorArg = arg("prior", null);
   const noTorah = process.argv.includes("--no-torah");
   const torahArg = arg("torah", null), pickArg = arg("torah-pick", null);
-  if (noTorah && (typeof torahArg === "string" || pickArg)) throw new Error("--no-torah cannot be combined with --torah <ref> or --torah-pick");
+  if (noTorah && (torahArg || pickArg)) throw new Error("--no-torah cannot be combined with --torah <ref> or --torah-pick");
   const pick = typeof torahArg === "string" ? { kind: "ref", ref: torahArg } : typeof pickArg === "string" ? parsePick(pickArg) : defaultPick(customs);
   if ((customs.toConfirm || []).length) console.log(`customs/${customs.id}.json: not yet confirmed by Daniel: ${customs.toConfirm.join(", ")}`);
   const hebcal = d => getJSON(leyningUrl(d, customs));
@@ -662,13 +708,10 @@ async function main() {
   const prior = await lookupPrior({ keys: parashahKeysOf(name), civil: date, priorDir: typeof priorArg === "string" ? priorArg : null });
   await writeFile(join(dir, PRIOR_FILE), JSON.stringify(prior, null, 1), "utf8");
   console.log(prior.slug ? `Last time: ${prior.slug} (${prior.hebrewEn}, from the ${prior.source})` : `Last time: none${prior.error ? ` (${prior.error})` : ""}`);
-  const ap = applyPrior(sheet, prior, { carry, fresh: !existing || force });
+  // 4c. Every entry has an id first (carry-forward depends on them), so a hand-added entry is not carried in twice.
+  const ap = withPrior(sheet, prior, { carry, fresh: !existing || force });
   if (ap.changed) { sheet = ap.sheet; if (!write) write = "Updated"; }
   if (ap.added.length) console.log(`  carried ${ap.added.length} entr${ap.added.length === 1 ? "y" : "ies"} from ${prior.slug}: ${ap.added.map(a => `${a.reading} ${a.chapter}:${a.verse} ${a.source}`).join("; ")}`);
-
-  // 4c. Every entry has an id (carry-forward depends on them); a kept sheet that lacked some is rewritten with them.
-  const ids = withEntryIds(sheet);
-  if (ids.changed) { sheet = ids.sheet; if (!write) write = "Updated"; }
 
   // 5. Write sheet.json.
   if (write) {

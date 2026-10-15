@@ -56,14 +56,14 @@ export function noPrior(keys, error = null) {
   return out;
 }
 
-/** The prior: a Drive-restored folder when given, else the public library. Never throws for a library it cannot reach. */
-export async function lookupPrior({ keys, civil, priorDir = null, fetchImpl = globalThis.fetch, site = SITE }) {
+/** The prior: a Drive-restored folder when given, else the public library. Never throws for a library it cannot reach or that hangs (15 s per GET). */
+export async function lookupPrior({ keys, civil, priorDir = null, fetchImpl = globalThis.fetch, site = SITE, timeoutMs = 15000 }) {
   if (priorDir) {
     const sheet = JSON.parse(await readFile(join(priorDir, "sheet.json"), "utf8"));
     return priorFromSheet(sheet, { slug: sheet.slug || basename(resolve(priorDir)), source: "folder" });
   }
   const get = async url => {
-    const res = await fetchImpl(url, { method: "GET", headers: { accept: "application/json" } });
+    const res = await fetchImpl(url, { method: "GET", headers: { accept: "application/json" }, signal: AbortSignal.timeout(timeoutMs) });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return res.json();
   };
@@ -114,19 +114,26 @@ export function withSeeAlso(note, sentence) {
 
 /**
  * What fetch does with the prior. Carry-forward is on by default (Daniel cuts): the pointer, the fitting
- * entries and the "See also" sentence, on a new sheet and on a kept one (reruns add nothing). With
- * carry: false (--no-carry), a new sheet gets the pointer only and a kept sheet is left alone.
+ * entries and the "See also" sentence, on a new sheet and on a kept one (reruns add nothing). The
+ * sentence is proposed once, when the pointer is first set (no prior before, or another slug): a
+ * sentence Daniel deletes stays deleted. Entries are carried on every run; ids make that idempotent.
+ * With carry: false (--no-carry), a new sheet gets the pointer only and a kept sheet is left alone.
+ * A sheet this changes comes back schema 3, as mergeWeek's do.
  */
 export function applyPrior(sheet, prior, { carry = true, fresh = false } = {}) {
   if (!prior || !prior.slug || !(carry || fresh)) return { sheet, changed: false, added: [] };
   let out = sheet, added = [];
+  const firstTime = !sheet.prior || sheet.prior.slug !== prior.slug;
   const pointer = { slug: prior.slug, hebrewEn: prior.hebrewEn, cycle: prior.cycle };
   if (JSON.stringify(sheet.prior) !== JSON.stringify(pointer)) out = { ...out, prior: pointer };
   if (carry) {
     ({ sheet: out, added } = carryInto(out, prior));
-    const note = withSeeAlso(out.openingNote, seeAlsoSentence(prior));
-    if (JSON.stringify(note) !== JSON.stringify(out.openingNote)) out = { ...out, openingNote: note };
+    if (firstTime) {
+      const note = withSeeAlso(out.openingNote, seeAlsoSentence(prior));
+      if (JSON.stringify(note) !== JSON.stringify(out.openingNote)) out = { ...out, openingNote: note };
+    }
   }
+  if (out !== sheet && !(Number(out.schema) >= 3)) out = migrate3(out);
   return { sheet: out, changed: out !== sheet, added };
 }
 

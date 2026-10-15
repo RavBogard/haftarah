@@ -39,4 +39,7 @@ test("no CRC constant lives in the code that will serve other congregations: it 
     const src = readFileSync(new URL(`../${f}`, import.meta.url), "utf8");
     for (const s of ["Central Reform", "Daniel Bogard", "Miqra according to the Masorah", "Gender-Sensitive", "Tell me what I got wrong"]) assert.ok(!src.includes(s), `${f} has "${s}"`);
   }
+  // fetch.mjs writes the series and the versions from customs; lib.js keeps its print-golden fallback series name.
+  const fetchSrc = readFileSync(new URL("../scripts/fetch.mjs", import.meta.url), "utf8");
+  for (const s of ["Torah from Scratch", "JPS TANAKH"]) assert.ok(!fetchSrc.toLowerCase().includes(s.toLowerCase()), `scripts/fetch.mjs has "${s}"`);
 });

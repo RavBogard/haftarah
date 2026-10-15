@@ -97,6 +97,54 @@ test("applyPrior: carry-forward is on by default (pointer, entries, sentence); -
   assert.equal(c.changed, false);
 });
 
+test("applyPrior: the See also sentence is proposed once, when the pointer is first set; deleted, it stays deleted", async () => {
+  const min = await load("week-min");
+  const prior = priorFromSheet(min, { slug: "2025-10-25-noach", source: "web library" });
+  const first = applyPrior(migrate3({ ...min, commentary: [] }), prior, { fresh: true }).sheet;
+  assert.match(first.openingNote.calendar, /See also/);
+  const edited = structuredClone(first);
+  edited.openingNote.calendar = "Daniel's own words.";
+  const rerun = applyPrior(edited, prior, {});
+  assert.deepEqual(rerun.sheet.openingNote, edited.openingNote, "the deleted sentence is not put back");
+  assert.equal(rerun.changed, false);
+  assert.equal(rerun.sheet, edited);
+  const newer = { ...prior, slug: "2026-10-17-noach" };
+  assert.match(applyPrior(edited, newer, {}).sheet.openingNote.calendar, /Daniel's own words\. See also/, "a different prior is a first time");
+});
+
+test("applyPrior: a schema-2 kept sheet it changes comes back schema 3 with the pointer set, even with nothing to carry", async () => {
+  const min = await load("week-min");
+  const prior = { ...priorFromSheet(min, { slug: "2025-10-25-noach", source: "web library" }), readings: [] };
+  const r = applyPrior(min, prior, {});
+  assert.equal(r.changed, true);
+  assert.deepEqual(r.added, []);
+  assert.equal(r.sheet.schema, 3);
+  assert.equal(r.sheet.prior.slug, "2025-10-25-noach");
+  assert.ok(Array.isArray(r.sheet.readings) && !("haftarah" in r.sheet));
+  const ptr = applyPrior(min, prior, { carry: false, fresh: true });
+  assert.equal(ptr.sheet.schema, 3, "the pointer alone is a change too");
+  assert.equal(min.schema, 2, "the input is not changed");
+});
+
+test("lookupPrior: each GET carries a timeout signal; an abort becomes no prior with the reason, never a throw", async () => {
+  const seen = [];
+  const hang = async (url, init = {}) => { seen.push(init.signal); const e = new Error("The operation was aborted due to timeout"); e.name = "TimeoutError"; throw e; };
+  const p = await lookupPrior({ keys: ["noach"], civil: "2026-10-17", fetchImpl: hang });
+  assert.equal(p.slug, null);
+  assert.match(p.error, /library index could not be read \(The operation was aborted due to timeout\)/);
+  assert.ok(seen[0] instanceof AbortSignal);
+  const calls = [];
+  const second = async (url, init = {}) => {
+    calls.push(init.signal);
+    if (String(url).endsWith("/data/index.json")) return new Response(JSON.stringify({ weeks: [{ slug: "2025-10-25-noach", civil: "2025-10-25", parashahKeys: ["noach"] }] }), { status: 200 });
+    const e = new Error("This operation was aborted"); e.name = "AbortError"; throw e;
+  };
+  const q = await lookupPrior({ keys: ["noach"], civil: "2026-10-17", fetchImpl: second });
+  assert.equal(q.slug, null);
+  assert.match(q.error, /2025-10-25-noach's sheet could not be read \(This operation was aborted\)/);
+  assert.ok(calls.length === 2 && calls.every(s => s instanceof AbortSignal));
+});
+
 test("no prior: the reason is kept, nothing is set on the sheet, and the digest says so", async () => {
   const none = noPrior(["haazinu"]);
   assert.deepEqual(none, { slug: null, parashahKey: "haazinu", searched: "web library" });

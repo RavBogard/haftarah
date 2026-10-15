@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { withEntryIds, withRetry, getJSON, fetchPassage, candidatesFrom, capToBudget, readingFrom, freshSheet, mergeWeek, leyningUrl, TORAH_CORE } from "../scripts/fetch.mjs";
+import { withPrior, missingValue, buildTexts, withEntryIds, withRetry, getJSON, fetchPassage, candidatesFrom, capToBudget, readingFrom, freshSheet, mergeWeek, leyningUrl, TORAH_CORE } from "../scripts/fetch.mjs";
 import { migrate3 } from "../scripts/migrate.mjs";
 import { makeWeekTorah } from "./helpers/makeWeekTorah.mjs";
 
@@ -30,6 +30,68 @@ test("getJSON retries a 5xx and a network error, never a 4xx", async () => {
   const missing = async () => { calls++; return new Response("no", { status: 404, statusText: "Not Found" }); };
   await assert.rejects(getJSON("https://example.test/y", { fetchImpl: missing, sleepImpl: async () => {} }), /404 Not Found for https:\/\/example\.test\/y/);
   assert.equal(calls, 1);
+});
+
+test("getJSON retries a 429 like a network error, with the same backoff", async () => {
+  let calls = 0;
+  const waits = [];
+  const limited = async () => (++calls === 1 ? new Response("slow down", { status: 429, statusText: "Too Many Requests" }) : new Response('{"ok":2}', { status: 200 }));
+  assert.deepEqual(await getJSON("https://example.test/z", { fetchImpl: limited, sleepImpl: async ms => waits.push(ms) }), { ok: 2 });
+  assert.equal(calls, 2);
+  assert.deepEqual(waits, [1500]);
+});
+
+test("getJSON and withRetry: fetchImpl throwing once (a network error) then answering is retried to success", async () => {
+  let calls = 0;
+  const waits = [];
+  const once = async () => { if (++calls === 1) throw new TypeError("fetch failed"); return new Response('{"ok":3}', { status: 200 }); };
+  assert.deepEqual(await getJSON("https://example.test/n", { fetchImpl: once, sleepImpl: async ms => waits.push(ms) }), { ok: 3 });
+  assert.equal(calls, 2);
+  assert.deepEqual(waits, [1500]);
+  let n = 0;
+  assert.equal(await withRetry(async () => { if (++n === 1) throw new TypeError("fetch failed"); return "fine"; }, { sleepImpl: async () => {} }), "fine");
+  assert.equal(n, 2);
+});
+
+test("a flag that needs a value and has none is a usage error: --prior, --torah, --torah-pick", () => {
+  assert.equal(missingValue({ prior: true }), "--prior needs a folder");
+  assert.match(missingValue({ torah: true }), /^--torah needs a range/);
+  assert.match(missingValue({ pick: true }), /^--torah-pick needs a pick/);
+  assert.equal(missingValue({ prior: "weeks/x", torah: "Genesis 6:9-22", pick: "aliyah:1" }), null);
+  assert.equal(missingValue({}), null);
+});
+
+test("buildTexts: the file as written, wrapper and all, stays under the budget when the candidates overflow it", async () => {
+  const verses = Array.from({ length: 20 }, (_, i) => ({ chapter: 6, verse: 9 + i }));
+  // 120 Talmud links: 60 fetched (the cap), 60 listed over cap with their anchors, which the wrapper carries.
+  const links = Array.from({ length: 120 }, (_, i) => ({ ref: `Synthetic Tractate ${i + 2}a:${i + 1}`, index_title: "Synthetic Tractate", category: "Talmud", anchorRef: `Genesis 6:${9 + (i % 20)}` }));
+  const big = "א".repeat(1500);
+  const getText = async ref => ({ indexTitle: ref.replace(/ \d.*$/, ""), versions: [{ languageFamilyName: "hebrew", versionTitle: "Synthetic", text: big }] });
+  const budget = 60_000;
+  const t = await buildTexts({ ref: "Genesis 6:9-28", book: "Genesis", verses, links, groups: new Map(), core: [], extras: false, capCommentaries: true, budget, getText, now: () => new Date("2026-10-15T00:00:00Z") });
+  const written = Buffer.byteLength(JSON.stringify(t, null, 1));
+  assert.ok(written <= budget, `texts file is ${written} bytes, over the ${budget} budget`);
+  assert.equal(t.notFetched.linkedOverCap.length, 60);
+  assert.ok(t.notFetched.linkedOverBudget.length > 0, "some linked texts gave way");
+  assert.ok(Object.keys(t.linked).length > 0, "and some stayed");
+  assert.equal(Object.keys(t.linked).length + t.notFetched.linkedOverBudget.length, 60);
+});
+
+test("withPrior: ids first, so an id-less entry Daniel added by hand is not carried in again beside itself", () => {
+  const three = migrate3(min);
+  const entry = { ...three.readings[0].commentary[0] };
+  const prior = { slug: "2025-10-25-noach", hebrewEn: "29 Tishrei 5786", cycle: "5786", parashahKey: "noach", readings: [{ id: "haftarah", kind: "haftarah", ref: three.readings[0].ref, book: three.readings[0].book,
+    entries: [{ ...entry, chapter: entry.chapter ?? three.readings[0].verses.find(v => v.verse === entry.verse).chapter }], glosses: [], cut: [] }] };
+  const kept = structuredClone(three);
+  kept.readings[0].commentary = [{ ...entry }];   // the same entry, typed in by hand: no id
+  delete kept.readings[0].commentary[0].id;
+  // Before the fix (applyPrior first) this sheet came back with the entry twice: Daniel's and a carried copy.
+  const r = withPrior(kept, prior, { carry: true, fresh: false });
+  const list = r.sheet.readings[0].commentary;
+  assert.equal(list.length, 1, "one entry, not two");
+  assert.equal(list[0].id, prior.readings[0].entries[0].id);
+  assert.notEqual(list[0].status, "carried");
+  assert.deepEqual(r.added, []);
 });
 
 test("leyningUrl asks Hebcal for the customs' calendar", () => {
@@ -121,6 +183,23 @@ test("mergeWeek: the same pick again changes nothing; an untouched Torah reading
   assert.deepEqual(swapped.notes, ["replaced the Torah reading Genesis 6:9-22 with Genesis 7:1-16"]);
   const worked = makeWeekTorah(min);   // its Torah reading has an entry and a gloss
   assert.throws(() => mergeWeek(worked, { torah: other, leyning: LEY }), /Torah reading \(Genesis 6:9-11\) already has 1 entry and 1 gloss; --force replaces the whole sheet/);
+});
+
+test("mergeWeek: a Torah reading holding only carried entries is untouched and a new pick replaces it; one non-carried entry keeps the refusal", () => {
+  const once = mergeWeek(min, { torah: TORAH, leyning: LEY }).sheet;
+  const carried = structuredClone(once);
+  carried.readings[0].commentary = [{ id: "e-11111111", verse: 9, chapter: 6, source: "Rashi", status: "carried", carried: "2025-10-25-noach" }];
+  const other = { ...TORAH, ref: "Genesis 7:1-16", selection: "aliyah 2" };
+  const r = mergeWeek(carried, { torah: other, leyning: LEY });
+  assert.equal(r.changed, true);
+  assert.equal(r.sheet.readings[0].ref, "Genesis 7:1-16");
+  assert.deepEqual(r.sheet.readings[0].commentary, [], "the carried entries go with the old reading");
+  const mixed = structuredClone(carried);
+  mixed.readings[0].commentary.push({ id: "e-22222222", verse: 9, chapter: 6, source: "Ramban", status: "draft" });
+  assert.throws(() => mergeWeek(mixed, { torah: other, leyning: LEY }), /Torah reading \(Genesis 6:9-22\) already has 2 entries and 0 glosses/);
+  const glossed = structuredClone(carried);
+  glossed.readings[0].glosses = [{ he: "x", en: "y" }];
+  assert.throws(() => mergeWeek(glossed, { torah: other, leyning: LEY }), /already has 1 entry and 1 gloss/);
 });
 
 test("nextWeekFor records next week's Torah reading from Hebcal's summary, en-dashed; the other fields are as before", async () => {
