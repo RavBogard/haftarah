@@ -59,6 +59,28 @@ export function wordRange(words, count) {
   return [Math.max(0, a), Math.min(count - 1, b)];
 }
 
+// A verse's shareable address: the canonical week path (lowercase, no trailing slash) and the anchor.
+export const verseUrl = (origin, slug, anchor) => `${origin}/${slug}#${anchor}`;
+
+// Copy, then say "Copied" or "Not copied" on the button and in the page's live region; the button's
+// label comes back after `delay` and the region empties. One pending revert per button: a second copy
+// restarts it instead of reverting early. The region is cleared only by the button that last spoke.
+const reverts = new WeakMap();
+let lastSpoke = null;
+export async function copyWithStatus(b, text, { write, status, delay = 1500 }) {
+  const label = b.dataset.label || (b.dataset.label = b.textContent);
+  clearTimeout(reverts.get(b));
+  let said;
+  try { await write(text); said = "Copied"; } catch { said = "Not copied"; }
+  b.textContent = said;
+  if (status) { status.textContent = said; lastSpoke = b; }
+  reverts.set(b, setTimeout(() => {
+    b.textContent = label; reverts.delete(b);
+    if (status && lastSpoke === b) { status.textContent = ""; lastSpoke = null; }
+  }, delay));
+  return said;
+}
+
 export async function run() {
   const L = window.HaftarahLib;
   const esc = L.escapeHtml, SIG = L.SIGLA, NAMES = L.REGISTER_NAMES;
@@ -180,7 +202,7 @@ export async function run() {
     const hlNotes = hls.filter(h => h.note);
     if (hls.length) {
       row.classList.add("hl");
-      gut.insertAdjacentHTML("beforeend", '<span class="sr">Highlighted.</span>');
+      gut.querySelector("button").insertAdjacentHTML("beforeend", '<span class="sr"> Highlighted.</span>');   // in the button's name
       const ws = [...he.querySelectorAll(".w")];
       for (const h of hls) { const span = wordRange(h.words, ws.length); if (span) ws.slice(span[0], span[1] + 1).forEach(w => w.classList.add("hl-w")); }
     }
@@ -269,8 +291,8 @@ export async function run() {
   function goToHash(hash = location.hash) {
     const a = parseVerseAnchor(hash);
     const r = a && rows.find(x => x.v.chapter === a.chapter && x.v.verse === a.verse && (a.reading == null || a.reading === reading.id));
+    rows.forEach(x => x.row.classList.toggle("target", x === r));   // an unknown fragment clears the old mark
     if (!r) return null;
-    rows.forEach(x => x.row.classList.toggle("target", x === r));
     r.row.scrollIntoView({ block: "start" });
     if (a.reading == null) history.replaceState(null, "", `${location.pathname}${location.search}#${r.row.id}`);
     return r;
@@ -289,18 +311,19 @@ export async function run() {
   async function onAct(e) {
     const b = e.target.closest("button.act"); if (!b) return;
     const r = rows.find(x => x.app === b.closest(".vapp")); if (!r) return;
-    const url = `${location.origin}${location.pathname}#${r.row.id}`;
+    const url = verseUrl(location.origin, slug, r.row.id);
     const text = b.dataset.act === "link" ? url : citationText({
       he: L.plainText(r.v.heHtml).text.trim(),
       en: r.v.enLines.map(t => L.plainText(t).text.trim()).join("\n"),
       ref: L.enDash(r.v.ref), translation: translationLabel(model.front.provenance.en), url,
       mode: html.dataset.lang || "both",
     });
-    const label = b.dataset.label || (b.dataset.label = b.textContent);
-    try { await navigator.clipboard.writeText(text); b.textContent = "Copied"; }
-    catch { b.textContent = "Not copied"; }
-    setTimeout(() => { b.textContent = label; }, 1500);
+    await copyWithStatus(b, text, { write: t => navigator.clipboard.writeText(t), status: copyStatus });
   }
+  // One polite live region for the page, so a screen reader hears "Copied" or "Not copied".
+  const copyStatus = el("p", "sr"); copyStatus.id = "copyStatus";
+  copyStatus.setAttribute("role", "status"); copyStatus.setAttribute("aria-live", "polite");
+  document.body.append(copyStatus);
   rail.addEventListener("click", onAct); text.addEventListener("click", onAct);
 
   const api = { rows, model, sync, goToHash, closeAll: () => { panel.close(); settings.close(); } };
@@ -350,7 +373,15 @@ function runCheck(api, L) {
   h.dataset.checkHlNotes = String(document.querySelectorAll(".vapp .hl-note").length);
   h.dataset.checkTarget = (document.querySelector("#text .row.target") || {}).id || "";
   h.dataset.checkHash = location.hash;
-  h.dataset.checkBogusHash = String(api.goToHash("#haftarah-99-99") === null);
+  h.dataset.checkBogusHash = String(api.goToHash("#haftarah-99-99") === null && !document.querySelector("#text .row.target"));
+  const hlButton = document.querySelector("#text .row.hl .gut button");
+  h.dataset.checkHlName = hlButton ? String(/Highlighted\.$/.test(hlButton.textContent)) : "none";
+  // One polite live region for copy status; every verse-header control a 44px target (one fold opened to measure on a phone).
+  h.dataset.checkLive = String(document.querySelectorAll(".sr[role='status'][aria-live='polite']").length);
+  const fold = document.querySelector("#text details.vapp:not([open])"); if (fold) fold.open = true;
+  const acts = [...document.querySelectorAll(".vapp .vh .act, .vapp .vh .acts a")].filter(x => x.getClientRects().length);
+  h.dataset.checkActHeight = acts.length ? String(Math.floor(Math.min(...acts.map(x => x.getBoundingClientRect().height)))) : "none";
+  if (fold) fold.open = false;
   // Two thirds down: far enough that a rail which scrolls short of its target misses it.
   const target = rows[Math.floor(rows.length * 2 / 3)];
   target.row.scrollIntoView({ block: "start" });

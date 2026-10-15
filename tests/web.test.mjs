@@ -132,7 +132,38 @@ test("load and store use the prefix and survive a storage that throws", () => {
   assert.deepEqual(migrateKeys(broken), []);
 });
 
-import { citationText, translationLabel, highlightsFor, wordRange } from "../site/app/sheet.js";
+import { citationText, translationLabel, highlightsFor, wordRange, verseUrl, copyWithStatus } from "../site/app/sheet.js";
+
+test("verseUrl is the canonical week path and the verse anchor, whatever address the reader arrived by", () => {
+  assert.equal(verseUrl("https://haftarah.centralreform.org", "2026-10-17-noach", "haftarah-54-1"), "https://haftarah.centralreform.org/2026-10-17-noach#haftarah-54-1");
+});
+
+test("copyWithStatus says Copied or Not copied on the button and in the live region, and one pending revert per button", async () => {
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  const button = () => ({ textContent: "Copy link", dataset: {} });
+  const status = { textContent: "" };
+  const written = [];
+  const b = button();
+  assert.equal(await copyWithStatus(b, "x", { write: async t => { written.push(t); }, status, delay: 10 }), "Copied");
+  assert.deepEqual(written, ["x"]);
+  assert.equal(b.textContent, "Copied"); assert.equal(status.textContent, "Copied");
+  await wait(30);
+  assert.equal(b.textContent, "Copy link"); assert.equal(status.textContent, "");
+  const f = button();
+  assert.equal(await copyWithStatus(f, "x", { write: () => { throw new Error("denied"); }, status, delay: 10 }), "Not copied");
+  assert.equal(f.textContent, "Not copied"); assert.equal(status.textContent, "Not copied");
+  await wait(30);
+  assert.equal(f.textContent, "Copy link"); assert.equal(status.textContent, "");
+  // A second copy inside the window restarts the revert instead of reverting early.
+  const d = button();
+  await copyWithStatus(d, "x", { write: async () => {}, status, delay: 120 });
+  await wait(60);
+  await copyWithStatus(d, "x", { write: async () => {}, status, delay: 120 });
+  await wait(90);   // past the first revert's moment, inside the second's
+  assert.equal(d.textContent, "Copied"); assert.equal(status.textContent, "Copied");
+  await wait(80);
+  assert.equal(d.textContent, "Copy link"); assert.equal(status.textContent, "");
+});
 
 test("translationLabel names the JPS editions briefly and leaves any other title as it is", () => {
   assert.equal(translationLabel("THE JPS TANAKH: Gender-Sensitive Edition"), "JPS 2023");

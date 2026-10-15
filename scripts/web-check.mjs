@@ -109,7 +109,10 @@ async function main() {
         expect("a teacher highlight marks one verse", a.highlights === "1", a.highlights);
         expect("a teacher highlight tints two words", a["hl-words"] === "2", a["hl-words"]);
         expect("a teacher highlight's note is in the apparatus", a["hl-notes"] === "1", a["hl-notes"]);
+        expect("the verse number's name says Highlighted.", a["hl-name"] === "true", a["hl-name"]);
       }
+      expect("one polite live region for copy status", a.live === "1", a.live);
+      expect("Copy link, Copy verse and on Sefaria are 44px targets", Number(a["act-height"]) >= 44, a["act-height"]);
       expect("Show Hebrew hides the English", a["lang-he"] === "none", a["lang-he"]);
       expect("Show English hides the Hebrew", a["lang-en"] === "none", a["lang-en"]);
       expect("one tab stop per verse for the Hebrew words", Number(a["word-stops"]) === sheet.verses.length, a["word-stops"]);
@@ -124,7 +127,7 @@ async function main() {
     expect("old link: page finished without errors", t.done === "1" && t.errors === "0", `${t.done} ${t.errors}`);
     expect("old link marks its verse", t.target === `haftarah-${lv.chapter}-${lv.verse}`, t.target);
     expect("old link becomes the new address", t.hash === `#haftarah-${lv.chapter}-${lv.verse}`, t.hash);
-    expect("a link to a verse not in the reading is ignored", t["bogus-hash"] === "true", t["bogus-hash"]);
+    expect("a link to a verse not in the reading is ignored and clears the old mark", t["bogus-hash"] === "true", t["bogus-hash"]);
     const l = attrs(await dumpDom(browser, `${base}/?check=1`, { size: "1440,900" }));
     console.log("\nlanding: /");
     expect("landing finished", l.done === "1", l.done);
