@@ -362,3 +362,10 @@ test("the related panel's strings are the agreed ones", () => {
   const sheetSrc = readSite(new URL("../site/app/sheet.js", import.meta.url), "utf8");
   assert.ok(sheetSrc.includes('data-act="related">Everything on this verse</button>'));
 });
+
+test("the word-analysis and translation credits are in README and the page", () => {
+  const readme = readSite(new URL("../README.md", import.meta.url), "utf8");
+  for (const s of ["Word analysis: STEPBible TAHOT and TBESH, data created by www.STEPBible.org based on work at Tyndale House Cambridge (CC BY 4.0), trimmed and aligned for this site.", "Word analysis: Open Scriptures Hebrew Bible morphology (CC BY 4.0); Westminster Leningrad Codex (public domain).", "English: Tanakh: The Holy Scriptures (The Jewish Publication Society, 1985), CC BY-NC, via Sefaria.", "English: The Koren Jerusalem Bible (Koren Publishers Jerusalem), CC BY-NC, via Sefaria.", "English: The Metsudah Tanach series (Lakewood, N.J.), CC BY, via Sefaria."]) assert.ok(readme.includes(s), s);
+  const sheetSrc = readSite(new URL("../site/app/sheet.js", import.meta.url), "utf8");
+  assert.ok(sheetSrc.includes("Word analysis:"), "the page credits the word data while a week has it");
+});
