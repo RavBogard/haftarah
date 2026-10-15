@@ -9,6 +9,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { isolatedEnv } from "./helpers/isolatedEnv.mjs";
+import { migrate3 } from "../scripts/migrate.mjs";
 import { publicName, planFiles, loadConfig, deliver } from "../scripts/deliver.mjs";
 
 const run = promisify(execFile);
@@ -228,4 +229,17 @@ test("deliver skips the web without a web config", async () => {
   let called = 0;
   await deliver(week, { only: "public", config: config(), log: quiet, publishImpl: async () => { called++; } });
   assert.equal(called, 0);
+});
+
+test("planFiles names the PDF from the haftarah of a schema-3 week", async () => {
+  const w3 = join(root, "weeks", "2026-10-24-lech-lecha");
+  await mkdir(w3, { recursive: true });
+  const two = JSON.parse(await readFile(join(week, "sheet.json"), "utf8"));
+  Object.assign(two, { slug: "2026-10-24-lech-lecha" });
+  two.shabbat.civil = "2026-10-24"; two.shabbat.parashah.en = "Lech-Lecha"; two.haftarah.ref = "Isaiah 40:27-41:16";
+  await writeFile(join(w3, "sheet.json"), JSON.stringify(migrate3(two), null, 2));
+  await writeFile(join(w3, "candidates.json"), "{}");
+  await writeFile(join(w3, "sheet.pdf"), "%PDF-1.7\n");
+  const plan = await planFiles(w3);
+  assert.equal(plan.publicName, "2026-10-24 Lech-Lecha — Isaiah 40.27-41.16.pdf");
 });

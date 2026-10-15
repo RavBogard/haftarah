@@ -23,6 +23,8 @@ import { homedir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { publish, loadWebConfig } from "./publish.mjs";
+import { createRequire } from "node:module";
+const L = createRequire(import.meta.url)("../template/lib.js");
 
 const REQUIRED = ["sheet.json", "candidates.json", "sheet.pdf"];
 const OPTIONAL = ["texts.json", "digest.md", "briefing.md"];
@@ -57,7 +59,7 @@ export async function planFiles(dir, { only } = {}) {
 
   const sheet = JSON.parse(await readFile(join(dir, "sheet.json"), "utf8"));
   const slug = basename(resolve(dir));
-  const pdfName = publicName(sheet);
+  const pdfName = publicName(L.readingView(sheet));
   const files = [];
 
   if (only !== "working") {

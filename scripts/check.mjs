@@ -11,6 +11,8 @@ import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { findBrowser } from "./build.mjs";
 import { dumpDom } from "./chrome.mjs";
+import { createRequire } from "node:module";
+const L = createRequire(import.meta.url)("../template/lib.js");
 
 // A split needs two lines on each side, so a two-line verse that does not fit leaves a band of up
 // to about an inch; the paginator splits anything taller. Checked ceiling: 100px (1.04in), plus
@@ -121,7 +123,7 @@ async function main() {
   const problems = a.problems.slice();
   if (JSON.stringify(a.summary) !== JSON.stringify(b.summary)) problems.push("two renders differ (pagination is not deterministic on this browser)");
   // The divine-name count in the render must equal the count in the data (verses plus incipit).
-  const data = JSON.parse(await readFile(join(weekDir, "sheet.json"), "utf8"));
+  const data = L.readingView(JSON.parse(await readFile(join(weekDir, "sheet.json"), "utf8")));
   const yyExpected = [...data.verses.map(v => v.he), data.haftarah.incipit?.he || ""].reduce((n, h) => n + (String(h).match(TETRA) || []).length, 0);
   if (yyExpected !== a.summary.yy) problems.push(`divine name: ${a.summary.yy} replaced in the render, ${yyExpected} in the data`);
   console.log(`Browser: ${browser}`);

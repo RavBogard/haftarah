@@ -124,6 +124,17 @@ export function applyFixes(data, fixes) {
 
 export const formatLint = list => list.map(x => `  - ${x.where}: ${x.msg}`).join("\n");
 
+/**
+ * Lint a sheet of either schema: its primary reading, through readingView. With fix, the gloss fixes
+ * are written into `file` itself (the view shares the reading's glosses).
+ */
+export function lintSheet(file, { voices = {}, fix = false } = {}) {
+  const view = L.readingView(file);
+  const r = lint(view, { voices });
+  if (fix && r.fixes.length) applyFixes(view, r.fixes);
+  return r;
+}
+
 export async function loadVoices() {
   return JSON.parse(await readFile(join(ROOT, "template", "voices.json"), "utf8"));
 }
@@ -134,11 +145,11 @@ async function main() {
   const sheetPath = join(resolve(dirArg), "sheet.json");
   const raw = await readFile(sheetPath, "utf8");
   const data = JSON.parse(raw);
-  const r = lint(data, { voices: await loadVoices() });
+  const fix = process.argv.includes("--fix");
+  const r = lintSheet(data, { voices: await loadVoices(), fix });
   if (r.errors.length) console.error(`Lint errors:\n${formatLint(r.errors)}`);
   if (r.warnings.length) console.warn(`Lint warnings:\n${formatLint(r.warnings)}`);
-  if (process.argv.includes("--fix") && r.fixes.length) {
-    applyFixes(data, r.fixes);
+  if (fix && r.fixes.length) {
     const indent = (raw.match(/^\{\r?\n([ \t]+)/) || [, "  "])[1];
     await writeFile(sheetPath, JSON.stringify(data, null, indent) + (raw.endsWith("\n") ? "\n" : ""), "utf8");
     console.log(`Fixed ${r.fixes.length} gloss lemma${r.fixes.length === 1 ? "" : "s"} in ${sheetPath}`);

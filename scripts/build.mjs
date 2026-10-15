@@ -114,7 +114,8 @@ function countPdfPages(buf) {
 async function main() {
   parseArgs();
   const sheetPath = join(weekDir, "sheet.json");
-  const data = JSON.parse(await readFile(sheetPath, "utf8"));
+  // The primary reading in the schema-2 shape; a schema-2 file is itself, so its sheet.html does not change.
+  const data = HaftarahLib.readingView(JSON.parse(await readFile(sheetPath, "utf8")));
 
   let biblio = null;
   try { biblio = HaftarahLib.parseBibliography(await readFile(join(ROOT, "bibliography", `${data.haftarah.book}.md`), "utf8")); } catch {}

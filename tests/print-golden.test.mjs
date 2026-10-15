@@ -2,13 +2,15 @@
 // 2.0, and the files the sheet links by path (template CSS, render.js, the fonts, lib.js's existing
 // functions) must be what they were. A failure here means the printed sheet changed. If that was
 // deliberate (Wave 4 only), look at the PDFs, then re-record with: node scripts/golden.mjs --update
-import { test } from "node:test";
+import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { mkdir, writeFile, readFile, rm } from "node:fs/promises";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { migrate3 } from "../scripts/migrate.mjs";
 import { isolatedEnv } from "./helpers/isolatedEnv.mjs";
 import { findBrowser } from "../scripts/build.mjs";
-import { browserVersion, sha256 } from "../scripts/chrome.mjs";
+import { browserVersion, sha256, dumpDom, printSignature } from "../scripts/chrome.mjs";
 import { FIXTURES, readGolden, buildFixture, domHash, foldEol, compare, compareSources, sourceHashes } from "../scripts/golden.mjs";
 
 const FIX = fileURLToPath(new URL("./fixtures/", import.meta.url));
@@ -67,6 +69,53 @@ for (const name of FIXTURES) {
       await buildFixture(join(FIX, name), { env: iso.env });
       assert.equal(await domHash(browser, join(FIX, name, "sheet.html"), { env: iso.env }), golden.fixtures[name].dom, `${name}: the rendered sheet changed`);
       assert.equal(await domHash(browser, join(FIX, name, "sheet-trope.html"), { env: iso.env }), golden.fixtures[name].tropeDom, `${name}: the rendered chanter's copy changed`);
+    } finally { await iso.cleanup(); }
+  });
+}
+
+// ---- a schema-3 week prints the same page ----
+
+// The embedded week data in a built sheet.html, and the page with it cut out.
+function splitData(html) {
+  const m = /window\.SHEET = (.*);\r?\nwindow\.SHEET_OPTIONS/.exec(html);
+  assert.ok(m, "sheet.html carries window.SHEET");
+  return { data: JSON.parse(m[1]), rest: html.slice(0, m.index) + html.slice(m.index + m[0].length) };
+}
+// A fixture migrated to schema 3, at the same folder depth, so every relative path in sheet.html is the same.
+async function writeSchema3(name) {
+  const dir = join(FIX, `_s3-${name}`);
+  await mkdir(dir, { recursive: true });
+  await writeFile(join(dir, "sheet.json"), JSON.stringify(migrate3(JSON.parse(await readFile(join(FIX, name, "sheet.json"), "utf8"))), null, 2));
+  return dir;
+}
+after(async () => { for (const name of FIXTURES) await rm(join(FIX, `_s3-${name}`), { recursive: true, force: true }); });
+
+for (const name of FIXTURES) {
+  test(`print golden: ${name} migrated to schema 3 builds the same page around the same data`, async () => {
+    const iso = await isolatedEnv();
+    try {
+      const s3 = await writeSchema3(name);
+      const a = await buildFixture(join(FIX, name), { env: iso.env });
+      const b = await buildFixture(s3, { env: iso.env });
+      for (const k of ["sheet", "trope"]) {
+        const x = splitData(foldEol(a[k])), y = splitData(foldEol(b[k]));
+        assert.equal(y.rest, x.rest, `${name} ${k}: only the embedded data may differ`);
+        assert.deepEqual(y.data, x.data, `${name} ${k}: the schema-3 build embeds the schema-2 view`);
+      }
+    } finally { await iso.cleanup(); }
+  });
+
+  test(`print golden: ${name} migrated to schema 3 renders the same pages`, { skip: browser ? false : "no Chrome or Edge on this machine", timeout: 300_000 }, async () => {
+    const iso = await isolatedEnv();
+    try {
+      const s3 = await writeSchema3(name);
+      await buildFixture(join(FIX, name), { env: iso.env });
+      await buildFixture(s3, { env: iso.env });
+      for (const f of ["sheet.html", "sheet-trope.html"]) {
+        const x = printSignature(await dumpDom(browser, pathToFileURL(join(FIX, name, f)).href, { env: iso.env }));
+        const y = printSignature(await dumpDom(browser, pathToFileURL(join(s3, f)).href, { env: iso.env }));
+        assert.equal(y, x, `${name}/${f}: schema 3 renders differently`);
+      }
     } finally { await iso.cleanup(); }
   });
 }

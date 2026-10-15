@@ -2,7 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { readFile } from "node:fs/promises";
-import { lint, applyFixes, godLanguage, wordCount } from "../scripts/lint.mjs";
+import { lint, lintSheet, applyFixes, godLanguage, wordCount } from "../scripts/lint.mjs";
+import { migrate3 } from "../scripts/migrate.mjs";
 import { gapReport, analyse } from "../scripts/check.mjs";
 const require = createRequire(import.meta.url);
 const lib = require("../template/lib.js");
@@ -194,4 +195,15 @@ test("analyse reads entry heights and gapReport names the largest entry to trim"
   assert.match(d, /next verse 54:3 \(119px tall\) misses page 2 by 20px/);
   assert.match(d, /suggested trim: Malbim on 54:1 .*cut about 21 words/);   // 2 × 20 × 101 / 200
   assert.equal(typeof gapReport, "function");
+});
+
+test("lintSheet lints the primary reading of either schema, and --fix writes into the file itself", async () => {
+  const d = JSON.parse(await readFile(new URL("./fixtures/week-notes/sheet.json", import.meta.url), "utf8"));
+  const m = migrate3(d);
+  const r = lintSheet(m, { fix: true });
+  assert.deepEqual(r.fixes, lint(d).fixes);
+  assert.ok(r.fixes.length > 0, "the fixture has near-miss gloss lemmas");
+  for (const f of r.fixes) assert.equal(m.readings[0].glosses[f.index][f.field], f.to);
+  assert.equal(lintSheet(m).fixes.length, 0);
+  assert.deepEqual(lintSheet(d).warnings, lint(d).warnings);
 });
