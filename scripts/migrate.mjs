@@ -1,8 +1,16 @@
 #!/usr/bin/env node
-/** migrate.mjs — schema 1 → 2.   node scripts/migrate.mjs weeks/<slug> */
+/**
+ * migrate.mjs — schema 1 → 2, and on request 2 → 3.
+ *
+ *   node scripts/migrate.mjs weeks/<slug>           # schema 1 → 2 (a schema-2 file only gains missing fields)
+ *   node scripts/migrate.mjs weeks/<slug> --to 3    # → schema 3: the haftarah becomes readings[0]
+ */
 import { readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
+
+const L = createRequire(import.meta.url)("../template/lib.js");
 
 const SIGNOFF = "I chose and approved every entry on this sheet; summaries marked as such were drafted with Claude and read before printing. Tell me what I got wrong.";
 
@@ -30,17 +38,48 @@ export function migrate(d) {
   return out;
 }
 
+/**
+ * Schema 2 → 3: the haftarah and its verses, glosses and commentary become readings[0]; every verse
+ * names its book; every entry gets an id. Everything that belongs to the week stays where it was.
+ * The input is not changed. On a schema-3 file it only fills a missing book or id.
+ */
+export function migrate3(d) {
+  if (Number(d.schema) >= 3) {
+    const out = structuredClone(d);
+    const taken = new Set();
+    for (const r of out.readings || []) {
+      for (const v of r.verses || []) if (!v.book && r.book) v.book = r.book;
+      L.assignEntryIds(r.commentary || [], r.id, taken);
+    }
+    return out;
+  }
+  const two = Number(d.schema) === 2 ? d : migrate(d);
+  const { haftarah = {}, verses = [], glosses = [], commentary = [], ...rest } = structuredClone(two);
+  const reading = {
+    id: "haftarah", kind: "haftarah", ...haftarah,
+    verses: verses.map(v => (haftarah.book ? { ...v, book: v.book || haftarah.book } : v)),
+    glosses,
+    commentary,
+  };
+  L.assignEntryIds(reading.commentary, reading.id);
+  return { ...rest, schema: 3, readings: [reading] };
+}
+
 async function main() {
-  const dirArg = process.argv.slice(2).find(a => !a.startsWith("--"));
-  if (!dirArg) { console.error("usage: node scripts/migrate.mjs weeks/<slug>"); process.exit(1); }
+  const args = process.argv.slice(2);
+  const toAt = args.indexOf("--to");
+  const to = toAt >= 0 ? Number(args[toAt + 1]) : 2;
+  const dirArg = args.find((a, i) => !a.startsWith("--") && !(toAt >= 0 && i === toAt + 1));   // not a flag, not the value after --to
+  if (!dirArg || ![2, 3].includes(to)) { console.error("usage: node scripts/migrate.mjs weeks/<slug> [--to 2|3]"); process.exit(1); }
   const p = join(resolve(dirArg), "sheet.json");
   const d = JSON.parse(await readFile(p, "utf8"));
-  const out = migrate(d);
+  const out = to === 3 ? migrate3(d) : migrate(d);
   await writeFile(p, JSON.stringify(out, null, 2) + "\n", "utf8");
+  const view = L.readingView(out);
   const todo = [];
-  for (const g of out.glosses) if (!g.en) todo.push(`gloss ${g.verse} ${g.lemma}: add "en" (the English words it belongs to)`);
-  for (const e of out.commentary) if (e.register === "critical" && !(e.works || []).length) todo.push(`critical ${e.verse} ${e.source}: add "works" keys from bibliography/${out.haftarah.book}.md`);
-  console.log(`Migrated ${p} to schema 2.` + (todo.length ? `\nStill needed:\n  - ${todo.join("\n  - ")}` : ""));
+  for (const g of view.glosses || []) if (!g.en) todo.push(`gloss ${g.verse} ${g.lemma}: add "en" (the English words it belongs to)`);
+  for (const e of view.commentary || []) if (e.register === "critical" && !(e.works || []).length) todo.push(`critical ${e.verse} ${e.source}: add "works" keys from bibliography/${view.haftarah.book}.md`);
+  console.log(`Migrated ${p} to schema ${to}.` + (todo.length ? `\nStill needed:\n  - ${todo.join("\n  - ")}` : ""));
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) main().catch(err => { console.error(err.message || err); process.exit(1); });

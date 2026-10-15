@@ -363,6 +363,78 @@
     };
   }
 
+  // ---- readings (schema 3) ----------------------------------------------------------
+  // A week may carry more than one reading: the haftarah, and from Wave 2 a Torah selection. A
+  // schema-2 file is one haftarah reading. These accessors let every caller treat both shapes alike;
+  // readingView gives the print and the scripts the schema-2 shape they have always read, and gives
+  // a schema-2 file back untouched, which is what keeps its print byte-identical.
+
+  // Keys that belong to a reading but not to the schema-2 "haftarah" object.
+  const READING_OWN = ["id", "kind", "verses", "glosses", "commentary", "aliyot", "selection", "maftir"];
+
+  function readings(data) {
+    if (!data) return [];
+    if (Number(data.schema) >= 3) return Array.isArray(data.readings) ? data.readings : [];
+    return [Object.assign({ id: "haftarah", kind: "haftarah" }, data.haftarah || {},
+      { verses: data.verses || [], glosses: data.glosses || [], commentary: data.commentary || [] })];
+  }
+
+  // The reading the week is known by: its haftarah, else its first reading.
+  function primaryReading(data) {
+    const all = readings(data);
+    return all.find(r => r.kind === "haftarah") || all[0] || null;
+  }
+
+  // One reading in the schema-2 shape. A schema-2 file comes back as the same object. For schema 3
+  // the verses lose `book` and the entries lose `id` (the print never read them); the glosses array
+  // is the reading's own, so a fix written into the view (lint --fix) lands in the file.
+  function readingView(data, readingId) {
+    if (!data || Number(data.schema) < 3) return data;
+    const all = readings(data);
+    const r = readingId ? all.find(x => x.id === readingId) : primaryReading(data);
+    if (!r) throw new Error(readingId ? `no reading "${readingId}" in this sheet` : "this sheet has no readings");
+    const haftarah = {};
+    for (const [k, v] of Object.entries(r)) if (!READING_OWN.includes(k)) haftarah[k] = v;
+    const view = {
+      schema: 2, slug: data.slug, shabbat: data.shabbat, series: data.series, haftarah,
+      verses: (r.verses || []).map(({ book, ...v }) => v),
+      glosses: r.glosses || [],
+      commentary: (r.commentary || []).map(({ id, ...e }) => e),
+      openingNote: data.openingNote, glossary: data.glossary, nextWeek: data.nextWeek, credits: data.credits,
+    };
+    for (const [k, v] of Object.entries(data)) if (!(k in view) && k !== "readings") view[k] = v;
+    for (const k of Object.keys(view)) if (view[k] === undefined) delete view[k];
+    return view;
+  }
+
+  // "Ha'azinu" → "haazinu", "Lech-Lecha" → "lech-lecha": the parashah part of a week slug.
+  function parashahKey(name) {
+    return String(name == null ? "" : name).toLowerCase().replace(/['’]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  }
+
+  // A commentary entry's id: given once and kept when the entry is edited, never recomputed. Made
+  // from where the entry sits and what it cites when it is first given, so the same file always gets
+  // the same ids: "e-" and eight hex digits of FNV-1a.
+  function entryId(e, readingId) {
+    const s = [readingId || "", e.chapter == null ? "" : e.chapter, e.verse, e.source || "", e.sourceRef || "", e.lemma || ""].join("|");
+    let h = 0x811c9dc5;
+    for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+    return "e-" + h.toString(16).padStart(8, "0");
+  }
+
+  // Ids for the entries that have none, unique among `taken` ("-2", "-3" on a collision). Mutates and returns the list.
+  function assignEntryIds(list, readingId, taken = new Set()) {
+    for (const e of list) if (e.id) taken.add(e.id);
+    for (const e of list) {
+      if (e.id) continue;
+      const base = entryId(e, readingId);
+      let id = base, n = 1;
+      while (taken.has(id)) id = `${base}-${++n}`;
+      e.id = id; taken.add(id);
+    }
+    return list;
+  }
+
   // The incipit fits a 3.5in box beside the 1.6in mural: 54pt at most, 40pt at least on one line; otherwise two lines at 44pt.
   function fitIncipitSize(widthAt60pt, boxWidth) {
     const size = Math.floor(60 * boxWidth / widthAt60pt);
@@ -473,5 +545,5 @@
     return map;
   }
 
-  return { TETRA, divineName, stripMarks, splitPoetry, nowrapKeys, letterFor, isDeadRef, normalizeRefs, assignKeys, SIGLA, REGISTER_ORDER, REGISTER_NAMES, voicesFor, voiceKey, hebrewKey, hebrewWords, findHebrew, plainText, findEnglish, fitIncipitSize, parseBibliography, tropePhrases, tropeHtml, tropeFamiliesUsed, TROPE_FAMILIES, escapeHtml, enDash, shabbatName, sheetModel };
+  return { TETRA, divineName, stripMarks, splitPoetry, nowrapKeys, letterFor, isDeadRef, normalizeRefs, assignKeys, SIGLA, REGISTER_ORDER, REGISTER_NAMES, voicesFor, voiceKey, hebrewKey, hebrewWords, findHebrew, plainText, findEnglish, fitIncipitSize, parseBibliography, tropePhrases, tropeHtml, tropeFamiliesUsed, TROPE_FAMILIES, escapeHtml, enDash, shabbatName, sheetModel, readings, primaryReading, readingView, parashahKey, entryId, assignEntryIds };
 });
