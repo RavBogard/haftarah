@@ -1,0 +1,79 @@
+{
+ "schema": 1,
+ "slug": "fixture-notes",
+ "readings": {
+  "haftarah": {
+   "ref": "I Samuel 20:18-42",
+   "versions": [
+    {
+     "key": "jps1985",
+     "label": "JPS 1985",
+     "title": "Tanakh: The Holy Scriptures, published by JPS",
+     "license": "CC-BY-NC",
+     "credit": "English: Tanakh: The Holy Scriptures (The Jewish Publication Society, 1985), CC BY-NC, via Sefaria.",
+     "verses": {
+      "20:18": "A fixture rendering (1985) of verse 18.",
+      "20:19": "A fixture rendering (1985) of verse 19.",
+      "20:20": "A fixture rendering (1985) of verse 20.",
+      "20:21": "A fixture rendering (1985) of verse 21.",
+      "20:22": "A fixture rendering (1985) of verse 22.",
+      "20:23": "A fixture rendering (1985) of verse 23.",
+      "20:24": "A fixture rendering (1985) of verse 24.",
+      "20:25": "A fixture rendering (1985) of verse 25.",
+      "20:26": "A fixture rendering (1985) of verse 26.",
+      "20:27": "A fixture rendering (1985) of verse 27.",
+      "20:28": "A fixture rendering (1985) of verse 28.",
+      "20:29": "A fixture rendering (1985) of verse 29.",
+      "20:30": "A fixture rendering (1985) of verse 30.",
+      "20:31": "A fixture rendering (1985) of verse 31.",
+      "20:32": "A fixture rendering (1985) of verse 32.",
+      "20:33": "A fixture rendering (1985) of verse 33.",
+      "20:34": "A fixture rendering (1985) of verse 34.",
+      "20:35": "A fixture rendering (1985) of verse 35.",
+      "20:36": "A fixture rendering (1985) of verse 36.",
+      "20:37": "A fixture rendering (1985) of verse 37.",
+      "20:38": "A fixture rendering (1985) of verse 38.",
+      "20:39": "A fixture rendering (1985) of verse 39.",
+      "20:40": "A fixture rendering (1985) of verse 40.",
+      "20:41": "A fixture rendering (1985) of verse 41.",
+      "20:42": "A fixture rendering (1985) of verse 42."
+     }
+    },
+    {
+     "key": "koren",
+     "label": "Koren",
+     "title": "The Koren Jerusalem Bible",
+     "license": "CC-BY-NC",
+     "credit": "English: The Koren Jerusalem Bible (Koren Publishers Jerusalem), CC BY-NC, via Sefaria.",
+     "verses": {
+      "20:18": "A fixture rendering (Koren) of verse 18.",
+      "20:19": "A fixture rendering (Koren) of verse 19.",
+      "20:20": "A fixture rendering (Koren) of verse 20.",
+      "20:21": "A fixture rendering (Koren) of verse 21.",
+      "20:22": "A fixture rendering (Koren) of verse 22.",
+      "20:23": "A fixture rendering (Koren) of verse 23.",
+      "20:24": "A fixture rendering (Koren) of verse 24.",
+      "20:25": "A fixture rendering (Koren) of verse 25.",
+      "20:26": "A fixture rendering (Koren) of verse 26.",
+      "20:27": "A fixture rendering (Koren) of verse 27.",
+      "20:28": "A fixture rendering (Koren) of verse 28.",
+      "20:29": "A fixture rendering (Koren) of verse 29.",
+      "20:30": "A fixture rendering (Koren) of verse 30.",
+      "20:31": "A fixture rendering (Koren) of verse 31.",
+      "20:32": "A fixture rendering (Koren) of verse 32.",
+      "20:33": "A fixture rendering (Koren) of verse 33.",
+      "20:34": "A fixture rendering (Koren) of verse 34.",
+      "20:35": "A fixture rendering (Koren) of verse 35.",
+      "20:36": "A fixture rendering (Koren) of verse 36.",
+      "20:37": "A fixture rendering (Koren) of verse 37.",
+      "20:38": "A fixture rendering (Koren) of verse 38.",
+      "20:39": "A fixture rendering (Koren) of verse 39.",
+      "20:40": "A fixture rendering (Koren) of verse 40.",
+      "20:41": "A fixture rendering (Koren) of verse 41.",
+      "20:42": "A fixture rendering (Koren) of verse 42."
+     }
+    }
+   ]
+  }
+ }
+}

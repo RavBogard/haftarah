@@ -133,7 +133,7 @@ export function cleanEnglish(html) {
   return { en: out, notes };
 }
 
-function flattenVerses(textArr, sections, toSections) {
+export function flattenVerses(textArr, sections, toSections) {
   // Sefaria returns a flat array for one chapter, nested arrays across chapters.
   const startCh = Number(sections[0]), startV = Number(sections[1] ?? 1);
   const out = [];
