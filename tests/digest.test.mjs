@@ -89,3 +89,10 @@ test("a schema-3 copy of a sheet gives the digest the same input and the same di
   assert.equal(buildDigest({ texts, candidates, ...b }), buildDigest({ texts, candidates, ...a }));
   assert.deepEqual(digestInput(null), { book: undefined, verses: [] });
 });
+
+test("digestInput never throws: a schema-3 sheet with no readings gives what no sheet gives", () => {
+  assert.deepEqual(digestInput({ schema: 3, readings: [] }), { book: undefined, verses: [] });
+  assert.deepEqual(digestInput({ schema: 3 }), { book: undefined, verses: [] });
+  const md = buildDigest({ texts, candidates, ...digestInput({ schema: 3, readings: [] }) });
+  assert.equal(md, buildDigest({ texts, candidates, ...digestInput(null) }));
+});

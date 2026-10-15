@@ -51,6 +51,16 @@
       "tropePhrases": "a3c7a300e566b3f89b5424551f5569141a5271a5b1dde275ce4fd8e24bf3fc99",
       "voiceKey": "7f90c35a0eb8fb19920473eb9e4b808eae7f1c5f3b30b8a0e0d243d3ea05ffc1",
       "voicesFor": "536e2cdd1b9dd9328684d01ba0854fc494711882c485dea05c18e1d0df6a645f"
+    },
+    "libInternal": {
+      "BLOCK_ENDING": "5d62f9281699ed24adfe8ef5a4fa09b99de660e5db871e9978b823f71f2942e0",
+      "ENTITIES": "a572458eec8b0cbbb0a88b7573e176f8f20454b0169afb9b1df5d8f38914902e",
+      "HE_WORD": "20ac62cdefdc3aa73dd830dabe3b3ac172a3e8e7bc0380da811501cf5aef25d2",
+      "READING_OWN": "89bf55ef98952c77e7660fe743bf3c38c6cc680c719a0ee695c7b8e9456bb1b1",
+      "consonantKey": "912581a70ea07032c0fe8a5fb21f0402d30384cc61d48a7a31f1598e2e2b4dc6",
+      "foldPhrase": "660254a7a0b851b734aa7dd5597ddf14f3b8c66dddc2d5fca06e720ecf547293",
+      "paragraphs": "621b103df1859c726592acfd124a52ea65915026517a4c9f98e9ac7c49a8cedc",
+      "tropeTokens": "c2f2950376fc1d7d5a7c5379680dd49fd009ede849864ab9b95c1d641db27567"
     }
   },
   "fixtures": {

@@ -5,12 +5,13 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { mkdir, copyFile } from "node:fs/promises";
+import { mkdir, copyFile, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isolatedEnv } from "./helpers/isolatedEnv.mjs";
 import { findBrowser } from "../scripts/build.mjs";
 import { parseArgs } from "../scripts/web-check.mjs";
+import { migrate3 } from "../scripts/migrate.mjs";
 
 const run = promisify(execFile);
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -40,6 +41,18 @@ test("web-check passes at desktop and phone widths", { skip, timeout: 300_000 },
   const iso = await isolatedEnv();
   try {
     const { stdout } = await run(process.execPath, [join(ROOT, "scripts", "web-check.mjs"), "--out", join(iso.home, "dist")], { env: iso.env, cwd: ROOT, maxBuffer: 1 << 24 });
+    assert.match(stdout, /All web checks passed\./);
+  } finally { await iso.cleanup(); }
+});
+
+test("web-check passes on a schema-3 copy of week-notes (the browser path, not just Node)", { skip, timeout: 300_000 }, async () => {
+  const iso = await isolatedEnv();
+  try {
+    const dir = join(iso.home, "week-notes-s3");
+    await mkdir(dir);
+    const two = JSON.parse(await readFile(join(ROOT, "tests", "fixtures", "week-notes", "sheet.json"), "utf8"));
+    await writeFile(join(dir, "sheet.json"), JSON.stringify(migrate3(two), null, 2));
+    const { stdout } = await run(process.execPath, [join(ROOT, "scripts", "web-check.mjs"), dir, "--out", join(iso.home, "dist")], { env: iso.env, cwd: ROOT, maxBuffer: 1 << 24 });
     assert.match(stdout, /All web checks passed\./);
   } finally { await iso.cleanup(); }
 });

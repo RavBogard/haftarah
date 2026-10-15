@@ -5,6 +5,9 @@
  *
  *   node scripts/golden.mjs            # compare with tests/golden/print.json (npm test does this too)
  *   node scripts/golden.mjs --update   # re-record, after a deliberate print change and a look at the PDFs
+ *   node scripts/golden.mjs --update-dom       # after a Chrome update: re-record only the DOM layer (refuses if the HTML or sources moved)
+ *   node scripts/golden.mjs --update-sources   # after a deliberate template or lib.js change: re-record only the sources (refuses if a fixture moved)
+ *   node scripts/golden.mjs --add <fixture>    # record a new fixture (refuses if anything recorded moved)
  *
  * Three layers. Line endings are folded to \n wherever text is hashed, because a Windows checkout
  * carries CRLF.
@@ -14,9 +17,9 @@
  *   template/fonts; a changed, missing or added file fails. "sources.lib" is, for each export of
  *   template/lib.js, the sha256 of its source text (Function#toString, or JSON for a value). A
  *   changed or missing export fails; a new export is allowed, because later tasks add functions to
- *   lib.js. This does not see a module-level constant that a function reads through its closure
- *   (lib.js's TETRA regex, for one): such a change shows only in "dom", or in "html" when the build
- *   uses it.
+ *   lib.js. "sources.libInternal" hashes each module-level helper or constant inside lib.js that is
+ *   not exported (HE_WORD, BLOCK_ENDING, tropeTokens ...), so a change a function sees only through
+ *   its closure fails too; a new one is allowed.
  * - "html"/"trope" per fixture (Node only, always checked): sha256 of sheet.html and
  *   sheet-trope.html as build.mjs writes them (--no-pdf --trope).
  * - "dom"/"tropeDom" per fixture: sha256 of what Chrome renders from them (the <html> tag render.js
@@ -41,6 +44,26 @@ export const DOM_KEYS = ["dom", "tropeDom"];
 const rel = p => relative(ROOT, p).split("\\").join("/");
 
 export const foldEol = s => String(s).replace(/\r\n/g, "\n");
+
+/**
+ * The module-level helpers and constants of lib.js that are not exported, each hashed: the factory's
+ * top-level `const`/`let`/`function` statements (two-space indent), each running to the next one or to
+ * the closing `return {`. Comment lines and blank lines are dropped first, so a comment above a new
+ * function moves nothing. Exported names are left to the "lib" layer.
+ */
+export function libInternals(text, exported) {
+  const src = foldEol(text);
+  const end = src.lastIndexOf("\n  return {");
+  const starts = [...src.matchAll(/^ {2}(?:const|let|var|function)\s+([A-Za-z_$][\w$]*)/gm)].filter(m => end < 0 || m.index < end);
+  const out = {};
+  starts.forEach((m, i) => {
+    if (exported.has(m[1])) return;
+    const stop = i + 1 < starts.length ? starts[i + 1].index : (end < 0 ? src.length : end);
+    const body = src.slice(m.index, stop).split("\n").filter(l => !/^\s*(\/\/.*)?$/.test(l)).join("\n");
+    out[m[1]] = sha256(body);
+  });
+  return out;
+}
 
 /** Build one week folder's sheet.html and sheet-trope.html (no PDF); returns their text. */
 export async function buildFixture(dir, { env } = {}) {
@@ -70,17 +93,20 @@ export async function sourceHashes() {
   const lib = createRequire(import.meta.url)("../template/lib.js");
   const text = v => typeof v === "function" ? v.toString()
     : JSON.stringify(v, (k, x) => typeof x === "function" || x instanceof RegExp ? String(x) : x);
-  const out = { files, lib: {} };
+  const out = { files, lib: {}, libInternal: {} };
   for (const name of Object.keys(lib).sort()) out.lib[name] = sha256(foldEol(text(lib[name])));
+  const internal = libInternals(await readFile(join(tpl, "lib.js"), "utf8"), new Set(Object.keys(lib)));
+  for (const name of Object.keys(internal).sort()) out.libInternal[name] = internal[name];
   return out;
 }
 
-/** What `got` breaks of the recorded sources: every file must hold and no file may appear; lib exports may be added, not changed or removed. */
+/** What `got` breaks of the recorded sources: every file must hold and no file may appear; lib exports and lib internals may be added, not changed or removed. */
 export function compareSources(want, got) {
   const diffs = [];
   for (const [p, h] of Object.entries(want.files)) if (got.files[p] !== h) diffs.push(`${p} ${p in got.files ? "changed" : "missing"}`);
   for (const p of Object.keys(got.files)) if (!(p in want.files)) diffs.push(`${p} added`);
   for (const [n, h] of Object.entries(want.lib)) if (got.lib[n] !== h) diffs.push(`lib.js ${n} ${n in got.lib ? "changed" : "missing"}`);
+  for (const [n, h] of Object.entries(want.libInternal || {})) if ((got.libInternal || {})[n] !== h) diffs.push(`lib.js internal ${n} ${n in (got.libInternal || {}) ? "changed" : "missing"}`);
   return diffs;
 }
 
@@ -103,25 +129,72 @@ export async function record({ env, browser = findBrowser() } = {}) {
   return out;
 }
 
-/** The recorded values `got` does not reproduce: the sources (when recorded), then "fixture key"; the DOM keys only on the same browser and platform. */
+/** The recorded values `got` does not reproduce: the sources (when recorded), then "fixture key" for every recorded fixture; the DOM keys only on the same browser and platform. */
 export function compare(want, got) {
   const sameBrowser = !!want.browser && want.browser === got.browser && want.platform === got.platform;
   const diffs = want.sources ? compareSources(want.sources, got.sources || { files: {}, lib: {} }) : [];
-  for (const name of FIXTURES) for (const k of ["html", "trope", ...(sameBrowser ? DOM_KEYS : [])]) {
+  for (const name of Object.keys(want.fixtures || {})) for (const k of ["html", "trope", ...(sameBrowser ? DOM_KEYS : [])]) {
     if ((want.fixtures[name] || {})[k] !== (got.fixtures[name] || {})[k]) diffs.push(`${name} ${k}`);
   }
   return diffs;
 }
 
+/**
+ * What --update-dom, --update-sources and --add <fixture> write, from the recorded golden `want` and a
+ * fresh recording `got`. Each refuses (throws) when it would hide a change it is not for:
+ *   dom      only the DOM layer, after a browser update; the sources and every fixture's HTML must hold
+ *   sources  only the sources layer (a deliberate template or lib.js change); every recorded fixture must hold
+ *   add      one fixture not yet recorded; everything recorded must hold, on the golden's own browser
+ */
+export function planUpdate(mode, want, got, name = null) {
+  if (mode === "dom") {
+    if (!got.browser) throw new Error("--update-dom needs Chrome or Edge on this machine");
+    const held = compare({ ...want, browser: null }, got);
+    if (held.length) throw new Error(`--update-dom refused: ${held.join(", ")} changed; this step only re-records what a browser update moved`);
+    const fixtures = {};
+    for (const [n, f] of Object.entries(want.fixtures)) {
+      fixtures[n] = { ...f };
+      for (const k of DOM_KEYS) if (got.fixtures[n] && got.fixtures[n][k] !== undefined) fixtures[n][k] = got.fixtures[n][k];
+    }
+    return { ...want, browser: got.browser, platform: got.platform, fixtures };
+  }
+  if (mode === "sources") {
+    const held = compare({ ...want, sources: undefined }, got);
+    if (held.length) throw new Error(`--update-sources refused: ${held.join(", ")} moved; a source change may not move a recorded fixture`);
+    return { ...want, sources: got.sources };
+  }
+  if (mode === "add") {
+    if (!FIXTURES.includes(name)) throw new Error(`--add takes one of ${FIXTURES.join(", ")}`);
+    if (want.fixtures[name]) throw new Error(`--add: ${name} is already recorded; recorded fixtures are compared, never re-recorded`);
+    if (want.browser && !got.browser) throw new Error(`--add needs the browser the golden was rendered on (${want.browser})`);
+    if (want.browser && (want.browser !== got.browser || want.platform !== got.platform)) throw new Error(`--add: the golden was rendered on ${want.browser} (${want.platform}) and this is ${got.browser} (${got.platform}); run --update-dom first`);
+    const held = compare(want, got);
+    if (held.length) throw new Error(`--add refused: ${held.join(", ")} moved`);
+    const f = { ...got.fixtures[name] };
+    if (!want.browser) for (const k of DOM_KEYS) delete f[k];
+    return { ...want, fixtures: { ...want.fixtures, [name]: f } };
+  }
+  throw new Error(`unknown golden update "${mode}"`);
+}
+
 async function main() {
+  const args = process.argv.slice(2);
+  const mode = args.includes("--update") ? "all" : args.includes("--update-dom") ? "dom" : args.includes("--update-sources") ? "sources" : args.includes("--add") ? "add" : null;
   const got = await record();
-  if (process.argv.includes("--update")) {
+  if (mode === "all") {
     await mkdir(dirname(GOLDEN_FILE), { recursive: true });
     await writeFile(GOLDEN_FILE, JSON.stringify(got, null, 2) + "\n", "utf8");
     console.log(`Recorded ${FIXTURES.length} fixtures to ${rel(GOLDEN_FILE)}${got.browser ? ` (rendered with ${got.browser} on ${got.platform})` : " (HTML only: no Chrome or Edge found)"}`);
     return;
   }
   const want = await readGolden();
+  if (mode) {
+    const name = mode === "add" ? args[args.indexOf("--add") + 1] : null;
+    const out = planUpdate(mode, want, got, name);
+    await writeFile(GOLDEN_FILE, JSON.stringify(out, null, 2) + "\n", "utf8");
+    console.log(`Recorded ${mode === "add" ? `the ${name} fixture` : mode === "dom" ? `the DOM layer (${got.browser} on ${got.platform})` : "the sources layer"} in ${rel(GOLDEN_FILE)}`);
+    return;
+  }
   const diffs = compare(want, got);
   if (diffs.length) { console.error(`Print golden differs: ${diffs.join(", ")}`); process.exit(1); }
   const same = want.browser === got.browser && want.platform === got.platform;

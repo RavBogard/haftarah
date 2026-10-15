@@ -11,7 +11,7 @@ import { migrate3 } from "../scripts/migrate.mjs";
 import { isolatedEnv } from "./helpers/isolatedEnv.mjs";
 import { findBrowser } from "../scripts/build.mjs";
 import { browserVersion, sha256, dumpDom, printSignature } from "../scripts/chrome.mjs";
-import { FIXTURES, readGolden, buildFixture, domHash, foldEol, compare, compareSources, sourceHashes } from "../scripts/golden.mjs";
+import { FIXTURES, readGolden, buildFixture, domHash, foldEol, compare, compareSources, sourceHashes, libInternals, planUpdate } from "../scripts/golden.mjs";
 
 const FIX = fileURLToPath(new URL("./fixtures/", import.meta.url));
 const golden = await readGolden();
@@ -119,3 +119,71 @@ for (const name of FIXTURES) {
     } finally { await iso.cleanup(); }
   });
 }
+
+test("libInternals hashes lib.js's module-level helpers that are not exported, ignoring comments and blank lines", () => {
+  const src = [
+    "(function () {",
+    '  "use strict";',
+    "  const TETRA = /x/g;",
+    "  // a comment",
+    "  const HE_WORD = /[a-z]+/g;",
+    "",
+    "  function exported(a) {",
+    "    const inner = 1;",
+    "    return a + inner;",
+    "  }",
+    "  const helper = s => s.trim();",
+    "  return { TETRA, exported };",
+    "});",
+  ].join("\n");
+  const ex = new Set(["TETRA", "exported"]);
+  const a = libInternals(src, ex);
+  assert.deepEqual(Object.keys(a).sort(), ["HE_WORD", "helper"]);
+  assert.deepEqual(libInternals(src.replace("  // a comment", "  // another comment\n\n  // and one more"), ex), a);
+  const changed = libInternals(src.replace("/[a-z]+/g", "/[a-z]*/g"), ex);
+  assert.notEqual(changed.HE_WORD, a.HE_WORD);
+  assert.equal(changed.helper, a.helper);
+});
+
+test("compareSources: a module-level helper of lib.js must hold too; a new one is allowed", () => {
+  const want = { files: {}, lib: {}, libInternal: { HE_WORD: "1" } };
+  assert.deepEqual(compareSources(want, { files: {}, lib: {}, libInternal: { HE_WORD: "1", fresh: "2" } }), []);
+  assert.deepEqual(compareSources(want, { files: {}, lib: {}, libInternal: { HE_WORD: "2" } }), ["lib.js internal HE_WORD changed"]);
+  assert.deepEqual(compareSources(want, { files: {}, lib: {}, libInternal: {} }), ["lib.js internal HE_WORD missing"]);
+  assert.deepEqual(compareSources({ files: {}, lib: {} }, { files: {}, lib: {}, libInternal: { HE_WORD: "9" } }), [], "a golden recorded before the layer existed checks nothing there");
+});
+
+test("the recorded golden guards lib.js's internals (TETRA's neighbours: HE_WORD, BLOCK_ENDING, tropeTokens ...)", () => {
+  assert.ok(golden.sources.libInternal, "tests/golden/print.json has no sources.libInternal; record it with node scripts/golden.mjs --update-sources");
+  for (const n of ["HE_WORD", "consonantKey", "ENTITIES", "READING_OWN", "BLOCK_ENDING", "tropeTokens"]) assert.ok(n in golden.sources.libInternal, n);
+});
+
+const F = { html: "h", trope: "t", dom: "d", tropeDom: "td" };
+const SRC = { files: { "template/sheet.css": "1" }, lib: { divineName: "1" }, libInternal: { HE_WORD: "1" } };
+const WANT = { browser: "HeadlessChrome/155.0.0.0", platform: "win32", sources: SRC, fixtures: { "week-min": F } };
+
+test("planUpdate dom: takes only what a browser update moved, and refuses while HTML or sources moved", () => {
+  const got = { browser: "HeadlessChrome/156.0.0.0", platform: "win32", sources: SRC, fixtures: { "week-min": { ...F, dom: "d2", tropeDom: "td2" } } };
+  assert.deepEqual(planUpdate("dom", WANT, got), { ...WANT, browser: "HeadlessChrome/156.0.0.0", fixtures: { "week-min": { ...F, dom: "d2", tropeDom: "td2" } } });
+  assert.throws(() => planUpdate("dom", WANT, { ...got, fixtures: { "week-min": { ...F, html: "h2" } } }), /--update-dom refused: week-min html changed/);
+  assert.throws(() => planUpdate("dom", WANT, { ...got, sources: { ...SRC, files: { "template/sheet.css": "2" } } }), /--update-dom refused: template\/sheet\.css changed/);
+  assert.throws(() => planUpdate("dom", WANT, { ...got, browser: null }), /needs Chrome or Edge/);
+});
+
+test("planUpdate sources: takes the new sources only while every recorded fixture holds", () => {
+  const got = { ...WANT, sources: { ...SRC, files: { "template/sheet.css": "2" } } };
+  assert.deepEqual(planUpdate("sources", WANT, got), { ...WANT, sources: got.sources });
+  assert.throws(() => planUpdate("sources", WANT, { ...got, fixtures: { "week-min": { ...F, dom: "moved" } } }), /--update-sources refused: week-min dom moved/);
+  // on another browser the DOM is not compared, so only the HTML can refuse
+  assert.deepEqual(planUpdate("sources", WANT, { ...got, browser: "HeadlessChrome/156.0.0.0", fixtures: { "week-min": { ...F, dom: "other" } } }).fixtures, WANT.fixtures);
+});
+
+test("planUpdate add: records one new fixture, never a recorded one, and only on the golden's browser", () => {
+  const got = { ...WANT, fixtures: { "week-min": F, "week-notes": { html: "nh", trope: "nt", dom: "nd", tropeDom: "ntd" } } };
+  assert.deepEqual(planUpdate("add", WANT, got, "week-notes").fixtures, got.fixtures);
+  assert.throws(() => planUpdate("add", WANT, got, "week-min"), /already recorded/);
+  assert.throws(() => planUpdate("add", WANT, got, "week-nothing"), /--add takes one of/);
+  assert.throws(() => planUpdate("add", WANT, { ...got, fixtures: { ...got.fixtures, "week-min": { ...F, html: "x" } } }, "week-notes"), /--add refused: week-min html/);
+  assert.throws(() => planUpdate("add", WANT, { ...got, browser: "HeadlessChrome/156.0.0.0" }, "week-notes"), /run --update-dom first/);
+  assert.throws(() => planUpdate("add", WANT, { ...got, browser: null }, "week-notes"), /needs the browser the golden was rendered on/);
+});

@@ -210,9 +210,11 @@ async function readJSON(p) {
 }
 
 // What the digest needs from sheet.json: the book and the verse refs, read through readingView so a
-// schema-3 week gives the same answer as its schema-2 original.
+// schema-3 week gives the same answer as its schema-2 original. It never throws: a sheet with no
+// readings says nothing, as no sheet does, and the digest falls back to texts.json's own verses.
 export function digestInput(sheet) {
-  const view = sheet && L.readingView(sheet);
+  let view = null;
+  try { view = sheet ? L.readingView(sheet) : null; } catch { view = null; }
   return { book: view?.haftarah?.book, verses: (view?.verses || []).map(v => v.ref).filter(Boolean) };
 }
 
