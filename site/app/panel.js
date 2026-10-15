@@ -117,7 +117,7 @@ export function initPanel({ page, L, sefariaUrl, track = () => {} }) {
     if (entry && entry.ketiv) parts.push(`<p class="ketiv-note">written as <span class="hebrew" lang="he" dir="rtl">${esc(entry.ketiv.replace(/\//g, ""))}</span></p>`);
     if (d.root && d.root.lem) {
       const occ = occurrences(words, readingId, d.root.lem);
-      parts.push(`<h3>This word here</h3><p class="here">${esc(hereLine(occ.length))}</p><ul class="occ">${occ.map(o => `<li><button type="button" class="occ-go" data-verse="${esc(o.key)}">${esc(o.key)}</button>${o.gloss ? ` <span class="occ-gl">${esc(o.gloss)}</span>` : ""}</li>`).join("")}</ul>`);
+      parts.push(`<h3>This word here</h3><p class="here">${esc(hereLine(occ.length))}</p><ul class="occ">${occ.map(o => `<li><button type="button" class="occ-go" data-reading="${esc(readingId)}" data-verse="${esc(o.key)}">${esc(o.key)}</button>${o.gloss ? ` <span class="occ-gl">${esc(o.gloss)}</span>` : ""}</li>`).join("")}</ul>`);
       const all = allLine(d.root.all);
       parts.push(`<p class="freq">${d.root.he ? `<span class="hebrew" lang="he" dir="rtl">${esc(d.root.he)}</span> ` : ""}${d.root.gloss ? `${esc(d.root.gloss)}${all ? " · " : ""}` : ""}${esc(all)}</p>`);
       const bh = bibleHubUrl(d.root.lem);
@@ -148,10 +148,11 @@ export function initPanel({ page, L, sefariaUrl, track = () => {} }) {
       const list = words && words.readings && words.readings[readingId] && words.readings[readingId].verses && words.readings[readingId].verses[key];
       const entry = list ? list.find(x => x.i === i) : null;
       const d = describe(entry || null, (words && words.lemmas) || {});
-      const analysed = !!entry;
+      const analysed = !!(entry && entry.seg && entry.seg.length);
       fill(token, `${head}${analysisHtml(d, entry, row, readingId, words)}<div class="bdb" id="bdb">${analysed ? `<details class="lex"><summary>Dictionary (BDB)</summary><p class="loading">Looking it up…</p></details>` : `<p class="loading">Looking it up…</p>`}</div>` + openLink(esc(sefariaUrl(ref)), "Open the verse on Sefaria"));
       return { analysed, entry };
     });
+    shown.catch(() => {});
     shown.then(({ analysed }) => bdb.then(body => {
       if (token !== seq) return;
       const host = pBody.querySelector("#bdb"); if (!host) return;
@@ -160,11 +161,14 @@ export function initPanel({ page, L, sefariaUrl, track = () => {} }) {
     }));
     return shown;
   }
-  // "This word here": a tap goes to that verse (the panel stays open).
+  // "This word here": a tap goes to that verse. Wide, the panel stays open beside it; narrower, the panel
+  // covers the text, so it closes and focus goes to the verse's number.
   pBody.addEventListener("click", e => {
     const b = e.target.closest("button.occ-go"); if (!b) return;
-    const r = page.rows.find(x => x.row.dataset.reading === (activeWord && activeWord.closest(".row").dataset.reading) && x.row.dataset.verse === b.dataset.verse);
-    if (r) { page.goToHash(`#${r.row.id}`); }
+    const r = page.rows.find(x => x.row.dataset.reading === b.dataset.reading && x.row.dataset.verse === b.dataset.verse);
+    if (!r) return;
+    page.goToHash(`#${r.row.id}`);
+    if (!matchMedia("(min-width: 1100px)").matches) { closePanel(); r.row.querySelector(".gut button").focus({ preventScroll: true }); }
   });
   text.addEventListener("click", e => { const w = e.target.closest(".he .w"); if (w) openWord(w); });
   text.addEventListener("keydown", e => { const w = e.target.closest(".he .w"); if (w && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openWord(w); } });

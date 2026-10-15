@@ -507,8 +507,11 @@ async function runCheck(api, L) {
     h.dataset.checkWordFreq = (pb.querySelector(".freq") || {}).textContent || "";
     h.dataset.checkWordLinks = String(pb.querySelectorAll(".wlinks a").length);
     h.dataset.checkWordCode = String(!!pb.querySelector(".code") && !pb.querySelector(".code").open);
+    h.dataset.checkWordBdbOpen = String(!pb.querySelector(".bdb > details"));
+    const wordControls = [...pb.querySelectorAll(".code summary, .bdb summary, .wlinks a, .occ-go")];
+    h.dataset.checkWordMin = wordControls.length ? String(Math.floor(Math.min(...wordControls.map(x => x.getBoundingClientRect().height)))) : "none";
     const goes = pb.querySelectorAll(".occ-go"), go = goes[goes.length - 1];
-    if (go) { go.click(); h.dataset.checkWordGo = (document.querySelector("#text .row.target") || {}).id === `${rows[0].reading}-${go.dataset.verse.replace(":", "-")}` ? "ok" : "none"; }
+    if (go) { go.click(); h.dataset.checkWordGo = (document.querySelector("#text .row.target") || {}).id === `${rows[0].reading}-${go.dataset.verse.replace(":", "-")}` ? "ok" : "none"; h.dataset.checkWordGoPanel = String(document.getElementById("panel").hasAttribute("data-open")); }
     api.closeAll();
   }
   h.dataset.checkErrors = String(errorsSeen.length) + (errorsSeen.length ? ": " + errorsSeen[0] : "");

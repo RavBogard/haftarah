@@ -272,11 +272,12 @@ test("Hebcal is credited (CC BY 4.0) on every page and in README", () => {
   for (const f of ["../site/index.html", "../site/library.html", "../site/app/sheet.js", "../README.md"]) assert.ok(readSite(new URL(f, import.meta.url), "utf8").includes(line), f);
 });
 
-import { describe as describeWord, occurrences, hereLine, allLine, stepUrl, bibleHubUrl, cleanGloss, STEMS as PAGE_STEMS, FORMS as PAGE_FORMS, STEM_HINTS as PAGE_HINTS, PARTICLES as PAGE_PARTICLES } from "../site/app/words.js";
-import { STEMS, FORMS, STEM_HINTS, PARTICLES } from "../scripts/words.mjs";
+import { describe as describeWord, occurrences, hereLine, allLine, stepUrl, bibleHubUrl, cleanGloss, STEMS as PAGE_STEMS, FORMS as PAGE_FORMS, STEM_HINTS as PAGE_HINTS, PARTICLES as PAGE_PARTICLES, PERSON as PAGE_PERSON, GENDER as PAGE_GENDER, NUMBER as PAGE_NUMBER, STATE as PAGE_STATE } from "../site/app/words.js";
+import { STEMS, FORMS, STEM_HINTS, PARTICLES, PERSON, GENDER, NUMBER, STATE } from "../scripts/words.mjs";
 
 test("the page's label tables are the ones words.mjs decodes with", () => {
   assert.deepEqual(PAGE_STEMS, STEMS); assert.deepEqual(PAGE_FORMS, FORMS); assert.deepEqual(PAGE_HINTS, STEM_HINTS); assert.deepEqual(PAGE_PARTICLES, PARTICLES);
+  assert.deepEqual(PAGE_PERSON, PERSON); assert.deepEqual(PAGE_GENDER, GENDER); assert.deepEqual(PAGE_NUMBER, NUMBER); assert.deepEqual(PAGE_STATE, STATE);
 });
 
 const lemmas = { H0559: { he: "אָמַר", gloss: "to say", all: 5308 }, H4186: { he: "מוֹשָׁב", gloss: "seat", all: 44 }, H9021: { he: "ךָ", gloss: "your" }, H3068G: { he: "יְהֹוָה", gloss: "LORD", all: 6520 }, H5186: { he: "נָטָה", gloss: "to stretch", all: 214 } };

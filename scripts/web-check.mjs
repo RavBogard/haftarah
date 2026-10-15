@@ -143,7 +143,9 @@ async function main() {
         expect("the whole-Tanakh count is shown", /in the Hebrew Bible/.test(a["word-freq"] || ""), a["word-freq"]);
         expect("STEPBible and Bible Hub links", Number(a["word-links"]) === 2, a["word-links"]);
         expect("an occurrence goes to its verse", a["word-go"] === "ok", a["word-go"]);
-      } else expect("a week with no words.json falls back to the dictionary alone", a["word-analysed"] === "false", a["word-analysed"]);
+        expect("an occurrence closes the panel on a phone and keeps it on a desktop", a["word-go-panel"] === String(wide), a["word-go-panel"]);
+        expect("every control in the word panel is a 44px target", Number(a["word-min"]) >= 44, a["word-min"]);
+      } else expect("a week with no words.json falls back to the dictionary alone", a["word-analysed"] === "false" && a["word-sentence"] === "No word analysis for this word." && a["word-bdb-open"] === "true", `${a["word-analysed"]} / ${a["word-sentence"]} / bdb open ${a["word-bdb-open"]}`);
     }
     const lv = sheet.verses[Math.min(5, sheet.verses.length - 1)];
     const t = attrs(await dumpDom(browser, `${base}/${slug}?check=1#v${lv.chapter}-${lv.verse}`, { size: "1440,900" }));
