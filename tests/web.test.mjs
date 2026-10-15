@@ -271,3 +271,72 @@ test("Hebcal is credited (CC BY 4.0) on every page and in README", () => {
   const line = "Calendar and readings: Hebcal (CC BY 4.0).";
   for (const f of ["../site/index.html", "../site/library.html", "../site/app/sheet.js", "../README.md"]) assert.ok(readSite(new URL(f, import.meta.url), "utf8").includes(line), f);
 });
+
+import { describe as describeWord, occurrences, hereLine, allLine, stepUrl, bibleHubUrl, cleanGloss, STEMS as PAGE_STEMS, FORMS as PAGE_FORMS, STEM_HINTS as PAGE_HINTS, PARTICLES as PAGE_PARTICLES } from "../site/app/words.js";
+import { STEMS, FORMS, STEM_HINTS, PARTICLES } from "../scripts/words.mjs";
+
+test("the page's label tables are the ones words.mjs decodes with", () => {
+  assert.deepEqual(PAGE_STEMS, STEMS); assert.deepEqual(PAGE_FORMS, FORMS); assert.deepEqual(PAGE_HINTS, STEM_HINTS); assert.deepEqual(PAGE_PARTICLES, PARTICLES);
+});
+
+const lemmas = { H0559: { he: "אָמַר", gloss: "to say", all: 5308 }, H4186: { he: "מוֹשָׁב", gloss: "seat", all: 44 }, H9021: { he: "ךָ", gloss: "your" }, H3068G: { he: "יְהֹוָה", gloss: "LORD", all: 6520 }, H5186: { he: "נָטָה", gloss: "to stretch", all: 214 } };
+
+test("describe: a verb with a prefix; the sentence is plain English with the Hebrew term after it", () => {
+  const w = { i: 0, seg: [{ k: "c", t: "וַ", gl: "and", lem: "H9001" }, { k: "V", stem: "q", form: "w", p: 3, g: "m", n: "s", t: "יֹּֽאמֶר", gl: "he said", lem: "H0559", root: true }], lem: "H0559", morph: "Hc/Vqw3ms", ketiv: null };
+  const d = describeWord(w, lemmas);
+  assert.equal(d.sentence, "A verb, narrative past: ‘he said’. Simple action (Qal).");
+  assert.equal(d.detail, "Qal · narrative past (wayyiqtol) · 3rd person masculine singular");
+  assert.deepEqual(d.before, [{ t: "וַ", text: "and" }]);
+  assert.deepEqual(d.after, []);
+  assert.deepEqual(d.root, { lem: "H0559", he: "אָמַר", gloss: "to say", all: 5308 });
+  assert.equal(d.code, "Hc/Vqw3ms");
+});
+
+test("describe: a noun with a suffix, a participle, a name, the divine name, a particle, a bare suffix root, a missing word", () => {
+  const seat = describeWord({ seg: [{ k: "N", kind: "c", g: "m", n: "s", st: "c", t: "מוֹשָׁבֶֽ", gl: "seat", lem: "H4186", root: true }, { k: "S", kind: "p", p: 2, g: "m", n: "s", t: "ךָ", gl: "your", lem: "H9021" }], lem: "H4186", morph: "HNcmsc/Sp2ms" }, lemmas);
+  assert.equal(seat.sentence, "A noun, masculine singular, in construct (‘… of’): ‘seat’.");
+  assert.deepEqual(seat.after, [{ t: "ךָ", text: "your" }]);
+  assert.equal(seat.detail, "noun · masculine singular construct");
+  const ptc = describeWord({ seg: [{ k: "C", t: "וְ", gl: "and", lem: "H9002" }, { k: "V", stem: "q", form: "r", g: "m", n: "s", st: "c", t: "נ֣וֹטֵי", gl: "[who] stretched out", lem: "H5186", root: true }, { k: "S", kind: "p", p: 3, g: "m", n: "p", t: "הֶ֔ם", gl: "them", lem: "H9038" }], lem: "H5186", morph: "HC/Vqrmsc/Sp3mp" }, lemmas);
+  assert.equal(ptc.sentence, "A verb, a participle (-ing; one who): ‘[who] stretched out’. Simple action (Qal).");
+  assert.deepEqual(ptc.before, [{ t: "וְ", text: "and" }]); assert.deepEqual(ptc.after, [{ t: "הֶ֔ם", text: "them" }]);
+  const name = describeWord({ seg: [{ k: "N", kind: "p", pk: "m", t: "יְהוֹנָתָ֖ן", gl: "Jonathan", lem: "H3083H", root: true }], lem: "H3083H", morph: "HNpm" }, lemmas);
+  assert.equal(name.sentence, "A name: ‘Jonathan’.");
+  assert.equal(name.detail, "proper noun");
+  const place = describeWord({ seg: [{ k: "N", kind: "p", pk: "l", t: "יְהוּדָ֖ה", gl: "Judah", lem: "H3063G", root: true }], lem: "H3063G", morph: "HNpl" }, lemmas);
+  assert.equal(place.sentence, "A place name: ‘Judah’.");
+  const god = describeWord({ seg: [{ k: "N", kind: "p", pk: "t", t: "יְהוָ֖ה", gl: "Yahweh", lem: "H3068G", root: true }], lem: "H3068G", morph: "HNpt" }, lemmas);
+  assert.equal(god.sentence, "The divine name, יי.");
+  assert.deepEqual(god.root, { lem: "H3068G", he: "יי", gloss: "the Name", all: 6520 });
+  const lord = describeWord({ seg: [{ k: "R", t: "לַֽ", gl: "to", lem: "H9005" }, { k: "N", kind: "p", pk: "t", t: "יהוָ֖ה", gl: "LORD", lem: "H3068G", root: true }], lem: "H3068G", morph: "HR/Npt" }, lemmas);
+  assert.equal(lord.sentence, "The divine name, יי."); assert.deepEqual(lord.before, [{ t: "לַֽ", text: "to" }]);
+  const ki = describeWord({ seg: [{ k: "T", kind: "c", t: "כִּ֥י", gl: "if", lem: "H3588A", root: true }], lem: "H3588A", morph: "HTc" }, {});
+  assert.equal(ki.sentence, "A particle, conditional (if, for): ‘if’.");
+  assert.deepEqual(ki.root, { lem: "H3588A", he: "", gloss: "", all: undefined });
+  const lo = describeWord({ seg: [{ k: "R", def: true, t: "ל֥", gl: "to <the>", lem: "H9005" }, { k: "S", kind: "p", p: 3, g: "m", n: "s", t: "וֹ", gl: "him", lem: "H9033", root: true }], lem: "H9033", morph: "HRd/Sp3ms" }, {});
+  assert.equal(lo.sentence, "A pronoun suffix, 3rd person masculine singular: ‘him’.");
+  assert.deepEqual(lo.before, [{ t: "ל֥", text: "to" }]);
+  const adj = describeWord({ seg: [{ k: "A", kind: "a", g: "m", n: "s", st: "a", t: "צַדִּ֛יק", gl: "righteous", lem: "H6662", root: true }], lem: "H6662", morph: "HAamsa" }, {});
+  assert.equal(adj.sentence, "An adjective, masculine singular: ‘righteous’.");
+  const num = describeWord({ seg: [{ k: "A", kind: "c", g: "b", n: "s", st: "c", t: "שְׁלֹ֥שֶׁת", gl: "[the] three", lem: "H7969", root: true }], lem: "H7969", morph: "HAcbsc" }, {});
+  assert.equal(num.sentence, "A number: ‘[the] three’.");
+  const pron = describeWord({ seg: [{ k: "C", t: "וַ", gl: "and", lem: "H9002" }, { k: "P", kind: "p", p: 1, g: "b", n: "s", t: "אֲנִ֕י", gl: "I", lem: "H0589", root: true }], lem: "H0589", morph: "HC/Pp1bs" }, {});
+  assert.equal(pron.sentence, "A pronoun, 1st person singular: ‘I’.");
+  const oshb = describeWord({ seg: [{ k: "V", stem: "N", form: "i", p: 3, g: "m", n: "s", t: "יִפָּקֵ֖ד", lem: "H6485", root: true }], lem: "H6485", morph: "HVNi3ms" }, {});
+  assert.equal(oshb.sentence, "A verb, future or ongoing. Passive or reflexive (Niphal).", "no gloss from OSHB: no quotation");
+  const none = describeWord(null, lemmas);
+  assert.equal(none.sentence, "No word analysis for this word."); assert.equal(none.root, null);
+  assert.equal(cleanGloss("to <the>"), "to"); assert.equal(cleanGloss("[the] son of"), "[the] son of"); assert.equal(cleanGloss(" and/ "), "and/");
+});
+
+test("occurrences, hereLine, allLine, link urls", () => {
+  const words = { readings: { haftarah: { verses: { "20:18": [{ i: 0, lem: "H0559", seg: [{ gl: "and" }, { gl: "he said", root: true }] }, { i: 5, lem: "H6485K", seg: [{ gl: "you will be missed", root: true }] }], "20:27": [{ i: 7, lem: "H0559", seg: [{ gl: "he said", root: true }] }] } } } };
+  assert.deepEqual(occurrences(words, "haftarah", "H0559"), [{ key: "20:18", i: 0, gloss: "he said" }, { key: "20:27", i: 7, gloss: "he said" }]);
+  assert.deepEqual(occurrences(words, "torah", "H0559"), []);
+  assert.equal(hereLine(1), "Once in this reading"); assert.equal(hereLine(3), "3 times in this reading");
+  assert.equal(allLine(1), "Once in the Hebrew Bible, by dictionary word"); assert.equal(allLine(53), "53 times in the Hebrew Bible, by dictionary word"); assert.equal(allLine(undefined), "");
+  assert.equal(stepUrl("H1254A"), "https://www.stepbible.org/?q=version=OHB|strong=H1254A&options=HNVUG");
+  assert.equal(bibleHubUrl("H1254A"), "https://biblehub.com/hebrew/1254a.htm");
+  assert.equal(bibleHubUrl("H0559"), "https://biblehub.com/hebrew/559.htm");
+  assert.equal(bibleHubUrl("H9023"), null);
+});

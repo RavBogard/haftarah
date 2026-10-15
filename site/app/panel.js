@@ -2,6 +2,8 @@
 // popovers on the keyed letters. sheet.js builds the hooks; this file only answers them.
 import { fetchText, lookupWord } from "./sefaria.js";
 import { noteHtml } from "./sheet.js";
+import { dataUrl, SIDE_FILES } from "./contract.js";
+import { describe, occurrences, hereLine, allLine, stepUrl, bibleHubUrl } from "./words.js";
 
 // Sefaria's text and dictionary markup is trusted but not ours: keep inline text tags only, strip
 // scripts, frames, handlers and non-http links before it reaches the live document.
@@ -100,29 +102,72 @@ export function initPanel({ page, L, sefariaUrl, track = () => {} }) {
   // ---- a Hebrew word: the root, the short gloss first, the full BDB article folded ----
   const senses = arr => !arr || !arr.length ? "" : `<ol>${arr.map(s => `<li>${clean(s && s.definition)}${senses(s && s.senses)}</li>`).join("")}</ol>`;
   const lexBlock = x => `<span class="hw" lang="he" dir="rtl">${esc(x.headword)}</span><span class="lexname">${esc(x.lexicon)}${x.morphology ? " · " + esc(x.morphology) : ""}</span>${senses(x.senses)}`;
-  async function openWord(w) {
-    const ref = w.closest(".row").dataset.ref, word = w.textContent;
+  // words.json, fetched once per page on the first word tap, only when the week has it.
+  let wordsFile = null;
+  const loadWords = () => {
+    if (!page.side || !page.side.words) return Promise.resolve(null);
+    if (!wordsFile) wordsFile = fetch(dataUrl(page.slug, SIDE_FILES.words)).then(r => (r.ok ? r.json() : null)).catch(() => null);
+    return wordsFile;
+  };
+  const chips = (list) => list.map(c => `<span class="chip"><span class="he hebrew" lang="he" dir="rtl">${esc(c.t)}</span>${esc(c.text)}</span>`).join("");
+  function analysisHtml(d, entry, row, readingId, words) {
+    const parts = [`<p class="sense">${esc(d.sentence)}</p>`];
+    if (d.before.length || d.after.length) parts.push(`<p class="chips"><span class="chips-label">Prefixes and suffixes</span>${chips(d.before)}${chips(d.after)}</p>`);
+    if (d.detail) parts.push(`<div class="detail">${esc(d.detail)}<details class="code"><summary>Show the code</summary><code>${esc(d.code)}</code></details></div>`);   // a div: a <p> cannot hold a <details>
+    if (entry && entry.ketiv) parts.push(`<p class="ketiv-note">written as <span class="hebrew" lang="he" dir="rtl">${esc(entry.ketiv.replace(/\//g, ""))}</span></p>`);
+    if (d.root && d.root.lem) {
+      const occ = occurrences(words, readingId, d.root.lem);
+      parts.push(`<h3>This word here</h3><p class="here">${esc(hereLine(occ.length))}</p><ul class="occ">${occ.map(o => `<li><button type="button" class="occ-go" data-verse="${esc(o.key)}">${esc(o.key)}</button>${o.gloss ? ` <span class="occ-gl">${esc(o.gloss)}</span>` : ""}</li>`).join("")}</ul>`);
+      const all = allLine(d.root.all);
+      parts.push(`<p class="freq">${d.root.he ? `<span class="hebrew" lang="he" dir="rtl">${esc(d.root.he)}</span> ` : ""}${d.root.gloss ? `${esc(d.root.gloss)}${all ? " · " : ""}` : ""}${esc(all)}</p>`);
+      const bh = bibleHubUrl(d.root.lem);
+      parts.push(`<p class="wlinks">${openLink(esc(stepUrl(d.root.lem)), "Search this word on STEPBible")}${bh ? openLink(esc(bh), "Bible Hub") : ""}</p>`);
+    }
+    return parts.join("");
+  }
+  function openWord(w) {
+    const row = w.closest(".row"), ref = row.dataset.ref, word = w.textContent;
+    const readingId = row.dataset.reading, key = row.dataset.verse, i = [...row.querySelectorAll(".he .w")].indexOf(w);
     const head = `<h2 class="he hebrew" lang="he" dir="rtl">${esc(word)}</h2><p class="sub">${esc(dash(ref))}</p>`;
     const token = openPanel("Word", `${head}<p class="loading">Looking it up…</p>`, w);
     activeWord = w; w.classList.add("active");
     track("word_lookup", {});   // a count: the word itself is never sent
-    try {
-      const x = await lookupWord(word, ref, L);
-      let body = head;
-      if (!x.short.length && !x.full.length) body += `<p class="inverse">No dictionary entry for this form. Try the word without its prefix, or open the verse on Sefaria.</p>`;
+    const bdb = lookupWord(word, ref, L).then(x => {
+      let body = "";
+      if (!x.short.length && !x.full.length) body = `<p class="inverse">No dictionary entry for this form. Try the word without its prefix, or open the verse on Sefaria.</p>`;
       else {
         body += `<p class="root">Root <b lang="he" dir="rtl" class="hebrew">${x.roots.map(esc).join(" · ")}</b></p>`;
         body += x.short.map(e => `<div class="lex">${lexBlock(e)}</div>`).join("");
         if (x.short.length) { if (x.full.length) body += `<details class="lex"><summary>Full entry</summary>${x.full.map(e => `<div class="full">${lexBlock(e)}</div>`).join("")}</details>`; }
         else body += x.full.map(e => `<div class="lex">${lexBlock(e)}</div>`).join("");
       }
-      fill(token, body + openLink(esc(sefariaUrl(ref)), "Open the verse on Sefaria"));
-    } catch (err) {
-      fill(token, `${head}<p class="err">Sefaria did not answer (${esc(err.message)}).</p>` + openLink(esc(sefariaUrl(ref)), "Open the verse on Sefaria"));
-    }
+      return body;
+    }, err => `<p class="err">Sefaria did not answer (${esc(err.message)}).</p>`);
+    // The analysis (local, instant) shows first; the dictionary entry folds in below when it arrives.
+    const shown = loadWords().then(words => {
+      const list = words && words.readings && words.readings[readingId] && words.readings[readingId].verses && words.readings[readingId].verses[key];
+      const entry = list ? list.find(x => x.i === i) : null;
+      const d = describe(entry || null, (words && words.lemmas) || {});
+      const analysed = !!entry;
+      fill(token, `${head}${analysisHtml(d, entry, row, readingId, words)}<div class="bdb" id="bdb">${analysed ? `<details class="lex"><summary>Dictionary (BDB)</summary><p class="loading">Looking it up…</p></details>` : `<p class="loading">Looking it up…</p>`}</div>` + openLink(esc(sefariaUrl(ref)), "Open the verse on Sefaria"));
+      return { analysed, entry };
+    });
+    shown.then(({ analysed }) => bdb.then(body => {
+      if (token !== seq) return;
+      const host = pBody.querySelector("#bdb"); if (!host) return;
+      host.innerHTML = analysed ? `<details class="lex"><summary>Dictionary (BDB)</summary>${body}</details>` : body;
+      host.querySelectorAll('a[href^="/"]').forEach(a => { a.href = "https://www.sefaria.org" + a.getAttribute("href"); a.target = "_blank"; a.rel = "noopener"; });
+    }));
+    return shown;
   }
+  // "This word here": a tap goes to that verse (the panel stays open).
+  pBody.addEventListener("click", e => {
+    const b = e.target.closest("button.occ-go"); if (!b) return;
+    const r = page.rows.find(x => x.row.dataset.reading === (activeWord && activeWord.closest(".row").dataset.reading) && x.row.dataset.verse === b.dataset.verse);
+    if (r) { page.goToHash(`#${r.row.id}`); }
+  });
   text.addEventListener("click", e => { const w = e.target.closest(".he .w"); if (w) openWord(w); });
   text.addEventListener("keydown", e => { const w = e.target.closest(".he .w"); if (w && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openWord(w); } });
 
-  return { open: openPanel, close: () => { closePop(); closePanel(); } };
+  return { open: openPanel, close: () => { closePop(); closePanel(); }, openWord };
 }

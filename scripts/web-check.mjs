@@ -135,6 +135,15 @@ async function main() {
       expect("a PDF link per reading", Number(a.pdfs) === order.length, a.pdfs);
       expect(raw.prior ? "the Last time link goes to last year's sheet" : "no Last time link without a prior", (a.prior || "") === (raw.prior ? `/${raw.prior.slug}` : ""), a.prior);
       expect("the page saw the side manifest", a.side === JSON.stringify(side ? Object.keys(side).sort() : []), a.side);
+      if (side && side.words) {
+        expect("the word panel analyses the first word from words.json", a["word-analysed"] === "true", a["word-analysed"]);
+        expect("the word panel leads with a plain-English sentence", /^(A|An|The) /.test(a["word-sentence"] || ""), a["word-sentence"]);
+        expect("the word panel never shows a raw code by default", a["word-code"] === "true", a["word-code"]);
+        expect("This word here lists the occurrences", Number(a["word-here"]) >= 1, a["word-here"]);
+        expect("the whole-Tanakh count is shown", /in the Hebrew Bible/.test(a["word-freq"] || ""), a["word-freq"]);
+        expect("STEPBible and Bible Hub links", Number(a["word-links"]) === 2, a["word-links"]);
+        expect("an occurrence goes to its verse", a["word-go"] === "ok", a["word-go"]);
+      } else expect("a week with no words.json falls back to the dictionary alone", a["word-analysed"] === "false", a["word-analysed"]);
     }
     const lv = sheet.verses[Math.min(5, sheet.verses.length - 1)];
     const t = attrs(await dumpDom(browser, `${base}/${slug}?check=1#v${lv.chapter}-${lv.verse}`, { size: "1440,900" }));

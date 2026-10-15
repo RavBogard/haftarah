@@ -370,6 +370,7 @@ export async function run() {
   const api = { rows, model, sync, goToHash, slug, side: data.side || null, closeAll: () => { panel.close(); settings.close(); } };
   window.HaftarahPage = api;
   const panel = initPanel({ page: api, L, sefariaUrl, track });
+  api.openWord = w => panel.openWord(w);
 
   // ---- presenter view: ?present on load, or the Aa card's button (which starts at the verse on screen) ----
   let presenter = null;
@@ -388,7 +389,7 @@ export async function run() {
     return presenter;
   };
   if (isPresent(location.search)) startPresent();
-  if (check) { if (presenter) runPresentCheck().catch(e => { const h = document.documentElement; h.dataset.checkErrors = "1: " + String(e && e.message || e); h.dataset.checkDone = "1"; }); else runCheck(api, L); }
+  if (check) { if (presenter) runPresentCheck().catch(e => { const h = document.documentElement; h.dataset.checkErrors = "1: " + String(e && e.message || e); h.dataset.checkDone = "1"; }); else runCheck(api, L).catch(e => { html.dataset.checkErrors = "1: " + String(e && e.message || e); html.dataset.checkDone = "1"; }); }
 }
 
 // ?present&check=1: what the presenter shows once the web fonts are in, then PageDown, B twice, Escape,
@@ -416,7 +417,7 @@ async function runPresentCheck() {
   h.dataset.checkDone = "1";
 }
 
-function runCheck(api, L) {
+async function runCheck(api, L) {
   const h = document.documentElement, rows = api.rows;
   const wide = matchMedia("(min-width: 1100px)").matches;
   h.dataset.checkVerses = String(rows.length);
@@ -494,6 +495,22 @@ function runCheck(api, L) {
   h.dataset.theme = "dark";
   h.dataset.checkPaper = getComputedStyle(document.body).backgroundColor;
   h.dataset.checkTitle = document.title;
+  // The word panel: the first word of the first row, analysed from words.json when the week has it.
+  const firstWord = document.querySelector("#text .row .he .w");
+  if (firstWord && api.openWord) {
+    const { analysed } = await api.openWord(firstWord);
+    const pb = document.getElementById("panelBody");
+    h.dataset.checkWordAnalysed = String(analysed);
+    h.dataset.checkWordSentence = (pb.querySelector(".sense") || {}).textContent || "";
+    h.dataset.checkWordChips = String(pb.querySelectorAll(".chip").length);
+    h.dataset.checkWordHere = String(pb.querySelectorAll(".occ-go").length);
+    h.dataset.checkWordFreq = (pb.querySelector(".freq") || {}).textContent || "";
+    h.dataset.checkWordLinks = String(pb.querySelectorAll(".wlinks a").length);
+    h.dataset.checkWordCode = String(!!pb.querySelector(".code") && !pb.querySelector(".code").open);
+    const goes = pb.querySelectorAll(".occ-go"), go = goes[goes.length - 1];
+    if (go) { go.click(); h.dataset.checkWordGo = (document.querySelector("#text .row.target") || {}).id === `${rows[0].reading}-${go.dataset.verse.replace(":", "-")}` ? "ok" : "none"; }
+    api.closeAll();
+  }
   h.dataset.checkErrors = String(errorsSeen.length) + (errorsSeen.length ? ": " + errorsSeen[0] : "");
   h.dataset.checkDone = "1";
 }

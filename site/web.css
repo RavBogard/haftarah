@@ -381,3 +381,23 @@ html[data-present] { overflow: hidden; }
 .reading-head .sel { color: var(--ink-2); font-weight: 400; font-style: italic; font-size: .88em; margin-left: .5em; }
 .hero .reading .prior { color: var(--ink-2); text-decoration: none; }
 .hero .reading .prior:hover { color: var(--rubric); text-decoration: underline; }
+/* ---- the word panel: plain English first, the Hebrew term after ---- */
+.panel .sense { font-size: 1.05rem; line-height: 1.45; margin: 0 0 .6rem; }
+.panel .chips { margin: 0 0 .6rem; display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; }
+.panel .chips-label { color: var(--ink-2); font-size: .82rem; width: 100%; }
+.panel .chip { display: inline-flex; align-items: center; gap: .35rem; border: .5px solid var(--frame); padding: .15rem .5rem; font-size: .88rem; }
+.panel .chip .he { font-size: 1.1em; }
+.panel .detail { color: var(--ink-2); font-size: .88rem; margin: 0 0 .6rem; }
+.panel .detail .code { display: inline; margin-left: .5rem; } .panel .detail .code summary { display: inline; cursor: pointer; color: var(--ink-2); font-style: italic; }
+.panel .detail code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .85em; margin-left: .35rem; }
+.panel .ketiv-note { color: var(--ink-2); font-size: .88rem; margin: 0 0 .6rem; }
+.panel h3 { font-size: .88rem; font-weight: 600; color: var(--ink-2); margin: .9rem 0 .25rem; }
+.panel .here { margin: 0 0 .25rem; }
+.panel .occ { list-style: none; margin: 0 0 .6rem; padding: 0; }
+.panel .occ li { display: flex; gap: .5rem; align-items: center; }
+.panel .occ-go { color: var(--rubric); font-weight: 500; text-decoration: underline; text-underline-offset: .18em; min-height: max(2.75rem, 44px); display: inline-flex; align-items: center; font-feature-settings: "lnum"; }
+.panel .occ-gl { color: var(--ink-2); font-size: .9rem; }
+.panel .freq { margin: 0 0 .4rem; font-size: .92rem; }
+.panel .wlinks { display: flex; flex-wrap: wrap; gap: 0 1.2rem; margin: 0; }
+.panel .wlinks .open { margin-top: .4rem; }
+.panel .bdb { margin-top: .9rem; }
