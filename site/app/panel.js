@@ -193,14 +193,19 @@ export function initPanel({ page, L, sefariaUrl, track = () => {} }) {
       const item = (x, cls) => `<button type="button" class="rel${cls}" data-ref="${esc(x)}" data-title="${esc(w.title)}">${esc(shortRef(x, w.title))}</button>`;
       return `<p class="rel-work"><span class="rel-title">${esc(w.title)}</span>${used ? `<span class="used-mark">on this sheet</span>` : ""} ${(w.refs || []).map(x => item(x, "")).join("")}${(w.he || []).map(x => item(x, " he-only")).join("")}</p>`;
     };
-    const groups = (data.groups || []).map(g => `<details class="rel-group"><summary>${esc(g.category)} (${g.works.reduce((n, w) => n + (w.refs || []).length + (w.he || []).length, 0)})</summary>${g.works.map(work).join("")}</details>`).join("");
+    const groups = (data.groups || []).map(g => `<details class="rel-group"><summary>${esc(g.category)} (${(g.works || []).reduce((n, w) => n + (w.refs || []).length + (w.he || []).length, 0)})</summary>${(g.works || []).map(work).join("")}</details>`).join("");
     return `<h2>${ref}</h2>${BANNER}<label class="heonly"><input type="checkbox" id="relHe"${pBody.classList.contains("show-he") ? " checked" : ""}> Show texts with no English</label>${groups || `<p class="inverse">Nothing is listed for this verse.</p>`}` + openLink(esc(sefariaUrl(r.v.ref)), "Open on Sefaria");
   }
   const gutButtonOf = r => r.row.querySelector(".gut button");
-  async function openRelated(r) {
-    const token = openPanel("On this verse", `<h2>${esc(dash(r.v.ref))}</h2>${BANNER}<p class="loading">Loading…</p>`, gutButtonOf(r));
+  // The opener is the control pressed ("Everything on this verse"), not the verse number: on a phone the
+  // number's aria-expanded reports its fold. Kept so Back from a text reopens the list with the same opener.
+  let relatedOpener = null;
+  async function openRelated(r, from = gutButtonOf(r)) {
+    relatedOpener = from || null;
+    const token = openPanel("On this verse", `<h2>${esc(dash(r.v.ref))}</h2>${BANNER}<p class="loading">Loading…</p>`, relatedOpener);
     panel.dataset.alt = "1";
     const file = await loadLinks();
+    if (token !== seq) return { groups: 0, n: 0 };
     const data = file && file.readings && file.readings[r.reading] && file.readings[r.reading].verses && file.readings[r.reading].verses[r.row.dataset.verse];
     fill(token, relatedHtml(r, data || null));
     pBody.dataset.related = r.row.id;
@@ -212,7 +217,7 @@ export function initPanel({ page, L, sefariaUrl, track = () => {} }) {
     if (back) {
       // Back to the list, with the group of the text just read open and focus on that text's button.
       const r = page.rows.find(x => x.row.id === back.dataset.row), was = back.dataset.ref;
-      if (r) openRelated(r).then(() => { const x = [...pBody.querySelectorAll("button.rel")].find(n => n.dataset.ref === was); if (x) { x.closest("details").open = true; x.focus({ preventScroll: true }); } });
+      if (r) openRelated(r, relatedOpener || undefined).then(() => { const x = [...pBody.querySelectorAll("button.rel")].find(n => n.dataset.ref === was); if (x) { x.closest("details").open = true; x.focus({ preventScroll: true }); } });
       return;
     }
     const b = e.target.closest("button.rel"); if (!b) return;

@@ -361,7 +361,7 @@ export async function run() {
   async function onAct(e) {
     const b = e.target.closest("button.act"); if (!b) return;
     const r = rows.find(x => x.app === b.closest(".vapp")); if (!r) return;
-    if (b.dataset.act === "related") { panel.openRelated(r); return; }
+    if (b.dataset.act === "related") { panel.openRelated(r, b); return; }
     const url = verseUrl(location.origin, slug, r.row.id);
     // Another edition shown in this verse: copy that English, under its name (a verse the edition lacks keeps the sheet's own).
     const alt = html.dataset.translation && html.dataset.translation !== "jps2023" && r.row.querySelector(".en.alt");
@@ -380,11 +380,11 @@ export async function run() {
   rail.addEventListener("click", onAct); text.addEventListener("click", onAct);
 
   const api = { rows, model, sync, goToHash, slug, side: data.side || null, closeAll: () => { panel.close(); settings.close(); } };
-  api.sources = new Set(parts.flatMap(p => (p.reading.commentary || []).filter(e => !e || e.status !== "rejected").map(e => e.source).filter(Boolean)));
+  api.sources = new Set(parts.flatMap(p => (p.reading.commentary || []).filter(e => e && e.status !== "rejected").map(e => e.source).filter(Boolean)));
   window.HaftarahPage = api;
   const panel = initPanel({ page: api, L, sefariaUrl, track });
   api.openWord = w => panel.openWord(w);
-  api.openRelated = r => panel.openRelated(r);
+  api.openRelated = (r, from) => panel.openRelated(r, from);
 
   // ---- the translation picker (spec 5.6): the English column shows another edition; the notes stay JPS's ----
   const trOptions = translationOptions(api.side);
@@ -556,7 +556,7 @@ async function runCheck(api, L) {
   // Everything on this verse: a control per verse when the week has links.json; the panel is visibly not the sheet.
   h.dataset.checkRelButtons = String(document.querySelectorAll('.vapp .act[data-act="related"]').length);
   if (api.openRelated && document.querySelector('.vapp .act[data-act="related"]')) {
-    const { groups } = await api.openRelated(rows[0]);
+    const { groups } = await api.openRelated(rows[0], document.querySelector('.vapp .act[data-act="related"]'));
     const pb = document.getElementById("panelBody"), panelEl = document.getElementById("panel");
     h.dataset.checkRelGroups = String(groups);
     h.dataset.checkRelBanner = (pb.querySelector(".from-sefaria") || {}).textContent || "";
@@ -565,7 +565,8 @@ async function runCheck(api, L) {
     h.dataset.checkRelUsed = String(pb.querySelectorAll(".used-mark").length);
     h.dataset.checkRelHeHidden = String([...pb.querySelectorAll(".rel.he-only")].every(b => getComputedStyle(b).display === "none"));
     const cb = pb.querySelector("#relHe"); if (cb) { cb.click(); h.dataset.checkRelHeShown = String([...pb.querySelectorAll(".rel.he-only")].every(b => getComputedStyle(b).display !== "none")); }
-    h.dataset.checkRelLast = (pb.querySelector(".rel-group:last-of-type summary") || {}).textContent || "";
+    h.dataset.checkRelHasQc = String([...pb.querySelectorAll(".rel-group summary")].some(s => /^Quoting Commentary/.test(s.textContent)));
+    h.dataset.checkRelLast =(pb.querySelector(".rel-group:last-of-type summary") || {}).textContent || "";
     h.dataset.checkRelKind = document.getElementById("panelKind").textContent;
     api.closeAll();
     h.dataset.checkRelAltGone = String(!panelEl.dataset.alt);

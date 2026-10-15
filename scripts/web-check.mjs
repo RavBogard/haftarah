@@ -162,7 +162,7 @@ async function main() {
         expect("groups start collapsed", a["rel-closed"] === "true", a["rel-closed"]);
         expect("a work the sheet cites is marked", Number(a["rel-used"]) >= 1, a["rel-used"]);
         expect("Hebrew-only texts hide until asked for", a["rel-he-hidden"] === "true" && (a["rel-he-shown"] === undefined || a["rel-he-shown"] === "true"), `${a["rel-he-hidden"]} ${a["rel-he-shown"]}`);
-        expect("Quoting Commentary comes last", /^Quoting Commentary/.test(a["rel-last"] || "") || !/Quoting Commentary/.test(JSON.stringify(a)), a["rel-last"]);
+        expect("Quoting Commentary comes last when present", a["rel-has-qc"] !== "true" || /^Quoting Commentary/.test(a["rel-last"] || ""), `${a["rel-has-qc"]} ${a["rel-last"]}`);
         expect("the panel kind is On this verse", a["rel-kind"] === "On this verse", a["rel-kind"]);
       } else expect("no related control without links.json", a["rel-buttons"] === "0", a["rel-buttons"]);
     }
