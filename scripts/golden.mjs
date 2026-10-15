@@ -25,10 +25,11 @@
  * - "dom"/"tropeDom" per fixture: sha256 of what Chrome renders from them (the <html> tag render.js
  *   stamps and the whole <main id="sheet">). Checked only on the browser version and platform they
  *   were recorded on, since a Chrome update may move a pixel.
+ * - "torah"/"torahDom" per fixture with a Torah reading (week-torah): the same for sheet-torah.html.
  */
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { readFile, writeFile, mkdir, readdir } from "node:fs/promises";
+import { readFile, writeFile, mkdir, readdir, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { join, resolve, dirname, relative } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -39,8 +40,10 @@ import { dumpDom, browserVersion, printSignature, sha256 } from "./chrome.mjs";
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const run = promisify(execFile);
 export const GOLDEN_FILE = join(ROOT, "tests", "golden", "print.json");
-export const FIXTURES = ["week-min", "week-notes"];
-export const DOM_KEYS = ["dom", "tropeDom"];
+export const FIXTURES = ["week-min", "week-notes", "week-torah"];
+/** The fixtures written in schema 2; the schema-3 checks migrate these. week-torah is schema 3 already. */
+export const SCHEMA2_FIXTURES = ["week-min", "week-notes"];
+export const DOM_KEYS = ["dom", "tropeDom", "torahDom"];
 const rel = p => relative(ROOT, p).split("\\").join("/");
 
 export const foldEol = s => String(s).replace(/\r\n/g, "\n");
@@ -65,10 +68,15 @@ export function libInternals(text, exported) {
   return out;
 }
 
-/** Build one week folder's sheet.html and sheet-trope.html (no PDF); returns their text. */
+/** Build one week folder's sheet.html and sheet-trope.html, and sheet-torah.html when it has a Torah reading (no PDF); returns their text (torah: null without one). */
 export async function buildFixture(dir, { env } = {}) {
+  await rm(join(dir, "sheet-torah.html"), { force: true });
   await run(process.execPath, [join(ROOT, "scripts", "build.mjs"), dir, "--no-pdf", "--trope"], { env, cwd: ROOT, maxBuffer: 1 << 24 });
-  return { sheet: await readFile(join(dir, "sheet.html"), "utf8"), trope: await readFile(join(dir, "sheet-trope.html"), "utf8") };
+  return {
+    sheet: await readFile(join(dir, "sheet.html"), "utf8"),
+    trope: await readFile(join(dir, "sheet-trope.html"), "utf8"),
+    torah: await readFile(join(dir, "sheet-torah.html"), "utf8").catch(() => null),
+  };
 }
 
 /** sha256 of what prints from one built HTML file. `env` is Chrome's environment. */
@@ -123,7 +131,12 @@ export async function record({ env, browser = findBrowser() } = {}) {
     const dir = join(ROOT, "tests", "fixtures", name);
     const built = await buildFixture(dir, { env });
     const f = { html: sha256(foldEol(built.sheet)), trope: sha256(foldEol(built.trope)) };
-    if (browser) { f.dom = await domHash(browser, join(dir, "sheet.html"), chrome); f.tropeDom = await domHash(browser, join(dir, "sheet-trope.html"), chrome); }
+    if (built.torah != null) f.torah = sha256(foldEol(built.torah));
+    if (browser) {
+      f.dom = await domHash(browser, join(dir, "sheet.html"), chrome);
+      f.tropeDom = await domHash(browser, join(dir, "sheet-trope.html"), chrome);
+      if (built.torah != null) f.torahDom = await domHash(browser, join(dir, "sheet-torah.html"), chrome);
+    }
     out.fixtures[name] = f;
   }
   return out;
@@ -133,7 +146,7 @@ export async function record({ env, browser = findBrowser() } = {}) {
 export function compare(want, got) {
   const sameBrowser = !!want.browser && want.browser === got.browser && want.platform === got.platform;
   const diffs = want.sources ? compareSources(want.sources, got.sources || { files: {}, lib: {} }) : [];
-  for (const name of Object.keys(want.fixtures || {})) for (const k of ["html", "trope", ...(sameBrowser ? DOM_KEYS : [])]) {
+  for (const name of Object.keys(want.fixtures || {})) for (const k of ["html", "trope", "torah", ...(sameBrowser ? DOM_KEYS : [])]) {
     if ((want.fixtures[name] || {})[k] !== (got.fixtures[name] || {})[k]) diffs.push(`${name} ${k}`);
   }
   return diffs;

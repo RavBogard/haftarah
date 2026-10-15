@@ -11,7 +11,7 @@ import { migrate3 } from "../scripts/migrate.mjs";
 import { isolatedEnv } from "./helpers/isolatedEnv.mjs";
 import { findBrowser } from "../scripts/build.mjs";
 import { browserVersion, sha256, dumpDom, printSignature } from "../scripts/chrome.mjs";
-import { FIXTURES, readGolden, buildFixture, domHash, foldEol, compare, compareSources, sourceHashes, libInternals, planUpdate } from "../scripts/golden.mjs";
+import { FIXTURES, SCHEMA2_FIXTURES, readGolden, buildFixture, domHash, foldEol, compare, compareSources, sourceHashes, libInternals, planUpdate } from "../scripts/golden.mjs";
 
 const FIX = fileURLToPath(new URL("./fixtures/", import.meta.url));
 const golden = await readGolden();
@@ -60,6 +60,7 @@ for (const name of FIXTURES) {
       const built = await buildFixture(join(FIX, name), { env: iso.env });
       assert.equal(sha256(foldEol(built.sheet)), golden.fixtures[name].html, `${name}/sheet.html is not what it was`);
       assert.equal(sha256(foldEol(built.trope)), golden.fixtures[name].trope, `${name}/sheet-trope.html is not what it was`);
+      assert.equal(built.torah == null ? undefined : sha256(foldEol(built.torah)), golden.fixtures[name].torah, `${name}/sheet-torah.html is not what it was`);
     } finally { await iso.cleanup(); }
   });
 
@@ -69,6 +70,7 @@ for (const name of FIXTURES) {
       await buildFixture(join(FIX, name), { env: iso.env });
       assert.equal(await domHash(browser, join(FIX, name, "sheet.html"), { env: iso.env }), golden.fixtures[name].dom, `${name}: the rendered sheet changed`);
       assert.equal(await domHash(browser, join(FIX, name, "sheet-trope.html"), { env: iso.env }), golden.fixtures[name].tropeDom, `${name}: the rendered chanter's copy changed`);
+      if (golden.fixtures[name].torahDom) assert.equal(await domHash(browser, join(FIX, name, "sheet-torah.html"), { env: iso.env }), golden.fixtures[name].torahDom, `${name}: the rendered Torah sheet changed`);
     } finally { await iso.cleanup(); }
   });
 }
@@ -88,9 +90,9 @@ async function writeSchema3(name) {
   await writeFile(join(dir, "sheet.json"), JSON.stringify(migrate3(JSON.parse(await readFile(join(FIX, name, "sheet.json"), "utf8"))), null, 2));
   return dir;
 }
-after(async () => { for (const name of FIXTURES) await rm(join(FIX, `_s3-${name}`), { recursive: true, force: true }); });
+after(async () => { for (const name of SCHEMA2_FIXTURES) await rm(join(FIX, `_s3-${name}`), { recursive: true, force: true }); });
 
-for (const name of FIXTURES) {
+for (const name of SCHEMA2_FIXTURES) {
   test(`print golden: ${name} migrated to schema 3 builds the same page around the same data`, async () => {
     const iso = await isolatedEnv();
     try {
@@ -186,4 +188,29 @@ test("planUpdate add: records one new fixture, never a recorded one, and only on
   assert.throws(() => planUpdate("add", WANT, { ...got, fixtures: { ...got.fixtures, "week-min": { ...F, html: "x" } } }, "week-notes"), /--add refused: week-min html/);
   assert.throws(() => planUpdate("add", WANT, { ...got, browser: "HeadlessChrome/156.0.0.0" }, "week-notes"), /run --update-dom first/);
   assert.throws(() => planUpdate("add", WANT, { ...got, browser: null }, "week-notes"), /needs the browser the golden was rendered on/);
+});
+
+// spec 5.4: the haftarah PDF of a week is identical whether or not the week also has a Torah reading.
+test("print golden: a week's haftarah builds the same sheet.html and chanter's copy with or without a Torah reading", async () => {
+  const iso = await isolatedEnv();
+  try {
+    const alone = await buildFixture(await writeSchema3("week-min"), { env: iso.env });
+    const withTorah = await buildFixture(join(FIX, "week-torah"), { env: iso.env });
+    assert.equal(foldEol(withTorah.sheet), foldEol(alone.sheet));
+    assert.equal(foldEol(withTorah.trope), foldEol(alone.trope));
+    assert.ok(withTorah.torah && /"reading":"torah"/.test(withTorah.torah), "the Torah sheet carries the Torah option");
+    assert.equal(alone.torah, null);
+  } finally { await iso.cleanup(); }
+});
+
+test("print golden: the Torah sheet's front page says Torah and its last verse ends on sof pasuk", { skip: browser ? false : "no Chrome or Edge on this machine", timeout: 300_000 }, async () => {
+  const iso = await isolatedEnv();
+  try {
+    await buildFixture(join(FIX, "week-torah"), { env: iso.env });
+    const dom = await dumpDom(browser, pathToFileURL(join(FIX, "week-torah", "sheet-torah.html")).href, { env: iso.env });
+    assert.match(dom, /<span class="range">Torah · 29 Tishrei 5787<\/span>/);
+    assert.ok(!/tr-sof-haftarah/.test(dom.split('<div id="stage"')[0]), "no haftarah cadence on a Torah sheet");
+    const haft = await dumpDom(browser, pathToFileURL(join(FIX, "week-torah", "sheet.html")).href, { env: iso.env });
+    assert.match(haft, /<span class="range">Haftarah · 29 Tishrei 5787<\/span>/);
+  } finally { await iso.cleanup(); }
 });

@@ -13,4 +13,5 @@ site/dist/
 .playwright-mcp/
 .claude/worktrees/
 tests/fixtures/*/sheet-trope.html
+tests/fixtures/*/sheet-torah.html
 tests/fixtures/_*/

@@ -1,7 +1,8 @@
 /* render.js — lays one week's sheet.json out as fixed letter pages.
    Runs in the browser (headless Chrome for the PDF, or a normal browser for review).
-   Expects window.SHEET (the data) and window.SHEET_OPTIONS ({ logo, voices, trope }); trope: true
-   makes the chanter's copy, with each trope phrase of the Hebrew on its family's color. */
+   Expects window.SHEET (the data) and window.SHEET_OPTIONS ({ logo, voices, trope, reading }); trope: true
+   makes the chanter's copy, with each trope phrase of the Hebrew on its family's color.
+   reading: "torah" makes the Torah sheet: "Torah" in the front page's head, a plain sof pasuk at the end. */
 
 (function () {
   "use strict";
@@ -125,7 +126,7 @@
 
   function buildFrontPage() {
     const p = newPage("front");
-    setHead(p, series.name, `Haftarah · ${seriesLabel}`);
+    setHead(p, series.name, `${opts.reading === "torah" ? "Torah" : "Haftarah"} · ${seriesLabel}`);
     setFoot(p, { wordmark: true });
 
     // Hero: the mural sits at a fixed height; the incipit block centres on it.
@@ -177,6 +178,7 @@
     // built; trope.css hides it (display: none, so the fill is unchanged) unless <html> has data-trope.
     {
       const fams = L.tropeFamiliesUsed(data.verses);
+      if (opts.reading === "torah") { fams.delete("sof-haftarah"); fams.add("sof-pasuk"); }   // a Torah reading ends on sof pasuk
       const tl = el("div", "legend trope-legend");
       tl.append(el("span", "label", "Chanter’s copy · trope phrases by family"));
       L.TROPE_FAMILIES.filter(([k]) => fams.has(k)).forEach(([k, label]) => tl.append(el("span", `tr tr-${k}`, label)));
@@ -236,7 +238,7 @@
     let heHtml = divineName(v.he.replace(/&thinsp;|\u2009/g, " "));
     for (const k of (v.keys || [])) if (k.kind === "gloss") heHtml = keyHebrew(heHtml, k.he, k.key);
     // Each trope phrase in its family's span, always; trope.css colors them only under data-trope.
-    heHtml = L.tropeHtml(heHtml, { final: v === data.verses[data.verses.length - 1] });
+    heHtml = L.tropeHtml(heHtml, { final: opts.reading !== "torah" && v === data.verses[data.verses.length - 1] });
     const he = el("div", "he");
     const heInner = el("div", "inner", heHtml);
     he.append(heInner);

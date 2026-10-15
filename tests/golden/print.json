@@ -10,7 +10,7 @@
       "template/fonts/NotoSerifHebrew[wdth,wght].ttf": "93caef921360788dc3b0e32136bb26f16bc57717ec482d48fc7fd43820617165",
       "template/fonts/OFL-literata.txt": "8742963604cd89dc81437811a850018fc03b2bfad686d7422c8235967c87614e",
       "template/fonts/OFL-notoserifhebrew.txt": "9b9fe028b5ba74d231659a1bbaf0ed09b11e759d1ca6a070999e16d151616b47",
-      "template/render.js": "3ece95867bc9063de7ad8e6b3165d8591d800c0ba1fdc529060573d9e7b3461b",
+      "template/render.js": "ca8b02fe55df68ec37960e4e910403244cff6ed254695bfd68b55117906f0c82",
       "template/sheet.css": "5979871157efc8d6f26974ca3dbf9a6d4bd8371e99f09998e7f915cc9b2c87ef",
       "template/sheet.html": "481dee92ba07c1c0def70ee8d2e0b0a8850f4acab764b0eca22b1b07b5797217",
       "template/trope.css": "a49ed10f4a9e392c23b473b1a7ed4766a824666409156c4fb7c836bac49632d1"
@@ -75,6 +75,14 @@
       "trope": "f067535e4142e014b4f5b22988773b6b74048c277a9b353c0a3dde778ecd0297",
       "dom": "1ec1b9173cf614bcaa2768ff0df0eefd4ed89fb3dfc99372c2604e0e1e9d5579",
       "tropeDom": "bf75204cd92a29af4898779a8020467a83075a77bc852c45d31398e55b4c521f"
+    },
+    "week-torah": {
+      "html": "da34c955d40faa604b50df34c6f0a0568db5222d8d7457c711484114efeb9d3d",
+      "trope": "fa0cf63830063f0d76217f227cb8519586750549620c0d0e34af9741dd5cb971",
+      "torah": "4f145bed85b7ab5373456272dd28230287e73ce48bdfb996ba58458ae13f5f2e",
+      "dom": "de28270a0290d2d77004a9b145b96d628c4a79860096538f6c15423463f0e427",
+      "tropeDom": "27ceca2a39fedfacc067abcb6f24d88a044ac3a1f17a5a7612c11d75567044fd",
+      "torahDom": "5276187c1750f577002e3947eff86cc0cc10ff97eccf790f065ede5b09bf2d7b"
     }
   }
 }

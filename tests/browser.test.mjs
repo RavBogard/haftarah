@@ -56,3 +56,17 @@ test("web-check passes on a schema-3 copy of week-notes (the browser path, not j
     assert.match(stdout, /All web checks passed\./);
   } finally { await iso.cleanup(); }
 });
+
+test("check.mjs passes on week-torah: both sheets", { skip, timeout: 300_000 }, async () => {
+  const iso = await isolatedEnv();
+  try {
+    const dir = join(iso.home, "week-torah");
+    await mkdir(dir);
+    await copyFile(join(ROOT, "tests", "fixtures", "week-torah", "sheet.json"), join(dir, "sheet.json"));
+    await run(process.execPath, [join(ROOT, "scripts", "build.mjs"), dir, "--no-pdf"], { env: iso.env, cwd: ROOT, maxBuffer: 1 << 24 });
+    const { stdout } = await run(process.execPath, [join(ROOT, "scripts", "check.mjs"), dir], { env: iso.env, cwd: ROOT, maxBuffer: 1 << 24 });
+    assert.match(stdout, /Torah: sheet-torah\.html/);
+    assert.match(stdout, /Haftarah: sheet\.html/);
+    assert.match(stdout, /Check passed\./);
+  } finally { await iso.cleanup(); }
+});

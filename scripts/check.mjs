@@ -3,14 +3,16 @@
  * check.mjs — render a week twice with the pinned browser and assert the layout invariants the
  * design review asked for. Reads the data-* attributes render.js writes on <html> and each .page.
  *
- *   node scripts/check.mjs weeks/<slug>
- *   node scripts/check.mjs weeks/<slug> --trope   # check the chanter's copy, sheet-trope.html
+ *   node scripts/check.mjs weeks/<slug>                  # every built reading: sheet.html, and sheet-torah.html when the week has a Torah reading
+ *   node scripts/check.mjs weeks/<slug> --reading torah  # one reading only
+ *   node scripts/check.mjs weeks/<slug> --trope          # the haftarah's chanter's copy, sheet-trope.html
  */
 import { readFile, access } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { findBrowser } from "./build.mjs";
 import { dumpDom } from "./chrome.mjs";
+import { HTML_FILES, TROPE_HTML } from "./week-files.mjs";
 import { createRequire } from "node:module";
 const L = createRequire(import.meta.url)("../template/lib.js");
 
@@ -105,35 +107,50 @@ export function gapReport(n, p, next) {
 }
 
 async function main() {
-  const dirArg = process.argv.slice(2).find(a => !a.startsWith("--"));
-  if (!dirArg) { console.error("usage: node scripts/check.mjs weeks/<slug> [--trope]"); process.exit(1); }
+  const args = process.argv.slice(2);
+  const dirArg = args.find((a, i) => !a.startsWith("--") && args[i - 1] !== "--reading");
+  if (!dirArg) { console.error("usage: node scripts/check.mjs weeks/<slug> [--reading torah|haftarah] [--trope]"); process.exit(1); }
   const weekDir = resolve(dirArg);
-  const trope = process.argv.includes("--trope");
-  const html = join(weekDir, trope ? "sheet-trope.html" : "sheet.html");
-  // A missing chanter's copy would render as Chrome's error page and surface as a page-count mismatch.
-  if (trope && !(await access(html).then(() => true, () => false))) {
-    console.error(`${dirArg.replace(/[\\/]+$/, "")}/sheet-trope.html is missing; run node scripts/build.mjs ${dirArg} --trope first`);
-    process.exit(1);
-  }
+  const trope = args.includes("--trope");
+  const ri = args.indexOf("--reading");
+  const only = ri >= 0 ? args[ri + 1] : null;
+  const file = JSON.parse(await readFile(join(weekDir, "sheet.json"), "utf8"));
+  // The chanter's copy exists for the haftarah only.
+  const targets = trope
+    ? [{ id: L.primaryReading(file).id, kind: "haftarah", html: TROPE_HTML }]
+    : L.readings(file).filter(r => (r.verses || []).length && (!only || r.kind === only)).map(r => ({ id: r.id, kind: r.kind, html: HTML_FILES[r.kind] }));
+  if (!targets.length) { console.error(`${dirArg}: no ${only || ""} reading with verses to check`); process.exit(1); }
   const browser = findBrowser();
   if (!browser) { console.error("No Chrome or Edge found."); process.exit(1); }
-  const url = pathToFileURL(html).href;
-  const a = analyse(await dumpDom(browser, url));
-  const b = analyse(await dumpDom(browser, url));
-  const problems = a.problems.slice();
-  if (JSON.stringify(a.summary) !== JSON.stringify(b.summary)) problems.push("two renders differ (pagination is not deterministic on this browser)");
-  // The divine-name count in the render must equal the count in the data (verses plus incipit).
-  const data = L.readingView(JSON.parse(await readFile(join(weekDir, "sheet.json"), "utf8")));
-  const yyExpected = [...data.verses.map(v => v.he), data.haftarah.incipit?.he || ""].reduce((n, h) => n + (String(h).match(TETRA) || []).length, 0);
-  if (yyExpected !== a.summary.yy) problems.push(`divine name: ${a.summary.yy} replaced in the render, ${yyExpected} in the data`);
   console.log(`Browser: ${browser}`);
-  console.log(`Pages: ${a.summary.pages}; divine name ${a.summary.yy}x; keys ${a.summary.keys.length}; voices without a line: ${a.summary.voicesMissing.join(", ") || "none"}`);
-  console.table(a.summary.page.map((p, i) => ({ page: i + 1, kind: p.kind, rows: p.rows, gap: p.gap, fill: p.fill, split: p.split, offpage: p.offpage, voices: p.voices || "" })));
-  if (problems.length) {
-    console.error("Check failed:\n  - " + problems.join("\n  - "));
-    if (a.diagnostics.length) console.error("\nGap diagnostics:\n" + a.diagnostics.join("\n"));
-    process.exit(1);
+  let failed = false;
+  for (const t of targets) {
+    const html = join(weekDir, t.html);
+    // A missing file would render as Chrome's error page and surface as a page-count mismatch.
+    if (!(await access(html).then(() => true, () => false))) {
+      console.error(`${dirArg.replace(/[\\/]+$/, "")}/${t.html} is missing; run node scripts/build.mjs ${dirArg}${trope ? " --trope" : ""} first`);
+      failed = true;
+      continue;
+    }
+    const url = pathToFileURL(html).href;
+    const a = analyse(await dumpDom(browser, url));
+    const b = analyse(await dumpDom(browser, url));
+    const problems = a.problems.slice();
+    if (JSON.stringify(a.summary) !== JSON.stringify(b.summary)) problems.push("two renders differ (pagination is not deterministic on this browser)");
+    // The divine-name count in the render must equal the count in the data (verses plus incipit).
+    const data = L.readingView(file, t.id);
+    const yyExpected = [...data.verses.map(v => v.he), data.haftarah.incipit?.he || ""].reduce((n, h) => n + (String(h).match(TETRA) || []).length, 0);
+    if (yyExpected !== a.summary.yy) problems.push(`divine name: ${a.summary.yy} replaced in the render, ${yyExpected} in the data`);
+    if (targets.length > 1) console.log(`\n${t.kind === "torah" ? "Torah" : "Haftarah"}: ${t.html}`);
+    console.log(`Pages: ${a.summary.pages}; divine name ${a.summary.yy}x; keys ${a.summary.keys.length}; voices without a line: ${a.summary.voicesMissing.join(", ") || "none"}`);
+    console.table(a.summary.page.map((p, i) => ({ page: i + 1, kind: p.kind, rows: p.rows, gap: p.gap, fill: p.fill, split: p.split, offpage: p.offpage, voices: p.voices || "" })));
+    if (problems.length) {
+      console.error("Check failed:\n  - " + problems.join("\n  - "));
+      if (a.diagnostics.length) console.error("\nGap diagnostics:\n" + a.diagnostics.join("\n"));
+      failed = true;
+    }
   }
+  if (failed) process.exit(1);
   console.log("Check passed.");
 }
 
