@@ -31,5 +31,7 @@ export function makeWeekTorah(weekMin) {
   };
   L.assignEntryIds(torah.commentary, "torah", new Set(h.commentary.map(e => e.id)));
   week.readings.unshift(torah);
+  // Next week is Noach in week-min; its Torah reading is what the Torah sheet's colophon names.
+  if (week.nextWeek) week.nextWeek = { ...week.nextWeek, torahRef: "Genesis 6:9–11:32" };
   return week;
 }

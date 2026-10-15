@@ -46,6 +46,20 @@ function parseArgs() {
   CUSTOMS = valueOf("customs") || "crc";
 }
 
+/** The Torah sheet's data: its colophon's "Next week" line names next week's Torah reading, and is dropped when none is known. */
+export function torahColophonData(data) {
+  const nw = data.nextWeek;
+  return { ...data, nextWeek: nw && nw.torahRef ? { ...nw, ref: nw.torahRef } : null };
+}
+
+/** The haftarah sheet's data: unchanged, except that next week's Torah ref (only the Torah sheet reads it) is not embedded, so the haftarah's page is byte-identical whether or not fetch recorded it. */
+export function haftarahColophonData(data) {
+  const nw = data.nextWeek;
+  if (!nw || !("torahRef" in nw)) return data;
+  const { torahRef, ...rest } = nw;
+  return { ...data, nextWeek: rest };
+}
+
 /** The readings this build makes: every reading with verses, in the sheet's order, or only the one --reading names. */
 export function readingsToBuild(file, only = null) {
   const all = HaftarahLib.readings(file).filter(r => (r.verses || []).length);
@@ -138,7 +152,8 @@ async function main() {
   const builds = [], problems = [];
   for (const t of targets) {
     // One reading in the schema-2 shape; a schema-2 file is itself, so its sheet.html does not change.
-    const data = HaftarahLib.readingView(file, t.id);
+    let data = HaftarahLib.readingView(file, t.id);
+    data = t.kind === "torah" ? torahColophonData(data) : haftarahColophonData(data);
     let biblio = null;
     try { biblio = HaftarahLib.parseBibliography(await readFile(join(ROOT, "bibliography", `${data.haftarah.book}.md`), "utf8")); } catch {}
     problems.push(...gate(data, biblio).map(p => (multi ? `${t.id}: ${p}` : p)));

@@ -25,3 +25,20 @@ test("render.js changes only behind the Torah option the haftarah build never pa
   assert.equal(uses.length, 3);
   assert.equal((src.match(/opts\.reading === "torah"|opts\.reading !== "torah"/g) || []).length, 3);
 });
+
+test("torahColophonData: the Torah sheet's Next week names the Torah reading, and is dropped without one", async () => {
+  const { torahColophonData } = await import("../scripts/build.mjs");
+  const two = await load("week-torah");
+  const view = { nextWeek: two.nextWeek, haftarah: {} };
+  const t = torahColophonData(view);
+  assert.equal(t.nextWeek.ref, "Genesis 6:9–11:32");
+  assert.equal(t.nextWeek.shabbat, "Noach");
+  assert.equal(view.nextWeek.ref, "Isaiah 54:1-55:5", "the haftarah's own data is not touched");
+  assert.equal(torahColophonData({ nextWeek: { shabbat: "Noach", ref: "Isaiah 54:1-55:5" } }).nextWeek, null);
+  assert.equal(torahColophonData({ nextWeek: null }).nextWeek, null);
+  assert.equal(torahColophonData({}).nextWeek, null);
+  const { haftarahColophonData } = await import("../scripts/build.mjs");
+  assert.deepEqual(haftarahColophonData(view).nextWeek, { shabbat: "Noach", special: null, ref: "Isaiah 54:1-55:5", civilDisplay: "October 17, 2026", status: "approved" }, "no torahRef in the haftarah's page");
+  const plain = { nextWeek: { shabbat: "Noach", ref: "x" } };
+  assert.equal(haftarahColophonData(plain), plain);
+});

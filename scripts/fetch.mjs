@@ -528,17 +528,20 @@ export function mergeWeek(existing, { torah = null, leyning = null } = {}) {
 // ---- main -------------------------------------------------------------------
 
 // The following Shabbat's reading; Daniel confirms it when the calendar offers a choice.
-async function nextWeekFor(date, customs) {
+export async function nextWeekFor(date, customs, get = getJSON) {
   const d = new Date(date + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() + 7);
   const next = d.toISOString().slice(0, 10);
   try {
-    const ley = await getJSON(leyningUrl(next, customs));
+    const ley = await get(leyningUrl(next, customs));
     const it = (ley.items || [])[0];
     if (!it || !it.haftara) return null;
+    // torahRef: next week's Torah reading as Hebcal's summary, en-dashed like the haftarah ref; the Torah sheet's colophon names it.
+    const torahRef = typeof it.summary === "string" && it.summary.trim() ? L.enDash(it.summary.trim()) : null;
     return {
       shabbat: it.name?.en || "",
       special: it.reason?.haftara || null,
       ref: it.haftara,
+      ...(torahRef ? { torahRef } : {}),
       civilDisplay: new Date(next + "T12:00:00Z").toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric", timeZone: "UTC" }),
     };
   } catch { return null; }

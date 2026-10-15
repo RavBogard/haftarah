@@ -121,3 +121,12 @@ test("mergeWeek: the same pick again changes nothing; an untouched Torah reading
   const worked = makeWeekTorah(min);   // its Torah reading has an entry and a gloss
   assert.throws(() => mergeWeek(worked, { torah: other, leyning: LEY }), /Torah reading \(Genesis 6:9-11\) already has 1 entry and 1 gloss; --force replaces the whole sheet/);
 });
+
+test("nextWeekFor records next week's Torah reading from Hebcal's summary, en-dashed; the other fields are as before", async () => {
+  const { nextWeekFor } = await import("../scripts/fetch.mjs");
+  const item = { name: { en: "Lech-Lecha" }, summary: "Genesis 12:1-17:27", haftara: "Isaiah 40:27-41:16", reason: { haftara: null } };
+  const nw = await nextWeekFor("2026-10-17", CUSTOMS, async () => ({ items: [item] }));
+  assert.deepEqual(nw, { shabbat: "Lech-Lecha", special: null, ref: "Isaiah 40:27-41:16", torahRef: "Genesis 12:1–17:27", civilDisplay: "October 24, 2026" });
+  const none = await nextWeekFor("2026-10-17", CUSTOMS, async () => ({ items: [{ ...item, summary: undefined }] }));
+  assert.equal("torahRef" in none, false);
+});
