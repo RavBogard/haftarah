@@ -14,12 +14,14 @@ template/
   voices.json               one-line identifications of named sources, for the front page
   fonts/                    Ezra SIL (Hebrew), Literata (English), Noto Serif Hebrew (fallback); OFL licenses alongside
 customs/crc.json            CRC's customs as data: calendar, rite, Torah selection rule, versions, series, credits, entry cap (toConfirm: what Daniel has not yet confirmed)
+data/words/frequency.json  how often each dictionary word is tagged in the Hebrew Bible (derived from STEP TAHOT; node scripts/words.mjs --frequency)
 scripts/
   leyning.mjs               Hebcal's leyning item -> aliyot, maftir, the Torah selection (aliyah:N[-M], triennial, full, a ref)
   prior.mjs                 "Last time": last year's sheet for the parashah, prior.json, carried entries (on by default; --no-carry), the See also sentence
   customs.mjs               loads and checks customs/<id>.json
   rites.mjs                 each rite's default haftarah per parashah
   week-files.mjs            the file names in a week folder, per reading
+  words.mjs                 the word analysis behind the web page's word panel (STEP TAHOT and TBESH, OSHB as fallback) -> weeks/<slug>/words.json; --download, --frequency, --check
   fetch.mjs                 Hebcal + Sefaria -> weeks/<slug>/sheet.json, candidates.json and texts.json
   digest.mjs                texts.json + candidates.json -> weeks/<slug>/digest.md, a one-page map of the passage
   lint.mjs                  entry lint (glosses, voices, God-language, word counts); build runs it first; --fix
@@ -52,6 +54,7 @@ weeks/
     briefing.md             the briefing, the issues and Daniel's picks
     sheet.pdf               the sheet Daniel reviews and prints
     sheet-torah.pdf         the Torah sheet, when the week has a Torah selection
+    words.json, translations.json, links.json   the web page's side files, written at publish (never on Drive)
     sheet-trope.pdf         the chanter's copy (optional)
     preview/                page images
 RUNBOOK.md                  the weekly runbook Claude follows in Cowork (the Cowork skill points here)

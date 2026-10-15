@@ -1,6 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { BOOKS, skeleton, parseTahot, parseTbesh, parseOshb, decodeMorph, segmentsOf, rootOf, alignVerse, STEMS, FORMS } from "../scripts/words.mjs";
+import { BOOKS, skeleton, parseTahot, parseTbesh, parseOshb, decodeMorph, segmentsOf, rootOf, alignVerse, STEMS, FORMS, cacheDir, STEP_FILES, oshbFile, ensureFiles, frequencyTable, wordsFor, buildWords } from "../scripts/words.mjs";
+import { mkdtemp, writeFile, readFile, rm, mkdir } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+const L = createRequire(import.meta.url)("../template/lib.js");
+const fixture = name => JSON.parse(readFileSync(new URL(`./fixtures/${name}/sheet.json`, import.meta.url), "utf8"));
 
 // Eleven rows of STEP's TAHOT (CC BY 4.0, www.STEPBible.org / Tyndale House Cambridge): I Samuel 20:18,
 // a Q(K) row from 20:38, and the two halves of Isaiah 63:19 as STEP numbers them (English 63:19 and 64:1).
@@ -111,6 +118,19 @@ test("parseOshb gives the same row shape, prefixes as STEP numbers, the qere in 
   assert.equal(parseOshb(xml, "Isa").size, 0);
 });
 
+test("parseOshb: a ketiv of two words joined by a ketiv maqqef gives way to its qere, one word or two (real 1 Samuel markup)", () => {
+  // OSHB morphhb (CC BY 4.0) 1 Samuel 20:2 (two ketiv words, two qere words) and 24:9 (two ketiv words, one qere word), trimmed.
+  const xml = `<verse osisID="1Sam.20.2"><w lemma="2009" n="1.1.1.1" morph="HTm" id="091nK">הִנֵּ֡ה</w>
+          <w type="x-ketiv" lemma="l" morph="HR/Sp3ms" id="09UFD">ל/ו</w><seg type="x-maqqef" subType="x-ketiv">־</seg><w type="x-ketiv" lemma="6213 a" morph="HVqp3ms" id="09atM">עשה</w><note type="variant"><catchWord>ל/ו־עשה</catchWord><rdg type="x-qere"><w lemma="3808" morph="HTn" id="09uGu">לֹֽא</w><seg type="x-maqqef">־</seg><w lemma="6213 a" morph="HVqi3ms" id="09dRu">יַעֲשֶׂ֨ה</w></rdg></note>
+          <w lemma="1" n="1.1.1.0" morph="HNcmsc/Sp1cs" id="09QWF">אָבִ֜/י</w></verse>
+<verse osisID="1Sam.24.9"><w lemma="c/3318" n="1.1.0" morph="HC/Vqw3ms" id="09wRN">וַ/יֵּצֵא֙</w>
+          <w type="x-ketiv" lemma="4480 a" morph="HR" id="0984p">מן</w><seg type="x-maqqef" subType="x-ketiv">־</seg><w type="x-ketiv" lemma="d/4631" morph="HTd/Ncfsa" id="09Mw5">ה/מערה</w><note type="variant"><catchWord>מן־ה/מערה</catchWord><rdg type="x-qere"><w lemma="m/d/4631" n="1.1" morph="HR/Td/Ncfsa" id="098Qr">מֵֽ/הַ/מְּעָרָ֔ה</w></rdg></note>
+          <w lemma="c/7121" morph="HC/Vqw3ms" id="09mR9">וַ/יִּקְרָ֧א</w></verse>`;
+  const m = parseOshb(xml, "1Sam");
+  assert.deepEqual(m.get("20:2").map(r => [r.he, r.ketiv]), [["הִנֵּ֡ה", null], ["לֹֽא", "ל/ו"], ["יַעֲשֶׂ֨ה", "עשה"], ["אָבִ֜/י", null]]);
+  assert.deepEqual(m.get("24:9").map(r => [r.he, r.ketiv]), [["וַ/יֵּצֵא֙", null], ["מֵֽ/הַ/מְּעָרָ֔ה", "מן־ה/מערה"], ["וַ/יִּקְרָ֧א", null]]);
+});
+
 test("decodeMorph: verbs, nouns, prefixes, suffixes, particles; unknown letters never throw", () => {
   assert.deepEqual(decodeMorph("Hc/Vqw3ms"), [{ k: "c" }, { k: "V", stem: "q", form: "w", p: 3, g: "m", n: "s" }]);
   assert.deepEqual(decodeMorph("HRd/Sp3ms"), [{ k: "R", def: true }, { k: "S", kind: "p", p: 3, g: "m", n: "s" }]);
@@ -166,4 +186,143 @@ test("alignVerse pairs words by skeleton and lists the page words it cannot plac
   assert.deepEqual(alignVerse(["יְהֹוָֽה"], [{ he: "יְהוָ֖ה", morph: "HNpt" }]).pairs, [[0, 0]]);
   assert.deepEqual(alignVerse([], rows), { pairs: [], missing: [] });
   assert.deepEqual(alignVerse(page, []), { pairs: [], missing: page.map((_, i) => i) });
+});
+
+test("cacheDir: HAFTARAH_CACHE, else ~/.haftarah-cache", () => {
+  assert.equal(cacheDir({ HAFTARAH_CACHE: "/c/cache" }, "/h"), "/c/cache");
+  assert.equal(cacheDir({}, "/h").replace(/\\/g, "/"), "/h/.haftarah-cache");
+});
+
+test("STEP_FILES and oshbFile name the files and their sources", () => {
+  assert.equal(STEP_FILES["Jos-Est"].file, "step/TAHOT-Jos-Est.txt");
+  assert.match(STEP_FILES["Jos-Est"].url, /^https:\/\/raw\.githubusercontent\.com\/STEPBible\/STEPBible-Data\/master\/Translators%20Amalgamated%20OT%2BNT\/TAHOT%20Jos-Est%20-%20Translators%20Amalgamated%20Hebrew%20OT%20-%20STEPBible\.org%20CC%20BY\.txt$/);
+  assert.equal(STEP_FILES.TBESH.file, "step/TBESH.txt");
+  assert.match(STEP_FILES.TBESH.url, /Lexicons\/TBESH%20-%20Translators%20Brief%20lexicon%20of%20Extended%20Strongs%20for%20Hebrew%20-%20STEPBible\.org%20CC%20BY\.txt$/);
+  assert.deepEqual(oshbFile("1Sam"), { file: "oshb/1Sam.xml", url: "https://raw.githubusercontent.com/openscriptures/morphhb/master/wlc/1Sam.xml" });
+});
+
+test("ensureFiles downloads only what the cache lacks, writes whole files, and names a failed download", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "words-cache-"));
+  try {
+    await mkdir(join(dir, "step"));
+    await writeFile(join(dir, "step", "TBESH.txt"), "cached");
+    const calls = [];
+    const fetchImpl = async url => { calls.push(url); return new Response(url.includes("Jos-Est") ? "fresh rows" : "nope", { status: url.includes("Jos-Est") ? 200 : 503 }); };
+    const lines = [];
+    const got = await ensureFiles(["step/TBESH.txt", "step/TAHOT-Jos-Est.txt"], { dir, fetchImpl, log: l => lines.push(l) });
+    assert.deepEqual(got.map(p => p.replace(/\\/g, "/").split("/").slice(-2).join("/")), ["step/TBESH.txt", "step/TAHOT-Jos-Est.txt"]);
+    assert.equal(calls.length, 1);
+    assert.equal(await readFile(join(dir, "step", "TAHOT-Jos-Est.txt"), "utf8"), "fresh rows");
+    assert.match(lines.join("\n"), /downloading step\/TAHOT-Jos-Est\.txt/);
+    await assert.rejects(ensureFiles(["oshb/Isa.xml"], { dir, fetchImpl, log: () => {} }), /oshb\/Isa\.xml: HTTP 503/);
+    await assert.rejects(readFile(join(dir, "oshb", "Isa.xml")), "a failed download leaves no file");
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test("frequencyTable counts rows per dictionary word across the files, without LXX rows", () => {
+  const f = frequencyTable([TAHOT]);
+  assert.equal(f.H6485K, 2);
+  assert.equal(f.H0559, 1);
+  assert.equal(f.H9033, 1, "a suffix that is the braced root counts too");
+  assert.equal(f.H7970, undefined, "an X row does not count");
+  assert.equal(f.H9001, undefined, "a prefix that is not the root does not count");
+});
+
+test("wordsFor: every page word of week-min's first verse aligned, segments and lemmas filled, the credit set", () => {
+  const sheet = fixture("week-min");
+  sheet.verses = sheet.verses.slice(0, 1);   // the eleven-row sample holds 20:18 only
+  const rows = parseTahot(TAHOT, "1Sa");
+  const lexicon = parseTbesh(TBESH);
+  const { words, report } = wordsFor(sheet, { source: "tahot", rows: { haftarah: rows }, lexicon, frequency: { H0559: 5308, H6485K: 7 } });
+  assert.equal(words.schema, 1);
+  assert.equal(words.source, "tahot");
+  assert.match(words.credit, /STEPBible TAHOT and TBESH.*CC BY 4\.0/);
+  const v18 = words.readings.haftarah.verses["20:18"];
+  assert.equal(v18.length, 9);
+  assert.deepEqual(v18[0], { i: 0, seg: [{ k: "c", t: "וַ", gl: "and", lem: "H9001" }, { k: "V", stem: "q", form: "w", p: 3, g: "m", n: "s", t: "יֹּֽאמֶר", gl: "he said", lem: "H0559", root: true }], lem: "H0559", morph: "Hc/Vqw3ms", ketiv: null });
+  assert.deepEqual(words.lemmas.H0559, { he: "אָמַר", gloss: "to say", all: 5308 });
+  assert.deepEqual(words.lemmas.H4186, { he: "", gloss: "" }, "a lemma TBESH lacks still has an entry");
+  assert.deepEqual(words.lemmas.H6485K, { he: "פָּקַד", gloss: "to reckon: missing", all: 7 });
+  assert.equal(words.readings.haftarah.book, "I Samuel");
+  assert.deepEqual(report.readings.haftarah.missing, []);
+  assert.equal(report.readings.haftarah.words, 9);
+});
+
+test("wordsFor refuses a verse with words and no rows, and lists an unaligned word", () => {
+  const sheet = fixture("week-min");
+  sheet.verses = sheet.verses.slice(0, 1);
+  const rows = parseTahot(TAHOT, "1Sa");
+  assert.throws(() => wordsFor(sheet, { source: "tahot", rows: { haftarah: new Map() }, lexicon: new Map(), frequency: {} }), /I Samuel 20:18 has no rows in tahot/);
+  const one = structuredClone(sheet);
+  one.verses[0].he = one.verses[0].he.replace("מָחָ֣ר", "מָחֳרָ֣ת");
+  const { words, report } = wordsFor(one, { source: "tahot", rows: { haftarah: rows }, lexicon: new Map(), frequency: {} });
+  assert.deepEqual(report.readings.haftarah.missing, ["20:18/3 מָחֳרָ֣ת"]);
+  assert.deepEqual(words.readings.haftarah.missing, ["20:18/3"]);
+  assert.deepEqual(words.readings.haftarah.verses["20:18"].map(w => w.i), [0, 1, 2, 4, 5, 6, 7, 8]);
+});
+
+test("wordsFor covers both readings of a two-reading week and marks a ketiv", async () => {
+  const { makeWeekTorah } = await import("./helpers/makeWeekTorah.mjs");
+  const two = makeWeekTorah(fixture("week-min"));
+  two.readings[1].verses = two.readings[1].verses.slice(0, 1);
+  two.readings[0].verses = two.readings[0].verses.slice(0, 1);   // Genesis 6:9 in the fixture carries 20:18's words
+  const sam = parseTahot(TAHOT, "1Sa");
+  const gen = new Map([["6:9", sam.get("20:18")]]);
+  const { words } = wordsFor(two, { source: "tahot", rows: { torah: gen, haftarah: sam }, lexicon: new Map(), frequency: {} });
+  assert.deepEqual(Object.keys(words.readings), ["torah", "haftarah"]);
+  assert.equal(words.readings.torah.verses["6:9"].length, 9);
+  const q = { ...sam.get("20:38")[0] };
+  const k = wordsFor({ ...fixture("week-min"), glosses: [], commentary: [], verses: [{ chapter: 20, verse: 38, ref: "I Samuel 20:38", he: '<span class="mam-kq"><span class="mam-kq-q">[הַ֣חִצִּ֔ים]</span> <span class="mam-kq-k">(החצי)</span></span>', en: "", notes: [] }] }, { source: "tahot", rows: { haftarah: new Map([["20:38", [q]]]) }, lexicon: new Map(), frequency: {} });
+  assert.equal(k.words.readings.haftarah.verses["20:38"][0].ketiv, "הַ/חֵצִי", "the row's ketiv, as parseTahot reads it");
+});
+
+test("buildWords writes words.json from the cache and reports; --source oshb reads the OSHB file", async () => {
+  const cache = await mkdtemp(join(tmpdir(), "words-cache-"));
+  const week = await mkdtemp(join(tmpdir(), "words-week-"));
+  try {
+    await mkdir(join(cache, "step")); await mkdir(join(cache, "oshb"));
+    await writeFile(join(cache, "step", "TAHOT-Jos-Est.txt"), TAHOT);
+    await writeFile(join(cache, "step", "TBESH.txt"), TBESH);
+    const sheet = fixture("week-min"); sheet.verses = sheet.verses.slice(0, 1);
+    await writeFile(join(week, "sheet.json"), JSON.stringify(sheet));
+    const lines = [];
+    const r = await buildWords(week, { cache, fetchImpl: () => { throw new Error("no network"); }, log: l => lines.push(l), frequency: { H0559: 5308 } });
+    const words = JSON.parse(await readFile(join(week, "words.json"), "utf8"));
+    assert.equal(words.readings.haftarah.verses["20:18"].length, 9);
+    assert.equal(words.lemmas.H0559.all, 5308);
+    assert.match(lines.join("\n"), /words    haftarah  9 words, 9 with analysis, 0 missing/);
+    assert.equal(r.report.readings.haftarah.aligned, 9);
+    await writeFile(join(cache, "oshb", "1Sam.xml"), `<verse osisID="1Sam.20.18"><w lemma="c/559" morph="HC/Vqw3ms">וַ/יֹּֽאמֶר</w><w lemma="l" morph="HR/Sp3ms">ל֥/וֹ</w><w lemma="3083" morph="HNp">יְהוֹנָתָ֖ן</w><w lemma="4279" morph="HNcmsa">מָחָ֣ר</w><w lemma="2320" morph="HNcmsa">חֹ֑דֶשׁ</w><w lemma="c/6485" morph="HC/VNq2ms">וְ/נִפְקַ֕דְתָּ</w><w lemma="3588 a" morph="HC">כִּ֥י</w><w lemma="6485" morph="HVNi3ms">יִפָּקֵ֖ד</w><w lemma="4186" morph="HNcmsc/Sp2ms">מוֹשָׁבֶֽ/ךָ</w></verse>`);
+    const o = await buildWords(week, { cache, source: "oshb", fetchImpl: () => { throw new Error("no network"); }, log: () => {}, frequency: {} });
+    const ow = JSON.parse(await readFile(join(week, "words.json"), "utf8"));
+    assert.equal(ow.source, "oshb");
+    assert.match(ow.credit, /Open Scriptures Hebrew Bible/);
+    assert.equal(ow.readings.haftarah.verses["20:18"][0].lem, "H0559");
+    assert.equal(ow.readings.haftarah.verses["20:18"][0].seg[1].gl, undefined, "OSHB has no glosses");
+    assert.equal(o.report.readings.haftarah.aligned, 9);
+  } finally { await rm(cache, { recursive: true, force: true }); await rm(week, { recursive: true, force: true }); }
+});
+
+test("the committed fixture words.json is what words.mjs makes of week-notes from the real cache (skipped without the cache)", async () => {
+  const cache = cacheDir(process.env);
+  let have = true;
+  try { await readFile(join(cache, "step", "TAHOT-Jos-Est.txt")); await readFile(join(cache, "step", "TBESH.txt")); } catch { have = false; }
+  if (!have) { console.log("skip: no STEP cache (node scripts/words.mjs --download)"); return; }
+  const week = await mkdtemp(join(tmpdir(), "words-week-"));
+  try {
+    await writeFile(join(week, "sheet.json"), JSON.stringify(fixture("week-notes")));
+    await buildWords(week, { cache, log: () => {} });
+    const fresh = JSON.parse(await readFile(join(week, "words.json"), "utf8"));
+    const committed = JSON.parse(readFileSync(new URL("./fixtures/week-notes/words.json", import.meta.url), "utf8"));
+    assert.deepEqual(fresh, committed);
+    assert.deepEqual(committed.readings.haftarah.missing, []);
+  } finally { await rm(week, { recursive: true, force: true }); }
+});
+
+test("data/words/frequency.json is a count per dictionary word, with the words the fixtures use", () => {
+  const f = JSON.parse(readFileSync(new URL("../data/words/frequency.json", import.meta.url), "utf8"));
+  assert.ok(Object.keys(f).length > 10000);
+  for (const [k, v] of Object.entries(f).slice(0, 50)) { assert.match(k, /^H\d{4}[A-Za-z]?$/); assert.ok(Number.isInteger(v) && v > 0); }
+  assert.equal(f.H1254A, 53);
+  assert.ok(f.H0559 > 5000);
 });

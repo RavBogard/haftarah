@@ -16,6 +16,17 @@
  * (counts per dictionary word) is derived data and is committed.
  */
 import { createRequire } from "node:module";
+import { readFile, writeFile, mkdir, rename, access } from "node:fs/promises";
+import { homedir } from "node:os";
+import { join, resolve, dirname, basename } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const FREQUENCY_FILE = join(ROOT, "data", "words", "frequency.json");
+export const CREDITS = {
+  tahot: "Word analysis: STEPBible TAHOT and TBESH, data created by www.STEPBible.org based on work at Tyndale House Cambridge (CC BY 4.0), trimmed and aligned for this site.",
+  oshb: "Word analysis: Open Scriptures Hebrew Bible morphology (CC BY 4.0); Westminster Leningrad Codex (public domain).",
+};
 
 const L = createRequire(import.meta.url)("../template/lib.js");
 
@@ -107,13 +118,22 @@ const SUFFIX_STRONG = {
   "1bs": ["H9020", "H9030"], "1bp": ["H9025", "H9035"], "3cp": ["H9028", "H9038"],
 };
 
+const KETIV_GROUP = /((?:<w type="x-ketiv"[^>]*>[^<]*<\/w>(?:<seg [^>]*>[^<]*<\/seg>)?)+)<note type="variant"><catchWord>[^<]*<\/catchWord><rdg type="x-qere">([\s\S]*?)<\/rdg><\/note>/g;
+
 export function parseOshb(xml, osisCode) {
   const out = new Map();
   const verseRe = /<verse osisID="([A-Za-z0-9]+)\.(\d+)\.(\d+)">([\s\S]*?)<\/verse>/g;
   let v;
   while ((v = verseRe.exec(xml))) {
     if (v[1] !== osisCode) continue;
-    const body = v[4].replace(/<w type="x-ketiv"[^>]*>([^<]*)<\/w><note type="variant">[\s\S]*?<rdg type="x-qere">(<w [^>]*>[^<]*<\/w>)<\/rdg><\/note>/g, (_, k, qw) => qw.replace(/^<w /, `<w data-ketiv="${k}" `));
+    // A ketiv can be several words joined by a ketiv maqqef (מ/בן־ימין), and its qere one word or several:
+    // word for word when the counts match, else the whole ketiv on the first qere word.
+    const body = v[4].replace(KETIV_GROUP, (_, kGroup, qere) => {
+      const ks = [...kGroup.matchAll(/<w [^>]*>([^<]*)<\/w>/g)].map(m => m[1]);
+      let qi = 0;
+      const qn = (qere.match(/<w /g) || []).length;
+      return qere.replace(/<w /g, () => { const k = qn === ks.length ? ks[qi] : qi === 0 ? ks.join("־") : null; qi++; return k ? `<w data-ketiv="${k}" ` : "<w "; });
+    });
     const rows = [];
     const wRe = /<w ([^>]*)>([^<]*)<\/w>/g;
     let w;
@@ -215,4 +235,166 @@ export function alignVerse(pageWords, rows) {
   const pairs = lcs(pa, ra);
   const hit = new Set(pairs.map(p => p[0]));
   return { pairs, missing: pageWords.map((_, i) => i).filter(i => !hit.has(i)) };
+}
+
+// ---- the cache: STEP's files and OSHB's, outside the repo ----
+export const cacheDir = (env = process.env, home = homedir()) => env.HAFTARAH_CACHE || join(home, ".haftarah-cache");
+const STEP_RAW = "https://raw.githubusercontent.com/STEPBible/STEPBible-Data/master/";
+const tahotUrl = group => `${STEP_RAW}Translators%20Amalgamated%20OT%2BNT/${encodeURIComponent(`TAHOT ${group} - Translators Amalgamated Hebrew OT - STEPBible.org CC BY.txt`)}`;
+export const STEP_FILES = {
+  "Gen-Deu": { file: "step/TAHOT-Gen-Deu.txt", url: tahotUrl("Gen-Deu") },
+  "Jos-Est": { file: "step/TAHOT-Jos-Est.txt", url: tahotUrl("Jos-Est") },
+  "Job-Sng": { file: "step/TAHOT-Job-Sng.txt", url: tahotUrl("Job-Sng") },
+  "Isa-Mal": { file: "step/TAHOT-Isa-Mal.txt", url: tahotUrl("Isa-Mal") },
+  TBESH: { file: "step/TBESH.txt", url: `${STEP_RAW}Lexicons/${encodeURIComponent("TBESH - Translators Brief lexicon of Extended Strongs for Hebrew - STEPBible.org CC BY.txt")}` },
+};
+export const oshbFile = osis => ({ file: `oshb/${osis}.xml`, url: `https://raw.githubusercontent.com/openscriptures/morphhb/master/wlc/${osis}.xml` });
+const urlOf = file => Object.values(STEP_FILES).find(f => f.file === file)?.url || (file.startsWith("oshb/") ? oshbFile(basename(file, ".xml")).url : null);
+const exists = p => access(p).then(() => true, () => false);
+
+/** The cache paths of `files` (relative names), downloading each one the cache lacks; whole files only. */
+export async function ensureFiles(files, { dir, fetchImpl = globalThis.fetch, log = console.log } = {}) {
+  const out = [];
+  for (const file of files) {
+    const path = join(dir, file);
+    if (!(await exists(path))) {
+      const url = urlOf(file);
+      if (!url) throw new Error(`${file}: no known source`);
+      log(`downloading ${file} from ${url.replace(/%20/g, " ")}`);
+      let res;
+      try { res = await fetchImpl(url); } catch (err) { throw new Error(`${file}: network error: ${err.cause?.code || err.message}`); }
+      if (!res.ok) throw new Error(`${file}: HTTP ${res.status} from ${url}`);
+      await mkdir(dirname(path), { recursive: true });
+      const tmp = `${path}.part`;
+      await writeFile(tmp, Buffer.from(await res.arrayBuffer()));
+      await rename(tmp, path);
+    }
+    out.push(path);
+  }
+  return out;
+}
+
+// ---- the frequency table: how often each dictionary word is tagged in the whole Hebrew Bible ----
+const FREQ_ROW = /^[A-Za-z0-9]+\.\d+\.\d+(?:\(\d+\.\d+\))?#\d+=(\S*)\t[^\t\n]*\t[^\t\n]*\t[^\t\n]*\t([^\t\n]*)\t/gm;
+export function frequencyTable(texts) {
+  const freq = {};
+  for (const text of texts) {
+    FREQ_ROW.lastIndex = 0;
+    let m;
+    while ((m = FREQ_ROW.exec(text))) {
+      if (m[1].startsWith("X")) continue;
+      const lem = (/\{(H\d{4}[A-Za-z]?)\}/.exec(m[2]) || [])[1];
+      if (lem) freq[lem] = (freq[lem] || 0) + 1;
+    }
+  }
+  return freq;
+}
+async function loadFrequency() { try { return JSON.parse(await readFile(FREQUENCY_FILE, "utf8")); } catch { return {}; } }
+
+// ---- words.json for one sheet ----
+/**
+ * sheet → { words, report }. `rows` holds, per reading id, the source's rows keyed "<ch>:<v>"; `lexicon`
+ * is TBESH (a Map; empty for OSHB); `frequency` the table. A verse with words and no rows is an error
+ * (nothing is guessed); a word that does not align is left out of its verse and named.
+ */
+export function wordsFor(sheet, { source = "tahot", rows, lexicon = new Map(), frequency = {} }) {
+  const words = { schema: 1, slug: sheet.slug || "", source, credit: CREDITS[source], readings: {}, lemmas: {} };
+  const report = { readings: {} };
+  const lemma = d => { if (!(d in words.lemmas)) { const x = lexicon.get(d) || { he: "", gloss: "" }; words.lemmas[d] = { he: x.he, gloss: x.gloss, ...(frequency[d] ? { all: frequency[d] } : {}) }; } };
+  for (const r of L.readings(sheet)) {
+    if (!(r.verses || []).length) continue;
+    const model = L.readingModel(sheet, r.id);
+    const src = rows[r.id] || new Map();
+    const out = { book: r.book || "", verses: {}, missing: [] };
+    const rep = { words: 0, aligned: 0, missing: [] };
+    for (const v of model.verses) {
+      const page = L.verseWords(v.heHtml).map(w => w.text);
+      if (!page.length) continue;
+      const key = `${v.chapter}:${v.verse}`;
+      const vr = src.get(key);
+      if (!vr || !vr.length) throw new Error(`words: ${r.book} ${key} has no rows in ${source}; STEP numbers verses by the English Bible, check the bracketed Hebrew refs`);
+      const { pairs, missing } = alignVerse(page, vr);
+      rep.words += page.length; rep.aligned += pairs.length;
+      for (const i of missing) { out.missing.push(`${key}/${i}`); rep.missing.push(`${key}/${i} ${page[i]}`); }
+      out.verses[key] = pairs.map(([i, j]) => {
+        const row = vr[j], lem = rootOf(row);
+        const seg = segmentsOf(row);
+        for (const s of seg) if (s.lem) lemma(s.lem);
+        return { i, seg, lem, morph: row.morph || "", ketiv: row.ketiv || null };
+      });
+    }
+    words.readings[r.id] = out;
+    report.readings[r.id] = rep;
+  }
+  return { words, report };
+}
+
+/** Read dir/sheet.json, load the sources from the cache, write dir/words.json, log one line per reading. */
+export async function buildWords(dir, { source = "tahot", cache = cacheDir(), fetchImpl = globalThis.fetch, log = console.log, frequency = null } = {}) {
+  const sheet = JSON.parse(await readFile(join(dir, "sheet.json"), "utf8"));
+  const rows = {}, texts = new Map();
+  const text = async file => { if (!texts.has(file)) texts.set(file, readFile((await ensureFiles([file], { dir: cache, fetchImpl, log }))[0], "utf8")); return texts.get(file); };
+  for (const r of L.readings(sheet)) {
+    if (!(r.verses || []).length) continue;
+    const book = BOOKS[r.book];
+    if (!book) throw new Error(`words: no word data for the book "${r.book}"`);
+    rows[r.id] = source === "oshb" ? parseOshb(await text(oshbFile(book.osis).file), book.osis) : parseTahot(await text(STEP_FILES[book.group].file), book.step);
+  }
+  const lexicon = source === "oshb" ? new Map() : parseTbesh(await text(STEP_FILES.TBESH.file));
+  const { words, report } = wordsFor(sheet, { source, rows, lexicon, frequency: frequency || (await loadFrequency()) });
+  const file = join(dir, "words.json");
+  await writeFile(file, JSON.stringify(words));
+  for (const [id, rep] of Object.entries(report.readings)) {
+    log(`words    ${id}  ${rep.words} words, ${rep.aligned} with analysis, ${rep.missing.length} missing${rep.missing.length ? `: ${rep.missing.join(", ")}` : ""}`);
+  }
+  return { file, report };
+}
+
+/** Alignment coverage for a live reference (the MAM Hebrew from Sefaria, GET only), for the wave's checks. */
+export async function checkRef(ref, { cache = cacheDir(), fetchImpl = globalThis.fetch, log = console.log } = {}) {
+  const res = await fetchImpl(`https://www.sefaria.org/api/v3/texts/${encodeURIComponent(ref.replace(/\s+/g, " "))}?version=hebrew|${encodeURIComponent("Miqra according to the Masorah")}&return_format=default`);
+  if (!res.ok) throw new Error(`Sefaria answered HTTP ${res.status} for ${ref}`);
+  const tx = await res.json();
+  const he = (tx.versions || [])[0];
+  if (!he) throw new Error(`Sefaria has no Hebrew for ${ref}`);
+  const book = tx.book || ref.replace(/\s+\d.*$/, ""), info = BOOKS[book];
+  if (!info) throw new Error(`no word data for the book "${book}"`);
+  const startCh = +tx.sections[0], startV = +(tx.sections[1] ?? 1), verses = [];
+  if (he.text.length && Array.isArray(he.text[0])) he.text.forEach((ch, ci) => ch.forEach((t, vi) => verses.push({ chapter: startCh + ci, verse: (ci === 0 ? startV : 1) + vi, he: t })));
+  else he.text.forEach((t, vi) => verses.push({ chapter: startCh, verse: startV + vi, he: t }));
+  const rows = parseTahot(await readFile((await ensureFiles([STEP_FILES[info.group].file], { dir: cache, fetchImpl, log }))[0], "utf8"), info.step);
+  let words = 0, aligned = 0; const missing = [];
+  for (const v of verses) {
+    const page = L.verseWords(String(v.he).replace(/<span class="mam-spi-[^"]*">\{[ספ]\}<\/span>/g, " ")).map(w => w.text);
+    const a = alignVerse(page, rows.get(`${v.chapter}:${v.verse}`) || []);
+    words += page.length; aligned += a.pairs.length;
+    for (const i of a.missing) missing.push(`${v.chapter}:${v.verse}/${i} ${page[i]}`);
+  }
+  log(`${ref}: ${words} words, ${aligned} with analysis (${(100 * aligned / Math.max(1, words)).toFixed(1)}%)${missing.length ? `; missing: ${missing.join(", ")}` : ""}`);
+  return { words, aligned, missing };
+}
+
+async function main(argv) {
+  const args = argv.slice(2);
+  const opt = name => { const i = args.indexOf(name); return i < 0 ? null : args[i + 1]; };
+  const cache = cacheDir();
+  if (args.includes("--download")) { await ensureFiles(Object.values(STEP_FILES).map(f => f.file), { dir: cache }); console.log(`STEP files are in ${cache}`); return; }
+  if (args.includes("--frequency")) {
+    const paths = await ensureFiles(["Gen-Deu", "Jos-Est", "Job-Sng", "Isa-Mal"].map(g => STEP_FILES[g].file), { dir: cache });
+    const table = frequencyTable(await Promise.all(paths.map(p => readFile(p, "utf8"))));
+    await mkdir(dirname(FREQUENCY_FILE), { recursive: true });
+    await writeFile(FREQUENCY_FILE, JSON.stringify(Object.fromEntries(Object.entries(table).sort(([a], [b]) => a.localeCompare(b)))) + "\n");
+    console.log(`${Object.keys(table).length} dictionary words → ${FREQUENCY_FILE}`);
+    return;
+  }
+  if (args.includes("--check")) { for (const ref of args.slice(args.indexOf("--check") + 1).filter(a => !a.startsWith("--"))) await checkRef(ref, { cache }); return; }
+  const dir = args.find(a => !a.startsWith("--") && a !== opt("--source"));
+  if (!dir) throw new Error("usage: node scripts/words.mjs weeks/<slug> [--source tahot|oshb] | --download | --frequency | --check \"<ref>\" ...");
+  const source = opt("--source") || "tahot";
+  if (!["tahot", "oshb"].includes(source)) throw new Error(`--source: tahot or oshb, not ${source}`);
+  await buildWords(dir, { source, cache });
+}
+
+if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
+  main(process.argv).catch(err => { console.error(`words: ${err.message}`); process.exit(1); });
 }
