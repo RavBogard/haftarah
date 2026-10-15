@@ -337,7 +337,8 @@ test("occurrences, hereLine, allLine, link urls", () => {
   assert.equal(hereLine(1), "Once in this reading"); assert.equal(hereLine(3), "3 times in this reading");
   assert.equal(allLine(1), "Once in the Hebrew Bible, by dictionary word"); assert.equal(allLine(53), "53 times in the Hebrew Bible, by dictionary word"); assert.equal(allLine(undefined), "");
   assert.equal(stepUrl("H1254A"), "https://www.stepbible.org/?q=version=OHB|strong=H1254A&options=HNVUG");
-  assert.equal(bibleHubUrl("H1254A"), "https://biblehub.com/hebrew/1254a.htm");
+  assert.equal(bibleHubUrl("H1254A"), "https://biblehub.com/hebrew/1254.htm");
+  assert.equal(bibleHubUrl("H3117G"), "https://biblehub.com/hebrew/3117.htm", "Bible Hub has no lettered pages: the suffix is dropped");
   assert.equal(bibleHubUrl("H0559"), "https://biblehub.com/hebrew/559.htm");
   assert.equal(bibleHubUrl("H9023"), null);
 });

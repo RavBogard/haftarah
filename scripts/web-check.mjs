@@ -31,11 +31,43 @@ export async function sitePolicy() {
   return h ? h.value : null;
 }
 
-export async function serveSite({ dist, week, port = 0, extra = {} }) {
+// The words of a verse's HTML that hold a <big> or <small> letter, as verseWords would read them (DOM-free).
+export function bigSmallWords(heHtml) {
+  const s = String(heHtml == null ? "" : heHtml)
+    .replace(/<sup\b[^>]*>[\s\S]*?<\/sup>/g, "")
+    .replace(/<span class="(?:[^"]*\s)?(?:mam-kq-k|ketiv)(?:\s[^"]*)?">[\s\S]*?<\/span>/g, "")
+    .replace(/<i class="footnote">(?:<i>.*?<\/i>|(?!<\/i>)[\s\S])*?<\/i>/g, "");
+  let plain = "", depth = 0;
+  const marked = [];
+  for (const m of s.matchAll(/<(\/?)(\w+)[^>]*>|&[a-z#0-9]+;|[\s\S]/gi)) {
+    if (m[2]) { if (/^(big|small)$/i.test(m[2])) depth += m[1] ? -1 : 1; continue; }
+    plain += m[0].length > 1 ? " " : m[0]; marked.push(depth > 0);
+  }
+  return L.hebrewWords(plain).filter(w => marked.slice(w.start, w.end).some(Boolean)).map(w => w.text);
+}
+
+// For the check: the primary reading's first verse of two words or more gets a large first letter
+// (MAM's <big>, as in Genesis 1:1) and a small last letter in its second word (as in Isaiah 44:14),
+// so the page's word wrapping is exercised across element boundaries. No word count changes.
+export function withBigSmall(raw) {
+  const out = JSON.parse(JSON.stringify(raw));
+  const list = Array.isArray(out.readings) ? ((out.readings.find(r => r.kind !== "torah" && (r.verses || []).length) || out.readings.find(r => (r.verses || []).length) || {}).verses) : out.verses;
+  const v = (list || []).find(x => typeof x.he === "string" && !/<(big|small)\b/i.test(x.he) && L.hebrewWords(x.he.replace(/<[^>]*>/g, m => " ".repeat(m.length))).length >= 2);
+  if (!v) return out;
+  const ws = L.hebrewWords(v.he.replace(/<[^>]*>/g, m => " ".repeat(m.length)));
+  const first = /^[א-ת][֑-ׇֽֿׁׂׅׄ]*/.exec(v.he.slice(ws[0].start, ws[0].end));
+  const second = v.he.slice(ws[1].start, ws[1].end), last = /[א-ת][֑-ׇֽֿׁׂׅׄ]*$/.exec(second);
+  if (!first || !last || first[0].length === ws[0].end - ws[0].start || last.index === 0) return out;
+  const b = ws[1].start + last.index;
+  v.he = v.he.slice(0, ws[0].start) + `<big>${first[0]}</big>` + v.he.slice(ws[0].start + first[0].length, b) + `<small>${last[0]}</small>` + v.he.slice(b + last[0].length);
+  return out;
+}
+
+export async function serveSite({ dist, week, port = 0, extra = {}, raw = null }) {
   // The page only routes dated slugs; an undated folder (the fixture) is served under a made-up dated one.
   const name = basename(resolve(week));
   const slug = isSlug(name) ? name : `2026-01-01-${name}`;
-  const sheet = { ...cleanSheet(JSON.parse(await readFile(join(week, "sheet.json"), "utf8"))), ...extra };
+  const sheet = { ...cleanSheet(raw || JSON.parse(await readFile(join(week, "sheet.json"), "utf8"))), ...extra };
   const index = { schema: 2, updated: new Date().toISOString(), weeks: [indexEntry(sheet, slug, new Date().toISOString())] };
   const csp = await sitePolicy();   // pages are served under the real policy
   const server = createServer(async (req, res) => {
@@ -74,19 +106,21 @@ async function main() {
   const { out: dist } = await buildSite(args.out ? { out: args.out } : {});
   // The primary reading in the schema-2 shape, whatever the week's schema. For the check (not for
   // --serve) a week without highlights gets one, so the page's highlight path is exercised.
-  const raw = JSON.parse(await readFile(join(week, "sheet.json"), "utf8"));
+  const disk = JSON.parse(await readFile(join(week, "sheet.json"), "utf8"));
+  const raw = args.serve ? disk : withBigSmall(disk);
   const sheet = L.readingView(raw);   // the primary reading (the haftarah), in the schema-2 shape
   // Every verse on the page in page order (a Torah selection first), each with its reading and book.
   const order = L.readings(raw).filter(r => (r.verses || []).length);
   const flat = order.flatMap(r => L.readingView(raw, r.id).verses.map(v => ({ ...v, reading: r.id, book: r.book })));
   // The page's Hebrew words, counted DOM-free from the same models the page builds (spec 4.3).
   const wordsExpected = order.reduce((n, r) => n + L.readingModel(raw, r.id).verses.reduce((m, v) => m + L.verseWords(v.heHtml).length, 0), 0);
+  const bigSmallExpected = order.flatMap(r => L.readingModel(raw, r.id).verses.flatMap(v => bigSmallWords(v.heHtml)));
   const hv = sheet.verses[Math.min(3, sheet.verses.length - 1)];
   const extra = raw.highlights || args.serve ? {} : { highlights: [{ reading: L.primaryReading(raw).id, chapter: hv.chapter, verse: hv.verse, words: [0, 1], note: "A highlight for the check." }] };
   // The side files the folder has (the fixture has all three; a bare copy none): the page sees the manifest publish would write.
   const side = await sideManifestFrom(week);
   if (side) extra.side = side;
-  const { server, slug, base } = await serveSite({ dist, week, port, extra });
+  const { server, slug, base } = await serveSite({ dist, week, port, extra, raw });
   if (args.serve) { console.log(`Serving ${slug}:\n  ${base}/\n  ${base}/${slug}\n  ${base}/${slug}?trope=1\nCtrl-C to stop.`); return; }
   const browser = findBrowser();
   if (!browser) { server.close(); console.error("No Chrome or Edge found (set HAFTARAH_BROWSER)."); process.exit(1); }
@@ -102,6 +136,7 @@ async function main() {
       expect("verse count", Number(a.verses) === flat.length, a.verses);
       expect("key series present", (a.keys || "").length > 0 && /^a,b/.test(a.keys), a.keys);
       expect("the page counts words as lib does", Number(a.words) === wordsExpected, `${a.words} (lib: ${wordsExpected})`);
+      expect("a large or small letter stays inside its word (one span each)", bigSmallExpected.length >= 2 && a["big-small"] === JSON.stringify(bigSmallExpected), `${a["big-small"]} (lib: ${JSON.stringify(bigSmallExpected)})`);
       expect("wide layout detected", a.wide === String(wide), a.wide);
       if (wide) { expect("rail holds every verse", Number(a.rail) === flat.length, a.rail); expect("no inline details", Number(a.details) === 0, a.details); }
       else { expect("rail empty", Number(a.rail) === 0, a.rail); expect("inline details for verses with commentary", Number(a.details) > 0, a.details); }

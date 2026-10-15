@@ -200,19 +200,27 @@ export async function run() {
   // Every Hebrew word becomes a focusable target for the word panel; footnote letters, the ketiv
   // (Sefaria's mam-kq-k span) and a MAM footnote are not words of the reading, so they are left
   // alone: lib.js's verseWords counts exactly these, and publish numbers the words the same way.
+  // A word can run across text nodes (MAM's <big>בְּ</big>רֵאשִׁ֖ית, אֹ֖רֶ<small>ן</small>): the eligible
+  // text is read as one string, as verseWords reads it with the tags stripped, and each word's span
+  // takes the original nodes, so a large or small letter stays inside its word.
   function wrapWords(node) {
     const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
-    const texts = []; let t; while ((t = walker.nextNode())) texts.push(t);
-    for (const tn of texts) {
-      if (tn.parentElement.closest("sup, .ketiv, .mam-kq-k, .footnote")) continue;
-      const words = L.hebrewWords(tn.data); if (!words.length) continue;
-      const frag = document.createDocumentFragment(); let at = 0;
-      for (const w of words) {
-        if (w.start > at) frag.append(tn.data.slice(at, w.start));
-        const s = el("span", "w", esc(w.text)); s.tabIndex = -1; s.setAttribute("role", "button"); frag.append(s); at = w.end;
-      }
-      if (at < tn.data.length) frag.append(tn.data.slice(at));
-      tn.replaceWith(frag);
+    const texts = []; let t, all = "";
+    while ((t = walker.nextNode())) {
+      if (t.parentElement.closest("sup, .ketiv, .mam-kq-k, .footnote")) continue;
+      texts.push({ node: t, at: all.length, end: all.length + t.data.length }); all += t.data;
+    }
+    const startOf = pos => texts.find(x => x.at <= pos && pos < x.end);
+    const endOf = pos => texts.find(x => x.at < pos && pos <= x.end);
+    const words = L.hebrewWords(all);
+    // Last word first: wrapping a word only cuts its nodes after its start, so earlier offsets hold.
+    for (let k = words.length - 1; k >= 0; k--) {
+      const w = words[k], a = startOf(w.start), z = endOf(w.end);
+      const s = el("span", "w"); s.tabIndex = -1; s.setAttribute("role", "button");
+      const range = document.createRange();
+      range.setStart(a.node, w.start - a.at); range.setEnd(z.node, w.end - z.at);
+      if (a.node === z.node) range.surroundContents(s);
+      else { s.append(range.extractContents()); range.insertNode(s); }
     }
   }
   function entryHtml(e) {
@@ -469,6 +477,8 @@ async function runCheck(api, L) {
   h.dataset.checkVerses = String(rows.length);
   h.dataset.checkKeys = api.model.sequence.join(",");
   h.dataset.checkWords = String(document.querySelectorAll("#text .he .w").length);
+  // A MAM large or small letter stays inside its word: the words that hold one, as their spans read.
+  h.dataset.checkBigSmall = JSON.stringify([...document.querySelectorAll("#text .he .w")].filter(w => w.querySelector("big, small")).map(w => w.textContent));
   h.dataset.checkRail = String(document.querySelectorAll("#rail .vapp").length);
   h.dataset.checkDetails = String(document.querySelectorAll("#text details.vapp:not(.empty)").length);
   h.dataset.checkEmptySummaries = String(document.querySelectorAll(".vapp.empty summary").length);

@@ -90,7 +90,8 @@ export const hereLine = n => (n === 1 ? "Once in this reading" : `${n} times in 
 export const allLine = all => (all == null ? "" : all === 1 ? "Once in the Hebrew Bible, by dictionary word" : `${all} times in the Hebrew Bible, by dictionary word`);
 export const stepUrl = lem => `https://www.stepbible.org/?q=version=OHB|strong=${lem}&options=HNVUG`;
 export function bibleHubUrl(lem) {
-  const m = /^H(\d{4})([A-Za-z]?)$/.exec(String(lem || ""));
+  // Bible Hub has a page per Strong's number only: STEP's disambiguating letter (H3117G) is dropped.
+  const m = /^H(\d{4})[A-Za-z]?$/.exec(String(lem || ""));
   if (!m || /^90/.test(m[1])) return null;
-  return `https://biblehub.com/hebrew/${String(Number(m[1]))}${m[2].toLowerCase()}.htm`;
+  return `https://biblehub.com/hebrew/${String(Number(m[1]))}.htm`;
 }
