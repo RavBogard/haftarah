@@ -50,14 +50,15 @@ export const foldEol = s => String(s).replace(/\r\n/g, "\n");
 
 /**
  * The module-level helpers and constants of lib.js that are not exported, each hashed: the factory's
- * top-level `const`/`let`/`function` statements (two-space indent), each running to the next one or to
- * the closing `return {`. Comment lines and blank lines are dropped first, so a comment above a new
- * function moves nothing. Exported names are left to the "lib" layer.
+ * top-level `const`/`let`/`function`/`async function` statements (two-space indent), each running to
+ * the next one or to the closing `return {`. Block comments (`/* … *\/`) are removed first, so a
+ * commented-out declaration is never collected; comment lines and blank lines are dropped too, so a
+ * comment above a new function moves nothing. Exported names are left to the "lib" layer.
  */
 export function libInternals(text, exported) {
-  const src = foldEol(text);
+  const src = foldEol(text).replace(/\/\*[\s\S]*?\*\//g, "");
   const end = src.lastIndexOf("\n  return {");
-  const starts = [...src.matchAll(/^ {2}(?:const|let|var|function)\s+([A-Za-z_$][\w$]*)/gm)].filter(m => end < 0 || m.index < end);
+  const starts = [...src.matchAll(/^ {2}(?:async\s+function|const|let|var|function)\s+([A-Za-z_$][\w$]*)/gm)].filter(m => end < 0 || m.index < end);
   const out = {};
   starts.forEach((m, i) => {
     if (exported.has(m[1])) return;
@@ -142,10 +143,16 @@ export async function record({ env, browser = findBrowser() } = {}) {
   return out;
 }
 
-/** The recorded values `got` does not reproduce: the sources (when recorded), then "fixture key" for every recorded fixture; the DOM keys only on the same browser and platform. */
-export function compare(want, got) {
+/**
+ * The recorded values `got` does not reproduce: the sources (when recorded), then "fixture key" for every
+ * recorded fixture; the DOM keys only on the same browser and platform. Each fixture named in `required`
+ * that has no recorded block is "<fixture> not recorded" (the check itself passes FIXTURES, so a deleted
+ * block fails instead of being skipped).
+ */
+export function compare(want, got, { required = [] } = {}) {
   const sameBrowser = !!want.browser && want.browser === got.browser && want.platform === got.platform;
   const diffs = want.sources ? compareSources(want.sources, got.sources || { files: {}, lib: {} }) : [];
+  for (const name of required) if (!(want.fixtures || {})[name]) diffs.push(`${name} not recorded`);
   for (const name of Object.keys(want.fixtures || {})) for (const k of ["html", "trope", "torah", ...(sameBrowser ? DOM_KEYS : [])]) {
     if ((want.fixtures[name] || {})[k] !== (got.fixtures[name] || {})[k]) diffs.push(`${name} ${k}`);
   }
@@ -208,7 +215,7 @@ async function main() {
     console.log(`Recorded ${mode === "add" ? `the ${name} fixture` : mode === "dom" ? `the DOM layer (${got.browser} on ${got.platform})` : "the sources layer"} in ${rel(GOLDEN_FILE)}`);
     return;
   }
-  const diffs = compare(want, got);
+  const diffs = compare(want, got, { required: FIXTURES });
   if (diffs.length) { console.error(`Print golden differs: ${diffs.join(", ")}`); process.exit(1); }
   const same = want.browser === got.browser && want.platform === got.platform;
   console.log(`Print golden holds${same ? "" : ` (HTML only: recorded on ${want.browser}/${want.platform}, this is ${got.browser}/${got.platform})`}.`);

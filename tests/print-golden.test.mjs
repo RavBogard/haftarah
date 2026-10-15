@@ -1,7 +1,9 @@
 // The print golden: the two fixtures must build and render exactly what was recorded at the start of
 // 2.0, and the files the sheet links by path (template CSS, render.js, the fonts, lib.js's existing
-// functions) must be what they were. A failure here means the printed sheet changed. If that was
-// deliberate (Wave 4 only), look at the PDFs, then re-record with: node scripts/golden.mjs --update
+// functions) must be what they were. A failure here means the printed sheet changed. Re-record only the
+// layer that moved, after looking at the PDFs: node scripts/golden.mjs --update-dom (a Chrome update),
+// --update-sources (a deliberate template or lib.js change) or --add <fixture> (a new fixture). Plain
+// --update re-records everything and is never run in a wave.
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
@@ -24,7 +26,7 @@ if (browser) {
 const domSkip = !browser ? "no Chrome or Edge on this machine"
   : !golden.browser ? "the golden was recorded without a browser"
   : version !== golden.browser || process.platform !== golden.platform
-    ? `golden rendered on ${golden.browser} (${golden.platform}); this is ${version} (${process.platform}). After checking the PDFs by eye: node scripts/golden.mjs --update`
+    ? `golden rendered on ${golden.browser} (${golden.platform}); this is ${version} (${process.platform}). After checking the PDFs by eye: node scripts/golden.mjs --update-dom`
     : false;
 
 test("compare: HTML always, DOM only on the recording's browser and platform", () => {
@@ -34,6 +36,30 @@ test("compare: HTML always, DOM only on the recording's browser and platform", (
   assert.deepEqual(compare(want, { ...want, fixtures: { ...want.fixtures, "week-min": { ...f, dom: "other" } } }), ["week-min dom"]);
   assert.deepEqual(compare(want, { ...want, browser: "HeadlessChrome/156.0.0.0", fixtures: { ...want.fixtures, "week-min": { ...f, dom: "other" } } }), []);
   assert.deepEqual(compare(want, { ...want, platform: "linux", fixtures: { ...want.fixtures, "week-notes": { ...f, html: "x" } } }), ["week-notes html"]);
+});
+
+test("compare: a fixture the check requires that has no recorded block is reported, not skipped", () => {
+  const copy = structuredClone(golden);
+  delete copy.fixtures["week-notes"];
+  assert.deepEqual(compare(copy, golden, { required: FIXTURES }), ["week-notes not recorded"]);
+  assert.deepEqual(compare(golden, golden, { required: FIXTURES }), []);
+  assert.deepEqual(compare(copy, golden), [], "without required, only recorded blocks are compared");
+});
+
+test("libInternals collects async functions and never a declaration inside a block comment", () => {
+  const src = [
+    "(function () {",
+    "  const A = 1;",
+    "  async function load(x) {",
+    "    return x;",
+    "  }",
+    "  /* const OLD = 2;",
+    "  function retired() {} */",
+    "  const B = 3;",
+    "  return { A };",
+    "});",
+  ].join("\n");
+  assert.deepEqual(Object.keys(libInternals(src, new Set(["A"]))).sort(), ["B", "load"]);
 });
 
 test("compareSources: every recorded file and lib export must hold; a new lib export is allowed, a new file is not", () => {
