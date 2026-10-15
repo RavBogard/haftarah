@@ -48,7 +48,31 @@ test("relatedFor asks once per verse of every reading, records a failed verse wi
   const v = links.readings.haftarah.verses;
   assert.equal(v["20:18"].n, 8);
   assert.deepEqual(v["20:19"], { n: 0, groups: [], failed: true });
-  assert.deepEqual(report.haftarah, { verses: 3, links: 16, failed: ["20:19"] });
+  assert.deepEqual(report.haftarah, { verses: 3, links: 16, failed: ["20:19"], errors: { "20:19": "503" } });
+  assert.ok(!JSON.stringify(links).includes("503"), "the cause is in the report, not in links.json");
+});
+
+test("groupLinks sorts works: numbered commentaries by number before unnumbered ones, the unnumbered by title", () => {
+  const g = groupLinks([
+    link("Commentary", "Ralbag on I Samuel", "Ralbag on I Samuel 20:18:1", true, "Ralbag"),
+    link("Commentary", "Malbim on I Samuel", "Malbim on I Samuel 20:18:1", true, "Malbim", 2),
+    link("Commentary", "Abarbanel on I Samuel", "Abarbanel on I Samuel 20:18:1", true, "Abarbanel"),
+    link("Commentary", "Rashi on I Samuel", "Rashi on I Samuel 20:18:1", true, "Rashi", 1),
+    link("Midrash", "Midrash Tanchuma", "Midrash Tanchuma, Noach 3:1"),
+    link("Midrash", "Bereshit Rabbah", "Bereshit Rabbah 1:1"),
+  ]);
+  assert.deepEqual(g.groups[0].works.map(w => w.title), ["Rashi", "Malbim", "Abarbanel", "Ralbag"]);
+  assert.deepEqual(g.groups[1].works.map(w => w.title), ["Bereshit Rabbah", "Midrash Tanchuma"]);
+});
+
+test("buildLinks names the first failure's cause in its line", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "links-"));
+  try {
+    await writeFile(join(dir, "sheet.json"), JSON.stringify(fixture("week-min")));
+    const lines = [];
+    await buildLinks(dir, { get: async url => { if (/20%3A19/.test(url)) throw new Error("HTTP 429 Too Many Requests"); return { links: sample }; }, log: l => lines.push(l) });
+    assert.match(lines.join("\n"), /Sefaria did not answer for 20:19 \(first: HTTP 429 Too Many Requests\)/);
+  } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
 test("buildLinks writes links.json and logs; a two-reading week covers both", async () => {

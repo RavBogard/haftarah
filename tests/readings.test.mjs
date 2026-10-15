@@ -158,8 +158,12 @@ test("verseWords: the page's Hebrew words, DOM-free; the ketiv, keyed letters an
   assert.deepEqual(L.verseWords(trope).map(w => w.text), ["כְּפַ֣עַם", "בְּפַ֗עַם", "אֶל", "מוֹשַׁב֙"]);
   assert.deepEqual(L.verseWords(""), []);
   assert.deepEqual(L.verseWords(null), []);
+  // A footnote holding its own <i> is removed whole, and a ketiv span with another class is still not a word.
+  const nested = 'אֹ֖רֶן<sup class="footnote-marker">*</sup><i class="footnote">(<i>כתיב</i> אֹרֶן נוּן זְעִירָא)</i> נָטַ֑ע';
+  assert.deepEqual(L.verseWords(nested).map(w => w.text), ["אֹ֖רֶן", "נָטַ֑ע"]);
+  assert.deepEqual(L.verseWords('<span class="x mam-kq-k">(על)</span> <span class="mam-kq-q">[אֶל]</span>').map(w => w.text), ["אֶל"]);
   // The model's verses count the same whether or not trope spans and gloss keys were added.
   const d = fixture("week-notes");
   const m = L.sheetModel(d);
-  for (const [i, v] of m.verses.entries()) assert.equal(L.verseWords(v.heHtml).length, L.verseWords(d.verses[i].he.replace(/&thinsp;| /g, " ")).length, v.ref);
+  for (const [i, v] of m.verses.entries()) assert.equal(L.verseWords(v.heHtml).length, L.verseWords(d.verses[i].he.replace(/&thinsp;| | /g, " ")).length, v.ref);
 });

@@ -38,7 +38,7 @@ const creditFor = (key, title) => TRANSLATIONS[key].credits ? TRANSLATIONS[key].
 export function plainVersion(html) {
   return String(html == null ? "" : html)
     .replace(/<sup class="footnote-marker">[^<]*<\/sup>/g, "")
-    .replace(/<i class="footnote">(?:<i>.*?<\/i>|(?!<\/i>)[\s\S])*?<\/i>/g, "")
+    .replace(/<i class="footnote">(?:<i>[\s\S]*?<\/i>|(?!<\/i>)[\s\S])*?<\/i>/g, "")
     .replace(/\s+(<br\s*\/?>)/g, "$1").replace(/[ \t]{2,}/g, " ").trim();
 }
 
@@ -62,7 +62,8 @@ export async function translationsFor(sheet, customs, { get = getJSON } = {}) {
       const title = TRANSLATIONS[key].titles.find(t => have.some(v => v.versionTitle === t));
       if (!title) { absent.push(key); continue; }
       const v = have.find(x => x.versionTitle === title);
-      const flat = flattenVerses(v.text || [], json.sections || [], json.toSections || []);
+      const text = Array.isArray(v.text) ? v.text : v.text == null ? [] : [v.text];   // a one-verse ref comes back as a string
+      const flat = flattenVerses(text, json.sections || [], json.toSections || []);
       const byKey = new Map(flat.map(x => [`${x.chapter}:${x.verse}`, plainVersion(x.text)]));
       const verses = {};
       for (const sv of r.verses) verses[`${sv.chapter}:${sv.verse}`] = byKey.get(`${sv.chapter}:${sv.verse}`) || "";

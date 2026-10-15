@@ -60,8 +60,8 @@
   function verseWords(heHtml) {
     const s = String(heHtml == null ? "" : heHtml)
       .replace(/<sup\b[^>]*>[\s\S]*?<\/sup>/g, "")
-      .replace(/<span class="(?:mam-kq-k|ketiv)">[\s\S]*?<\/span>/g, "")
-      .replace(/<i class="footnote">[\s\S]*?<\/i>/g, "")
+      .replace(/<span class="(?:[^"]*\s)?(?:mam-kq-k|ketiv)(?:\s[^"]*)?">[\s\S]*?<\/span>/g, "")
+      .replace(/<i class="footnote">(?:<i>.*?<\/i>|(?!<\/i>)[\s\S])*?<\/i>/g, "")
       .replace(/<[^>]+>/g, "")
       .replace(/&thinsp;|&nbsp;| | /g, " ");
     return hebrewWords(s);

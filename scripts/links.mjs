@@ -49,7 +49,7 @@ export async function relatedFor(sheet, { get = getJSON } = {}) {
   for (const r of L.readings(sheet)) {
     if (!(r.verses || []).length) continue;
     const verses = {};
-    const rep = { verses: 0, links: 0, failed: [] };
+    const rep = { verses: 0, links: 0, failed: [], errors: {} };   // errors: why each failed verse failed (the report only)
     for (const v of r.verses) {
       const key = `${v.chapter}:${v.verse}`;
       rep.verses++;
@@ -57,9 +57,10 @@ export async function relatedFor(sheet, { get = getJSON } = {}) {
         const json = await get(relatedUrl(`${v.book || r.book} ${key}`));
         verses[key] = groupLinks(json && json.links);
         rep.links += verses[key].n;
-      } catch {
+      } catch (err) {
         verses[key] = { n: 0, groups: [], failed: true };
         rep.failed.push(key);
+        rep.errors[key] = (err && err.message) || String(err);
       }
     }
     links.readings[r.id] = { verses };
@@ -73,7 +74,7 @@ export async function buildLinks(dir, { get = getJSON, log = console.log } = {})
   const { links, report } = await relatedFor(sheet, { get });
   const file = join(dir, "links.json");
   await writeFile(file, JSON.stringify(links));
-  for (const [id, rep] of Object.entries(report)) log(`links    ${id}  ${rep.verses} verses, ${rep.links} links${rep.failed.length ? `; Sefaria did not answer for ${rep.failed.join(", ")}` : ""}`);
+  for (const [id, rep] of Object.entries(report)) log(`links    ${id}  ${rep.verses} verses, ${rep.links} links${rep.failed.length ? `; Sefaria did not answer for ${rep.failed.join(", ")} (first: ${rep.errors[rep.failed[0]]})` : ""}`);
   return { file, report };
 }
 

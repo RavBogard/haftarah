@@ -29,6 +29,17 @@ test("plainVersion drops footnote markers and footnotes and keeps line breaks", 
   assert.equal(plainVersion('Jonathan<sup class="footnote-marker">a</sup><i class="footnote">a note <i>with</i> italics</i> said<br>more'), "Jonathan said<br>more");
   assert.equal(plainVersion("<small>LORD</small> spoke"), "<small>LORD</small> spoke");
   assert.equal(plainVersion(null), "");
+  assert.equal(plainVersion('A<i class="footnote">a note <i>over\ntwo lines</i> ends</i> b'), "A b", "an inner <i> may span a line break");
+});
+
+test("translationsFor: a one-verse reading, whose text Sefaria returns as a string", async () => {
+  const one = fixture("week-min");
+  one.haftarah = { ...one.haftarah, ref: "I Samuel 20:18" };
+  one.verses = one.verses.slice(0, 1);
+  const get = async () => ({ ref: "I Samuel 20:18", sections: ["20", "18"], toSections: ["20", "18"], versions: [{ versionTitle: "The Koren Jerusalem Bible", license: "CC-BY-NC", language: "en", text: "Then Jonathan said to him." }] });
+  const { translations } = await translationsFor(one, { translations: ["koren"] }, { get });
+  const h = Object.values(translations.readings)[0];
+  assert.deepEqual(h.versions[0].verses, { "20:18": "Then Jonathan said to him." });
 });
 
 test("versionsOf lists the English versions; flattenVerses is exported from fetch.mjs", () => {
