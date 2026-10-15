@@ -285,7 +285,6 @@ test("a week with a Torah reading publishes both PDFs, and its index row points 
   const dir = join(root, "two", "2026-10-10-bereshit-machar-chodesh");
   await mkdir(dir, { recursive: true });
   const two = makeWeekTorah(JSON.parse(await readFile(new URL("./fixtures/week-notes/sheet.json", import.meta.url), "utf8")));
-  two.slug = "2026-10-10-bereshit-machar-chodesh";
   await writeFile(join(dir, "sheet.json"), JSON.stringify(two));
   await writeFile(join(dir, "sheet.pdf"), "%PDF-1.7\nhaftarah\n");
   const missing = await publish(dir, { dryRun: true, log: () => {} }).catch(e => e);

@@ -69,9 +69,9 @@ export async function planFiles(dir, { only } = {}) {
     pdfs.push({ path: join(dir, PDF_FILES.torah), name: publicName(L.readingView(sheet, torah.id), { label: "Torah" }) });
   }
   pdfs.push({ path: join(dir, PDF_FILES.haftarah), name: publicName(L.readingView(sheet, L.primaryReading(sheet).id), torah ? { label: "Haftarah" } : {}) });
-  // Never ship a stale PDF: each must be at least as new as the sheet it was built from.
+  // Never ship a stale Torah PDF: it must be at least as new as the sheet it was built from. (The haftarah PDF has no such check.)
   const sheetTime = (await stat(join(dir, "sheet.json"))).mtimeMs;
-  for (const p of pdfs) {
+  for (const p of torah ? pdfs.slice(0, 1) : []) {
     if ((await stat(p.path)).mtimeMs < sheetTime) throw new Error(`${basename(p.path)} is older than sheet.json; run build.mjs`);
   }
   const files = [];

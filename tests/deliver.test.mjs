@@ -281,8 +281,17 @@ test("deliver never ships a stale PDF: a PDF older than sheet.json is refused wi
   await utimes(join(w, "sheet-torah.pdf"), past, past);
   await utimes(join(w, "sheet.json"), now, now);
   await assert.rejects(planFiles(w), err => /^.*sheet-torah\.pdf is older than sheet\.json; run build\.mjs$/.test(err.message) && !err.message.includes("\n"));
+  await assert.rejects(deliver(w, { config: { url: `${base}/exec`, token: TOKEN }, log: () => {} }), /older than sheet\.json/);
   await utimes(join(w, "sheet-torah.pdf"), now, now);
   await utimes(join(w, "sheet.pdf"), past, past);
-  await assert.rejects(planFiles(w), /sheet\.pdf is older than sheet\.json; run build\.mjs/);
-  await assert.rejects(deliver(w, { config: { url: `${base}/exec`, token: TOKEN }, log: () => {} }), /older than sheet\.json/);
+  await planFiles(w);   // only the Torah PDF is checked
+});
+
+test("a haftarah-only week whose sheet.pdf is older than sheet.json still plans and dry-runs (no mtime check on that path)", async () => {
+  const past = new Date(Date.now() - 60_000), now = new Date();
+  await utimes(join(week, "sheet.pdf"), past, past);
+  await utimes(join(week, "sheet.json"), now, now);
+  const plan = await planFiles(week);
+  assert.equal(plan.publicName, "2026-10-17 Noach — Isaiah 54.1-55.5.pdf");
+  assert.deepEqual(await deliver(week, { dryRun: true, log: () => {} }), []);
 });
