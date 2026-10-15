@@ -7,6 +7,7 @@ import { slugFromPath, dataUrl, verseAnchor, parseVerseAnchor } from "./contract
 export { slugFromPath, dataUrl };
 import { initRoving, focusables } from "./a11y.js";
 import { createAnalytics } from "./analytics.js";
+import { initPresent, isPresent } from "./present.js";
 
 const DRIVE = "https://drive.google.com/drive/folders/1TbSmoeBaCSLciL_-_HSCuKWkJMSZvGwd";
 const errorsSeen = [];   // filled in check mode (?check=1) by the error listeners in run()
@@ -98,7 +99,8 @@ export async function run() {
 
   applyStored();
   const slug = slugFromPath(location.pathname);
-  const settings = initSettings({ host: $("settings"), button: $("aaBtn"), pdfHref: slug ? dataUrl(slug, "sheet.pdf") : null });
+  let startPresent = null;   // set once the verses exist
+  const settings = initSettings({ host: $("settings"), button: $("aaBtn"), pdfHref: slug ? dataUrl(slug, "sheet.pdf") : null, onPresent: () => startPresent && startPresent() });
   if (!slug) return fail(`No sheet at this address. <a href="/">All sheets</a>`);
   const analytics = createAnalytics();
   const track = (name, props = {}) => analytics.track(name, { week: slug, ...props });
@@ -336,7 +338,42 @@ export async function run() {
   const api = { rows, model, sync, goToHash, closeAll: () => { panel.close(); settings.close(); } };
   window.HaftarahPage = api;
   const panel = initPanel({ page: api, L, sefariaUrl, track });
-  if (check) runCheck(api, L);
+
+  // ---- presenter view: ?present on load, or the Aa card's button (which starts at the verse on screen) ----
+  let presenter = null;
+  startPresent = () => {
+    if (presenter) return presenter;
+    if (!isPresent(location.search)) {
+      const at = current ? `#${current.row.id}` : location.hash;
+      history.replaceState(null, "", `${location.pathname}${location.search ? `${location.search}&present` : "?present"}${at}`);
+    }
+    settings.close(); panel.close();
+    presenter = initPresent({ model, rows, L, track, onExit: () => { presenter = null; current = null; sync(); } });
+    return presenter;
+  };
+  if (isPresent(location.search)) startPresent();
+  if (check) { if (presenter) runPresentCheck(); else runCheck(api, L); }
+}
+
+// ?present&check=1: what the presenter shows, then PageDown, B twice, Escape, each as a key a remote would send.
+function runPresentCheck() {
+  const h = document.documentElement, $ = id => document.getElementById(id);
+  const key = k => document.dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true }));
+  h.dataset.checkPresent = h.dataset.present || "";
+  h.dataset.checkPresentLabel = $("pLabel").textContent;
+  h.dataset.checkPresentCount = $("pCount").textContent;
+  const body = $("pBody");
+  h.dataset.checkPresentFits = String(body.scrollHeight <= body.clientHeight + 1);
+  key("PageDown");
+  h.dataset.checkPresentNext = $("pLabel").textContent;
+  h.dataset.checkPresentHash = location.hash;
+  key("b");
+  h.dataset.checkPresentBlank = String(!$("pBlank").hidden);
+  key("b");
+  key("Escape");
+  h.dataset.checkPresentExit = String(!$("present") && !h.dataset.present);
+  h.dataset.checkErrors = String(errorsSeen.length) + (errorsSeen.length ? ": " + errorsSeen[0] : "");
+  h.dataset.checkDone = "1";
 }
 
 function runCheck(api, L) {

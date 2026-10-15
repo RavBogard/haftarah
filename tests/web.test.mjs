@@ -203,3 +203,52 @@ test("wordRange clamps a range into the verse and refuses a reversed or empty on
   assert.equal(highlightsFor(list, "torah", 20, 30).length, 1);
   assert.deepEqual(highlightsFor(undefined, "haftarah", 20, 30), []);
 });
+
+import { presentAction, stepIndex, isPresent, startIndex, stripKeys } from "../site/app/present.js";
+
+test("presenter keys: remotes, arrows and letters; modified keys, F5, and Space or Enter on a button stay with the browser", () => {
+  for (const k of ["PageDown", "ArrowRight", "ArrowDown", " ", "Enter"]) assert.equal(presentAction({ key: k }), "next", k);
+  for (const k of ["PageUp", "ArrowLeft", "ArrowUp", "Backspace"]) assert.equal(presentAction({ key: k }), "prev", k);
+  assert.equal(presentAction({ key: "Home" }), "first");
+  assert.equal(presentAction({ key: "End" }), "last");
+  for (const [k, a] of [["b", "blank"], ["B", "blank"], [".", "blank"], ["c", "notes"], ["n", "preview"], ["t", "trope"], ["+", "bigger"], ["=", "bigger"], ["-", "smaller"], ["?", "help"], ["Escape", "exit"]]) assert.equal(presentAction({ key: k }), a, k);
+  assert.equal(presentAction({ key: "+", ctrlKey: true }), null);
+  assert.equal(presentAction({ key: "-", metaKey: true }), null);
+  assert.equal(presentAction({ key: "ArrowLeft", altKey: true }), null);
+  assert.equal(presentAction({ key: " ", onControl: true }), null);
+  assert.equal(presentAction({ key: "Enter", onControl: true }), null);
+  assert.equal(presentAction({ key: "PageDown", onControl: true }), "next");
+  assert.equal(presentAction({ key: "F5" }), null);
+});
+
+test("stepIndex holds at both ends", () => {
+  assert.equal(stepIndex(0, 3, "next"), 1);
+  assert.equal(stepIndex(2, 3, "next"), 2);
+  assert.equal(stepIndex(0, 3, "prev"), 0);
+  assert.equal(stepIndex(1, 3, "first"), 0);
+  assert.equal(stepIndex(0, 3, "last"), 2);
+  assert.equal(stepIndex(1, 3, "blank"), 1);
+  assert.equal(stepIndex(0, 0, "next"), 0);
+});
+
+test("startIndex: the verse in the address, an old v-anchor, else the first", () => {
+  const rows = [{ reading: "haftarah", chapter: 20, verse: 18 }, { reading: "haftarah", chapter: 20, verse: 19 }];
+  assert.equal(startIndex(rows, "#haftarah-20-19"), 1);
+  assert.equal(startIndex(rows, "#v20-19"), 1);
+  assert.equal(startIndex(rows, "#torah-20-19"), 0);
+  assert.equal(startIndex(rows, "#haftarah-99-1"), 0);
+  assert.equal(startIndex(rows, ""), 0);
+});
+
+test("stripKeys removes the JPS and gloss letters and nothing else", () => {
+  assert.equal(stripKeys('<span class="nb">word<sup class="fn">a</sup>,</span> more'), '<span class="nb">word,</span> more');
+  assert.equal(stripKeys('עֲקָרָ֖ה<sup class="fn he">b</sup>׃'), "עֲקָרָ֖ה׃");
+  assert.equal(stripKeys("x<sup>2</sup>"), "x<sup>2</sup>");
+});
+
+test("isPresent reads ?present with or without a value", () => {
+  assert.equal(isPresent("?present"), true);
+  assert.equal(isPresent("?present=1&check=1"), true);
+  assert.equal(isPresent("?trope=1"), false);
+  assert.equal(isPresent(""), false);
+});

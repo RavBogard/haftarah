@@ -316,3 +316,15 @@ One shadow family, a soft drop with a faint contact line, for the panels, the se
 
 ### Trope colors
 The trope backgrounds are light pastels and keep their light values on the dark theme; the words on them turn dark (`#111`) so they stay readable.
+
+### Presenter view
+`?present` covers the page with one verse at a time for a shared screen, in a fixed light palette whatever the theme (paper #ffffff, ink #000000, rubric #8a0a14, the light register colors). The verse label in rubric and "3 / 22" in ink-2 sit at the top at 1.6vh + .6rem. Hebrew in Ezra SIL at clamp(1.6rem, 7vh, 5.5rem) with 1.6 leading; English at clamp(1.2rem, 4.2vh, 3.2rem) with 1.4; the verse's commentary under a 1px rule at clamp(1rem, 2.6vh, 2rem). A long verse shrinks all three together, to half size at most, rather than scroll; − and + scale them by a tenth between .6 and 2. Previous, Next and Exit are 44px outlined buttons at the bottom right. B is a black screen. Trope colors start off. Nothing moves.
+
+### Verse links and highlights
+A verse reached by its link takes the wash and a 1px rubric outline. A teacher highlight is a 3px rubric bar inside the verse's left edge, a tint on its words (rgba(138,10,20,.10); dark rgba(224,97,107,.18)) and its note in the apparatus behind a 2px rubric rule. The verse header's "Copy link" and "Copy verse" are set like "on Sefaria": ink-2 italic at .85em, rubric on hover.
+
+### Show
+Hebrew, Both or English. One language alone turns the wide row into two tracks, the verse number (2.8rem) then the text; English alone keeps a 42em measure.
+
+### No inline styles
+The Content-Security-Policy forbids style attributes, so every style lives in web.css; a script that positions something (the note popover, the presenter's fit) uses the CSSOM, which the policy allows.

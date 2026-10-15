@@ -128,6 +128,18 @@ async function main() {
     expect("old link marks its verse", t.target === `haftarah-${lv.chapter}-${lv.verse}`, t.target);
     expect("old link becomes the new address", t.hash === `#haftarah-${lv.chapter}-${lv.verse}`, t.hash);
     expect("a link to a verse not in the reading is ignored and clears the old mark", t["bogus-hash"] === "true", t["bogus-hash"]);
+    const p = attrs(await dumpDom(browser, `${base}/${slug}?present&check=1`, { size: "1280,720" }));
+    const [v1, v2] = sheet.verses;
+    console.log(`\npresenter 1280x720: /${slug}?present`);
+    expect("presenter: page finished without errors", p.done === "1" && p.errors === "0", `${p.done} ${p.errors}`);
+    expect("presenter on", p.present === "1", p.present);
+    expect("presenter starts at the first verse", p["present-label"] === L.enDash(v1.ref), p["present-label"]);
+    expect("presenter counts the verses", p["present-count"] === `1 / ${sheet.verses.length}`, p["present-count"]);
+    expect("the verse fits the screen", p["present-fits"] === "true", p["present-fits"]);
+    expect("PageDown steps to the next verse", p["present-next"] === L.enDash(v2.ref), p["present-next"]);
+    expect("the address follows the verse", p["present-hash"] === `#haftarah-${v2.chapter}-${v2.verse}`, p["present-hash"]);
+    expect("B blanks the screen", p["present-blank"] === "true", p["present-blank"]);
+    expect("Escape leaves the presenter", p["present-exit"] === "true", p["present-exit"]);
     const l = attrs(await dumpDom(browser, `${base}/?check=1`, { size: "1440,900" }));
     console.log("\nlanding: /");
     expect("landing finished", l.done === "1", l.done);

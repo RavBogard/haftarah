@@ -315,3 +315,31 @@ html[data-lang="he"] .row .en, html[data-lang="en"] .row .he { display: none; }
 .he .w.hl-w { background: var(--hl); box-shadow: inset 0 -2px 0 var(--rubric); }
 .hl-note { margin: 0 0 .5rem; padding-left: .6rem; border-left: 2px solid var(--rubric); }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* ---- presenter view (?present): one verse at a time, large, for a shared screen ---- */
+html[data-present] { overflow: hidden; }
+.present { position: fixed; inset: 0; z-index: 50; display: grid; grid-template-rows: auto minmax(0, 1fr) auto auto; gap: 1.5vh;
+  padding: 3vh 5vw 2vh; background: #ffffff; color: #000000;
+  --paper: #ffffff; --ink: #000000; --ink-2: #595959; --rubric: #8a0a14; --focus: #1d4f9c;
+  --reg-traditional: #8a0a14; --reg-modern: #1d4f9c; --reg-critical: #0b6a62; --reg-reference: #8a5a00; --p-user: 1; }
+.present .p-top { display: flex; justify-content: space-between; align-items: baseline; font-size: calc(1.6vh + .6rem); font-feature-settings: "lnum", "tnum"; }
+.present .p-label { color: var(--rubric); font-weight: 600; }
+.present .p-count { color: var(--ink-2); }
+.present .p-body { min-height: 0; overflow: hidden; display: flex; flex-direction: column; justify-content: center; gap: 2.5vh; --p-fit: 1; }
+.present .p-he { font-family: var(--hebrew); direction: rtl; text-align: right; line-height: 1.6; font-size: calc(clamp(1.6rem, 7vh, 5.5rem) * var(--p-fit) * var(--p-user)); }
+.present .p-en { line-height: 1.4; font-size: calc(clamp(1.2rem, 4.2vh, 3.2rem) * var(--p-fit) * var(--p-user)); }
+.present .p-en .ln { display: block; padding-left: 1.1em; text-indent: -1.1em; }
+.present .p-notes { border-top: 1px solid var(--ink); padding-top: 1.5vh; line-height: 1.4; font-size: calc(clamp(1rem, 2.6vh, 2rem) * var(--p-fit) * var(--p-user)); }
+.present .p-entry { margin: 0 0 .6em; }
+.present .p-entry .sig, .present .p-entry b { color: var(--reg); }
+.present .p-entry .sig svg { width: .6em; height: .6em; margin-right: .35em; }
+.present .p-entry b { font-weight: 600; margin-right: .3em; }
+.present .p-next { margin: 0; color: var(--ink-2); font-size: calc(1.4vh + .5rem); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.present .p-nav { display: flex; align-items: center; justify-content: flex-end; gap: .5rem; }
+.present .p-help { flex: 1; color: var(--ink-2); font-size: .88rem; }
+.present .p-nav button { min-height: max(2.75rem, 44px); min-width: max(2.75rem, 44px); padding: 0 1rem; border: 1px solid var(--ink); color: var(--ink); background: var(--paper); }
+.present .p-nav button:hover { background: rgba(0, 0, 0, .06); }
+.present .p-blank { position: fixed; inset: 0; z-index: 51; background: #000000; }
+.settings .present-btn { color: var(--rubric); font-weight: 500; min-height: max(2.75rem, 44px); text-align: left; }
+.settings .present-btn:hover { text-decoration: underline; }
+@media print { .present { display: none !important; } }
