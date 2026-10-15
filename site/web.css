@@ -409,3 +409,26 @@ html[data-present] { overflow: hidden; }
 .tr-note { color: var(--ink-2); font-style: italic; font-size: .88rem; margin: 0 0 .75rem; }
 .row .en.alt { color: var(--ink); }
 .foot .tr-credit { display: block; width: 100%; }
+
+/* ---- everything on this verse: Sefaria's related texts, visibly not the sheet ---- */
+:root { --panel-alt: #f6f4ef; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --panel-alt: #1b1a18; } }
+:root[data-theme="dark"] { --panel-alt: #1b1a18; }
+.panel[data-alt] .pb { background: var(--panel-alt); }
+.panel .from-sefaria { display: inline-block; background: var(--ink); color: var(--paper); font-size: .82rem; padding: .3rem .6rem; margin: 0 0 .75rem; }
+.panel .heonly { display: flex; align-items: center; gap: .5rem; min-height: max(2.75rem, 44px); color: var(--ink-2); font-size: .88rem; cursor: pointer; }
+.panel .heonly input { width: 1.1rem; height: 1.1rem; margin: 0; accent-color: var(--rubric); }
+.panel .rel-group { border-top: .5px solid var(--rule); }
+.panel .rel-group summary { cursor: pointer; min-height: max(2.75rem, 44px); display: flex; align-items: center; font-weight: 600; list-style: none; }
+.panel .rel-group summary::-webkit-details-marker { display: none; }
+.panel .rel-group summary::before { content: "›"; display: inline-block; width: 1em; color: var(--ink-2); transition: transform .18s ease-out; }
+.panel .rel-group[open] summary::before { transform: rotate(90deg); }
+.panel .rel-work { margin: 0 0 .5rem 1em; line-height: 1.6; }
+.panel .rel-title { font-weight: 500; }
+.panel .used-mark { color: var(--ink-2); font-size: .82rem; font-style: italic; margin-left: .35rem; }
+.panel .rel { color: var(--rubric); text-decoration: underline; text-underline-offset: .18em; font-feature-settings: "lnum"; margin: 0 .6rem 0 0; min-height: max(2.75rem, 44px); display: inline-flex; align-items: center; }
+.panel .rel.he-only { display: none; color: var(--ink-2); }
+.panel .pb.show-he .rel.he-only { display: inline-flex; }
+.panel .back { color: var(--rubric); font-weight: 500; min-height: max(2.75rem, 44px); display: inline-flex; align-items: center; margin: 0 0 .5rem; }
+.panel .back:hover { text-decoration: underline; }
+.vapp .vh .acts .act[data-act="related"] { color: var(--rubric); }

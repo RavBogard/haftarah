@@ -55,6 +55,7 @@ export function initPanel({ page, L, sefariaUrl, track = () => {} }) {
     if (activeWord) { activeWord.classList.remove("active"); activeWord = null; }
     opener = from || null; if (opener) { opener.setAttribute("aria-expanded", "true"); opener.setAttribute("aria-controls", "panel"); }
     panel.inert = false;
+    delete panel.dataset.alt;   // a related view sets it again right after
     pKind.textContent = kind; panel.setAttribute("aria-label", kind);
     pBody.innerHTML = html; pBody.scrollTop = 0;
     panel.setAttribute("data-open", ""); panel.setAttribute("aria-hidden", "false");
@@ -64,6 +65,7 @@ export function initPanel({ page, L, sefariaUrl, track = () => {} }) {
     if (!panel.hasAttribute("data-open")) return;
     seq++;
     panel.removeAttribute("data-open"); panel.setAttribute("aria-hidden", "true"); panel.inert = true;
+    delete panel.dataset.alt; delete pBody.dataset.related; pBody.classList.remove("show-he");
     if (activeWord) { activeWord.classList.remove("active"); activeWord = null; }
     if (opener) { const o = opener; opener = null; o.setAttribute("aria-expanded", "false"); o.focus({ preventScroll: true }); }
   }
@@ -173,5 +175,66 @@ export function initPanel({ page, L, sefariaUrl, track = () => {} }) {
   text.addEventListener("click", e => { const w = e.target.closest(".he .w"); if (w) openWord(w); });
   text.addEventListener("keydown", e => { const w = e.target.closest(".he .w"); if (w && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openWord(w); } });
 
-  return { open: openPanel, close: () => { closePop(); closePanel(); }, openWord };
+  // ---- everything on this verse (spec 5.7): Sefaria's related texts, visibly not the sheet ----
+  let linksFile = null;
+  const loadLinks = () => {
+    if (!page.side || !page.side.links) return Promise.resolve(null);
+    if (!linksFile) linksFile = fetch(dataUrl(page.slug, SIDE_FILES.links)).then(r => (r.ok ? r.json() : null)).catch(() => null);
+    return linksFile;
+  };
+  const shortRef = (ref, title) => { const s = String(ref).startsWith(title) ? String(ref).slice(title.length).replace(/^\s*on\s+/, "").trim() : String(ref); return s || String(ref); };
+  const BANNER = `<p class="from-sefaria">From Sefaria, not edited by CRC</p>`;
+  function relatedHtml(r, data) {
+    const ref = esc(dash(r.v.ref));
+    if (!data) return `<h2>${ref}</h2>${BANNER}<p class="inverse">Nothing is listed for this verse.</p>`;
+    if (data.failed) return `<h2>${ref}</h2>${BANNER}<p class="inverse">Sefaria did not answer for this verse when the sheet was published.</p>`;
+    const work = w => {
+      const used = page.sources && page.sources.has(w.title);
+      const item = (x, cls) => `<button type="button" class="rel${cls}" data-ref="${esc(x)}" data-title="${esc(w.title)}">${esc(shortRef(x, w.title))}</button>`;
+      return `<p class="rel-work"><span class="rel-title">${esc(w.title)}</span>${used ? `<span class="used-mark">on this sheet</span>` : ""} ${(w.refs || []).map(x => item(x, "")).join("")}${(w.he || []).map(x => item(x, " he-only")).join("")}</p>`;
+    };
+    const groups = (data.groups || []).map(g => `<details class="rel-group"><summary>${esc(g.category)} (${g.works.reduce((n, w) => n + (w.refs || []).length + (w.he || []).length, 0)})</summary>${g.works.map(work).join("")}</details>`).join("");
+    return `<h2>${ref}</h2>${BANNER}<label class="heonly"><input type="checkbox" id="relHe"${pBody.classList.contains("show-he") ? " checked" : ""}> Show texts with no English</label>${groups || `<p class="inverse">Nothing is listed for this verse.</p>`}` + openLink(esc(sefariaUrl(r.v.ref)), "Open on Sefaria");
+  }
+  const gutButtonOf = r => r.row.querySelector(".gut button");
+  async function openRelated(r) {
+    const token = openPanel("On this verse", `<h2>${esc(dash(r.v.ref))}</h2>${BANNER}<p class="loading">Loading…</p>`, gutButtonOf(r));
+    panel.dataset.alt = "1";
+    const file = await loadLinks();
+    const data = file && file.readings && file.readings[r.reading] && file.readings[r.reading].verses && file.readings[r.reading].verses[r.row.dataset.verse];
+    fill(token, relatedHtml(r, data || null));
+    pBody.dataset.related = r.row.id;
+    return { groups: (data && data.groups || []).length, n: (data && data.n) || 0 };
+  }
+  pBody.addEventListener("change", e => { if (e.target.id === "relHe") pBody.classList.toggle("show-he", e.target.checked); });
+  pBody.addEventListener("click", async e => {
+    const back = e.target.closest("button.back");
+    if (back) {
+      // Back to the list, with the group of the text just read open and focus on that text's button.
+      const r = page.rows.find(x => x.row.id === back.dataset.row), was = back.dataset.ref;
+      if (r) openRelated(r).then(() => { const x = [...pBody.querySelectorAll("button.rel")].find(n => n.dataset.ref === was); if (x) { x.closest("details").open = true; x.focus({ preventScroll: true }); } });
+      return;
+    }
+    const b = e.target.closest("button.rel"); if (!b) return;
+    const ref = b.dataset.ref, title = b.dataset.title, rowId = pBody.dataset.related;
+    const head = `<button type="button" class="back" data-row="${esc(rowId)}" data-ref="${esc(ref)}">← Everything on ${esc(dash((page.rows.find(x => x.row.id === rowId) || { v: { ref: "" } }).v.ref))}</button><h2>${esc(title)}</h2><p class="sub">${esc(dash(ref))}</p>${BANNER}`;
+    const token = openPanel("On this verse", `${head}<p class="loading">Fetching from Sefaria…</p>`, opener);
+    panel.dataset.alt = "1";
+    pBody.querySelector("button.back").focus({ preventScroll: true });   // the tapped button is gone; keep focus in the panel
+    track("source_open", { source: title });
+    try {
+      const t = await fetchText(ref);
+      fill(token, head +
+        (t.he ? `<div class="src-he" lang="he" dir="rtl">${clean(t.he.html)}</div><p class="vt">${esc(t.he.versionTitle)}</p>` : "") +
+        (t.en ? `<div class="src-en">${clean(t.en.html)}</div><p class="vt">${esc(t.en.versionTitle)}</p>` : `<p class="inverse">No English on Sefaria for this passage.</p>`) +
+        openLink(esc(sefariaUrl(ref)), "Open on Sefaria"));
+    } catch (err) {
+      fill(token, `${head}<p class="err">Sefaria did not answer (${esc(err.message)}).</p>` + openLink(esc(sefariaUrl(ref)), "Open on Sefaria"));
+    }
+    if (token !== seq) return;
+    if (document.activeElement === document.body) { const bk = pBody.querySelector("button.back"); if (bk) bk.focus({ preventScroll: true }); }
+    pBody.dataset.related = rowId;
+  });
+
+  return { open: openPanel, close: () => { closePop(); closePanel(); }, openWord, openRelated };
 }

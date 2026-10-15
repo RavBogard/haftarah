@@ -355,3 +355,10 @@ test("the settings card's Translation row and the note are the agreed strings", 
   const sheetSrc = readSite(new URL("../site/app/sheet.js", import.meta.url), "utf8");
   assert.ok(sheetSrc.includes("Notes and glosses refer to the JPS translation."));
 });
+
+test("the related panel's strings are the agreed ones", () => {
+  const panelSrc = readSite(new URL("../site/app/panel.js", import.meta.url), "utf8");
+  for (const s of ["From Sefaria, not edited by CRC", "Show texts with no English", "on this sheet", "Sefaria did not answer for this verse when the sheet was published.", "← Everything on "]) assert.ok(panelSrc.includes(s), s);
+  const sheetSrc = readSite(new URL("../site/app/sheet.js", import.meta.url), "utf8");
+  assert.ok(sheetSrc.includes('data-act="related">Everything on this verse</button>'));
+});

@@ -255,7 +255,7 @@ export async function run() {
     // A verse with nothing gets a div: a <details> without a summary shows the browser's own "Details".
     const app = el(count ? "details" : "div", "vapp"); app.dataset.verse = cv;
     app.innerHTML = (count ? `<summary><span class="count">${count}</span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></summary>` : "") +
-      `<p class="vh"><span>${cv}</span><span class="acts"><button type="button" class="act" data-act="link">Copy link</button><button type="button" class="act" data-act="copy">Copy verse</button><a href="${esc(sefariaUrl(v.ref))}" target="_blank" rel="noopener">on Sefaria</a></span></p>` +
+      `<p class="vh"><span>${cv}</span><span class="acts"><button type="button" class="act" data-act="link">Copy link</button><button type="button" class="act" data-act="copy">Copy verse</button>${data.side && data.side.links ? `<button type="button" class="act" data-act="related">Everything on this verse</button>` : ""}<a href="${esc(sefariaUrl(v.ref))}" target="_blank" rel="noopener">on Sefaria</a></span></p>` +
       hlNotes.map(h => `<p class="hl-note">${L.divineName(h.note).html}</p>`).join("") +
       v.keys.map(k => `<p class="note ${k.kind}">${noteHtml(k, L)}</p>`).join("") +
       v.entries.map(e => `<p class="entry reg-${e.register}">${entryHtml(e)}</p>`).join("");
@@ -361,6 +361,7 @@ export async function run() {
   async function onAct(e) {
     const b = e.target.closest("button.act"); if (!b) return;
     const r = rows.find(x => x.app === b.closest(".vapp")); if (!r) return;
+    if (b.dataset.act === "related") { panel.openRelated(r); return; }
     const url = verseUrl(location.origin, slug, r.row.id);
     // Another edition shown in this verse: copy that English, under its name (a verse the edition lacks keeps the sheet's own).
     const alt = html.dataset.translation && html.dataset.translation !== "jps2023" && r.row.querySelector(".en.alt");
@@ -379,9 +380,11 @@ export async function run() {
   rail.addEventListener("click", onAct); text.addEventListener("click", onAct);
 
   const api = { rows, model, sync, goToHash, slug, side: data.side || null, closeAll: () => { panel.close(); settings.close(); } };
+  api.sources = new Set(parts.flatMap(p => (p.reading.commentary || []).filter(e => !e || e.status !== "rejected").map(e => e.source).filter(Boolean)));
   window.HaftarahPage = api;
   const panel = initPanel({ page: api, L, sefariaUrl, track });
   api.openWord = w => panel.openWord(w);
+  api.openRelated = r => panel.openRelated(r);
 
   // ---- the translation picker (spec 5.6): the English column shows another edition; the notes stay JPS's ----
   const trOptions = translationOptions(api.side);
@@ -549,6 +552,23 @@ async function runCheck(api, L) {
     h.dataset.checkTrLabel = api.translation.label;
     await api.setTranslation("jps2023");
     h.dataset.checkTrRestored = String(first.innerHTML === was && !document.querySelector(".tr-note") && !document.getElementById("footTr"));
+  }
+  // Everything on this verse: a control per verse when the week has links.json; the panel is visibly not the sheet.
+  h.dataset.checkRelButtons = String(document.querySelectorAll('.vapp .act[data-act="related"]').length);
+  if (api.openRelated && document.querySelector('.vapp .act[data-act="related"]')) {
+    const { groups } = await api.openRelated(rows[0]);
+    const pb = document.getElementById("panelBody"), panelEl = document.getElementById("panel");
+    h.dataset.checkRelGroups = String(groups);
+    h.dataset.checkRelBanner = (pb.querySelector(".from-sefaria") || {}).textContent || "";
+    h.dataset.checkRelAlt = String(panelEl.dataset.alt === "1");
+    h.dataset.checkRelClosed = String([...pb.querySelectorAll(".rel-group")].every(d => !d.open));
+    h.dataset.checkRelUsed = String(pb.querySelectorAll(".used-mark").length);
+    h.dataset.checkRelHeHidden = String([...pb.querySelectorAll(".rel.he-only")].every(b => getComputedStyle(b).display === "none"));
+    const cb = pb.querySelector("#relHe"); if (cb) { cb.click(); h.dataset.checkRelHeShown = String([...pb.querySelectorAll(".rel.he-only")].every(b => getComputedStyle(b).display !== "none")); }
+    h.dataset.checkRelLast = (pb.querySelector(".rel-group:last-of-type summary") || {}).textContent || "";
+    h.dataset.checkRelKind = document.getElementById("panelKind").textContent;
+    api.closeAll();
+    h.dataset.checkRelAltGone = String(!panelEl.dataset.alt);
   }
   // The word panel: the first word of the first row, analysed from words.json when the week has it.
   const firstWord = document.querySelector("#text .row .he .w");

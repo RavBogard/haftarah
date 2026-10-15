@@ -154,6 +154,17 @@ async function main() {
         expect("Copy verse would name the edition", a["tr-label"] === "JPS 1985", a["tr-label"]);
         expect("JPS 2023 comes back exactly", a["tr-restored"] === "true", a["tr-restored"]);
       } else expect("no Translation row without versions", a["tr-offered"] === "", a["tr-offered"]);
+      if (side && side.links) {
+        expect("a control on every verse for everything on this verse", Number(a["rel-buttons"]) === flat.length, a["rel-buttons"]);
+        expect("the related panel has groups", Number(a["rel-groups"]) > 0, a["rel-groups"]);
+        expect("the related panel says it is from Sefaria", a["rel-banner"] === "From Sefaria, not edited by CRC", a["rel-banner"]);
+        expect("the related panel is visibly not the sheet", a["rel-alt"] === "true" && a["rel-alt-gone"] === "true", `${a["rel-alt"]} ${a["rel-alt-gone"]}`);
+        expect("groups start collapsed", a["rel-closed"] === "true", a["rel-closed"]);
+        expect("a work the sheet cites is marked", Number(a["rel-used"]) >= 1, a["rel-used"]);
+        expect("Hebrew-only texts hide until asked for", a["rel-he-hidden"] === "true" && (a["rel-he-shown"] === undefined || a["rel-he-shown"] === "true"), `${a["rel-he-hidden"]} ${a["rel-he-shown"]}`);
+        expect("Quoting Commentary comes last", /^Quoting Commentary/.test(a["rel-last"] || "") || !/Quoting Commentary/.test(JSON.stringify(a)), a["rel-last"]);
+        expect("the panel kind is On this verse", a["rel-kind"] === "On this verse", a["rel-kind"]);
+      } else expect("no related control without links.json", a["rel-buttons"] === "0", a["rel-buttons"]);
     }
     const lv = sheet.verses[Math.min(5, sheet.verses.length - 1)];
     const t = attrs(await dumpDom(browser, `${base}/${slug}?check=1#v${lv.chapter}-${lv.verse}`, { size: "1440,900" }));
