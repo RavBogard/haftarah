@@ -4,18 +4,18 @@
  * desktop and a phone size, and assert what the pages report in their data-check-* attributes
  * (sheet.js and landing.js write them when the URL has ?check=1).
  *
- *   node scripts/web-check.mjs [weeks/<slug>]          # default: tests/fixtures/week-notes
- *   node scripts/web-check.mjs weeks/<slug> --serve    # just serve, for a look in a browser
+ *   node scripts/web-check.mjs [weeks/<slug>]              # default: tests/fixtures/week-notes
+ *   node scripts/web-check.mjs weeks/<slug> --serve        # just serve, for a look in a browser
+ *   node scripts/web-check.mjs [weeks/<slug>] --out DIR    # build into DIR instead of site/dist (npm test does)
  */
-import { readFile, mkdir, rm } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { join, resolve, basename, extname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { spawn } from "node:child_process";
-import { tmpdir } from "node:os";
 import { buildSite } from "./web-build.mjs";
 import { indexEntry, cleanSheet } from "./publish.mjs";
-import { findBrowser, chromeFlags } from "./build.mjs";
+import { findBrowser } from "./build.mjs";
+import { dumpDom } from "./chrome.mjs";
 
 const ROOT = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const MIME = { ".html": "text/html; charset=utf-8", ".css": "text/css", ".js": "text/javascript", ".json": "application/json", ".png": "image/png", ".ttf": "font/ttf", ".pdf": "application/pdf", ".txt": "text/plain" };
@@ -43,28 +43,24 @@ export async function serveSite({ dist, week, port = 0 }) {
   return { server, slug, base: `http://127.0.0.1:${server.address().port}` };
 }
 
-function dumpDom(browser, url, size) {
-  return new Promise(async (res, rej) => {
-    const profile = join(tmpdir(), `haftarah-web-${process.pid}-${Math.random().toString(36).slice(2)}`);
-    await mkdir(profile, { recursive: true });
-    const child = spawn(browser, [...chromeFlags(profile), `--window-size=${size}`, "--dump-dom", url], { stdio: ["ignore", "pipe", "pipe"] });
-    let out = "", err = "";
-    child.stdout.on("data", d => (out += d)); child.stderr.on("data", d => (err += d));
-    child.on("error", rej);
-    child.on("close", async code => { await rm(profile, { recursive: true, force: true }).catch(() => {}); code === 0 ? res(out) : rej(new Error(`dump-dom exited ${code}\n${err.slice(-500)}`)); });
-  });
+// The values of --port and --out, and the week folder: the one argument that is neither a flag nor a flag's value.
+export function parseArgs(args) {
+  const valueAt = new Set();
+  const opt = name => { const i = args.indexOf(name); if (i < 0) return null; valueAt.add(i + 1); return args[i + 1]; };
+  const port = opt("--port"), out = opt("--out");
+  const week = args.find((a, i) => !a.startsWith("--") && !valueAt.has(i)) || null;
+  return { week, port: port == null ? null : Number(port), out, serve: args.includes("--serve") };
 }
+
 const attrs = dom => Object.fromEntries([...((dom.match(/<html[^>]*>/) || [""])[0]).matchAll(/\sdata-check-([a-z-]+)="([^"]*)"/g)].map(m => [m[1], m[2].replace(/&quot;/g, '"').replace(/&amp;/g, "&")]));
 
 async function main() {
-  const args = process.argv.slice(2);
-  const portArg = args.indexOf("--port");
-  const week = resolve(args.find((a, i) => !a.startsWith("--") && (portArg < 0 || i !== portArg + 1)) || join(ROOT, "tests", "fixtures", "week-notes"));
-  const serveOnly = args.includes("--serve");
-  const port = portArg >= 0 ? Number(args[portArg + 1]) : (serveOnly ? 8767 : 0);
-  const { out: dist } = await buildSite();
+  const args = parseArgs(process.argv.slice(2));
+  const week = resolve(args.week || join(ROOT, "tests", "fixtures", "week-notes"));
+  const port = args.port ?? (args.serve ? 8767 : 0);
+  const { out: dist } = await buildSite(args.out ? { out: args.out } : {});
   const { server, slug, base } = await serveSite({ dist, week, port });
-  if (serveOnly) { console.log(`Serving ${slug}:\n  ${base}/\n  ${base}/${slug}\n  ${base}/${slug}?trope=1\nCtrl-C to stop.`); return; }
+  if (args.serve) { console.log(`Serving ${slug}:\n  ${base}/\n  ${base}/${slug}\n  ${base}/${slug}?trope=1\nCtrl-C to stop.`); return; }
   const browser = findBrowser();
   if (!browser) { server.close(); console.error("No Chrome or Edge found (set HAFTARAH_BROWSER)."); process.exit(1); }
   const sheet = JSON.parse(await readFile(join(week, "sheet.json"), "utf8"));
@@ -72,7 +68,7 @@ async function main() {
   const expect = (name, ok, got) => { console.log(`${ok ? "ok  " : "FAIL"}  ${name}${ok ? "" : `  (got ${JSON.stringify(got)})`}`); if (!ok) failures.push(name); };
   try {
     for (const [label, size, wide] of [["desktop 1440x900", "1440,900", true], ["phone 390x844", "390,844", false]]) {
-      const a = attrs(await dumpDom(browser, `${base}/${slug}?check=1`, size));
+      const a = attrs(await dumpDom(browser, `${base}/${slug}?check=1`, { size }));
       // Headless Chrome enforces a minimum window width, so say what was actually measured.
       console.log(`\n${label} (measured viewport ${a.width || "?"}px): /${slug}`);
       expect("page finished", a.done === "1", a.done);
@@ -92,7 +88,7 @@ async function main() {
       expect("dark paper", a.paper === "rgb(18, 17, 16)", a.paper);
       expect("title", /·/.test(a.title || ""), a.title);
     }
-    const l = attrs(await dumpDom(browser, `${base}/?check=1`, "1440,900"));
+    const l = attrs(await dumpDom(browser, `${base}/?check=1`, { size: "1440,900" }));
     console.log("\nlanding: /");
     expect("landing finished", l.done === "1", l.done);
     expect("landing errors", l.errors === "0", l.errors);

@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
+import { isolatedEnv } from "./helpers/isolatedEnv.mjs";
 import { publicName, planFiles, loadConfig, deliver } from "../scripts/deliver.mjs";
 
 const run = promisify(execFile);
@@ -188,34 +189,29 @@ test("loadConfig: flags over env over file; missing config is an error", async (
 });
 
 test("CLI exits 1 with a clear message when not configured", async () => {
-  const home = await mkdtemp(join(tmpdir(), "home-"));
-  // Windows' homedir() reads USERPROFILE, not HOME: point every config lookup into the temp home so
-  // the child can never find the real drop box or Blob token and deliver for real.
-  const env = { PATH: process.env.PATH, HOME: home, USERPROFILE: home, HAFTARAH_DROPBOX_CONFIG: join(home, "none.json"), HAFTARAH_WEB_CONFIG: join(home, "none.json") };
-  const err = await run(process.execPath, [script, week], { env }).catch(e => e);
-  assert.equal(err.code, 1);
-  assert.match(err.stderr, /deliver: drop box not configured/);
-  const ok = await run(process.execPath, [script, week, "--dry-run"], { env });
-  assert.match(ok.stdout, /working +Haftarah working\/2026-10-17-noach\/sheet\.json/);
-  await rm(home, { recursive: true, force: true });
+  // isolatedEnv: HOME and USERPROFILE in a temp folder, no tokens, so the child can never deliver for real.
+  const { env, cleanup } = await isolatedEnv();
+  try {
+    const err = await run(process.execPath, [script, week], { env }).catch(e => e);
+    assert.equal(err.code, 1);
+    assert.match(err.stderr, /deliver: drop box not configured/);
+    const ok = await run(process.execPath, [script, week, "--dry-run"], { env });
+    assert.match(ok.stdout, /working +Haftarah working\/2026-10-17-noach\/sheet\.json/);
+  } finally { await cleanup(); }
 });
 
 test("CLI uploads with config from env", async () => {
-  const home = await mkdtemp(join(tmpdir(), "home-"));
-  const env = {
-    PATH: process.env.PATH, HOME: home, USERPROFILE: home,
-    HAFTARAH_DROPBOX_CONFIG: join(home, "none.json"), HAFTARAH_WEB_CONFIG: join(home, "none.json"),
-    HAFTARAH_DROPBOX_URL: `${base}/exec`, HAFTARAH_DROPBOX_TOKEN: TOKEN,
-  };
-  seen.length = 0;
-  const { stdout } = await run(process.execPath, [script, week, "--only", "working", "--no-web"], { env });
-  assert.match(stdout, /working +sheet\.json .* sha256 ok/);
-  assert.ok(!stdout.includes(TOKEN));
-  assert.ok(!/^web /m.test(stdout) && !/Page:/.test(stdout), "no web publish");
-  // Every upload reached the local stub (POST /exec, then GET /echo for the reply), nothing else.
-  assert.ok(seen.length > 0 && seen.every(r => (r.method === "POST" && r.path === "/exec") || (r.method === "GET" && r.path === "/echo")));
-  assert.equal(seen.filter(r => r.path === "/exec").length, (stdout.match(/sha256 ok/g) || []).length);
-  await rm(home, { recursive: true, force: true });
+  const { env, cleanup } = await isolatedEnv({ HAFTARAH_DROPBOX_URL: `${base}/exec`, HAFTARAH_DROPBOX_TOKEN: TOKEN });
+  try {
+    seen.length = 0;
+    const { stdout } = await run(process.execPath, [script, week, "--only", "working", "--no-web"], { env });
+    assert.match(stdout, /working +sheet\.json .* sha256 ok/);
+    assert.ok(!stdout.includes(TOKEN));
+    assert.ok(!/^web /m.test(stdout) && !/Page:/.test(stdout), "no web publish");
+    // Every upload reached the local stub (POST /exec, then GET /echo for the reply), nothing else.
+    assert.ok(seen.length > 0 && seen.every(r => (r.method === "POST" && r.path === "/exec") || (r.method === "GET" && r.path === "/echo")));
+    assert.equal(seen.filter(r => r.path === "/exec").length, (stdout.match(/sha256 ok/g) || []).length);
+  } finally { await cleanup(); }
 });
 
 test("deliver runs publish after the Drive uploads when a web config is given", async () => {

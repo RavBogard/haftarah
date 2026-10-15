@@ -23,3 +23,16 @@ export async function isolatedEnv(extra = {}) {
   }, extra);
   return { env, home, cleanup: () => rm(home, { recursive: true, force: true }) };
 }
+
+// The lint every test file passes (tests/isolation.test.mjs): a file that starts a program must use
+// isolatedEnv and must not touch process.env. A tripwire, not a proof: it reads the source.
+const SPAWNS = /from\s+["'](?:node:)?child_process["']|require\(\s*["'](?:node:)?child_process["']\s*\)|\bbuildFixture\s*\(/;
+export function isolationProblems(src) {
+  const s = String(src);
+  if (!SPAWNS.test(s)) return [];
+  const problems = [];
+  if (!/from\s+["']\.\/helpers\/isolatedEnv\.mjs["']/.test(s)) problems.push("spawns a process but does not import ./helpers/isolatedEnv.mjs");
+  if (!/\bisolatedEnv\s*\(/.test(s)) problems.push("spawns a process but never calls isolatedEnv()");
+  if (/\bprocess\.env\b/.test(s)) problems.push("reads process.env; a spawned child must get isolatedEnv's env only");
+  return problems;
+}

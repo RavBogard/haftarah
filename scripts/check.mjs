@@ -6,34 +6,17 @@
  *   node scripts/check.mjs weeks/<slug>
  *   node scripts/check.mjs weeks/<slug> --trope   # check the chanter's copy, sheet-trope.html
  */
-import { readFile, mkdir, rm, access } from "node:fs/promises";
+import { readFile, access } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { spawn } from "node:child_process";
-import { tmpdir } from "node:os";
-import { findBrowser, chromeFlags } from "./build.mjs";
+import { findBrowser } from "./build.mjs";
+import { dumpDom } from "./chrome.mjs";
 
 // A split needs two lines on each side, so a two-line verse that does not fit leaves a band of up
 // to about an inch; the paginator splits anything taller. Checked ceiling: 100px (1.04in), plus
 // 4px for the sub-pixel rounding of a bottom-pinned apparatus (Noach 5787 failed at 101px).
 const GAP_CEILING = 104;
 const TETRA = /י[֑-ׇ]*ה[֑-ׇ]*ו[֑-ׇ]*ה[֑-ׇ]*/g;
-
-function dumpDom(browser, url) {
-  return new Promise(async (res, rej) => {
-    const profile = join(tmpdir(), `haftarah-check-${process.pid}-${Math.random().toString(36).slice(2)}`);
-    await mkdir(profile, { recursive: true });
-    const child = spawn(browser, [...chromeFlags(profile), "--dump-dom", url], { stdio: ["ignore", "pipe", "pipe"] });
-    let out = "", err = "";
-    child.stdout.on("data", d => (out += d));
-    child.stderr.on("data", d => (err += d));
-    child.on("error", rej);
-    child.on("close", async code => {
-      await rm(profile, { recursive: true, force: true }).catch(() => {});
-      code === 0 ? res(out) : rej(new Error(`dump-dom exited ${code}\n${err.slice(-500)}`));
-    });
-  });
-}
 
 const attr = (tag, name) => { const m = tag.match(new RegExp(`\\sdata-${name}="([^"]*)"`)); return m ? m[1] : null; };
 
