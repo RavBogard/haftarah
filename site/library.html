@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en" data-theme="auto">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Haftarah · Torah from Scratch</title>
+<link rel="icon" href="/mural.png">
+<link rel="stylesheet" href="/web.css">
+<script src="/lib.js"></script>
+<script type="module" src="/app/boot-library.js"></script>
+</head>
+<body>
+<header class="mast" id="mast">
+  <a class="shabbat" href="/">Torah from Scratch</a>
+  <span class="range"></span>
+  <span class="tools"><a class="all" href="/">All sheets</a><button class="aa" id="aaBtn" aria-expanded="false" aria-controls="settings" title="Text size and theme">Aa</button></span>
+</header>
+<div class="settings" id="settings" role="dialog" aria-label="Reading settings"></div>
+<main class="wrap" id="top">
+  <section class="front">
+    <noscript><p class="status">This page needs JavaScript to find the sheet. <a href="/">All sheets</a></p></noscript>
+    <p class="status" id="status" hidden></p>
+    <section class="index" id="index" hidden><h2 id="libTitle"></h2><ol id="weeks"></ol></section>
+  </section>
+  <footer class="foot">
+    <span>Hebrew: Miqra according to the Masorah. English: THE JPS TANAKH: Gender-Sensitive Edition (JPS, 2023). Sources from Sefaria.</span>
+    <span><span class="wm">central reform congregation</span>A Jewish Presence in the City of St. Louis</span>
+  </footer>
+</main>
+</body>
+</html>

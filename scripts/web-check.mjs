@@ -17,6 +17,7 @@ import { indexEntry, cleanSheet } from "./publish.mjs";
 import { findBrowser } from "./build.mjs";
 import { dumpDom } from "./chrome.mjs";
 import { isSlug, slugFromPath, dataUrl, indexUrl } from "../site/app/contract.js";
+import { isAliasPath, PARASHOT, keyOf } from "../site/app/parashot.js";
 import { createRequire } from "node:module";
 const L = createRequire(import.meta.url)("../template/lib.js");
 
@@ -46,7 +47,7 @@ export async function serveSite({ dist, week, port = 0, extra = {} }) {
       // Read first, write headers after: a missing file (the fixture has no sheet.pdf) must be a 404, not a crash.
       try { return send(200, MIME[extname(p)] || "application/octet-stream", await readFile(join(week, basename(p)))); } catch { return send(404, "text/plain", "Not found"); }
     }
-    let file = slugFromPath(p) ? join(dist, "sheet.html") : join(dist, p === "/" ? "index.html" : p);
+    let file = slugFromPath(p) ? join(dist, "sheet.html") : isAliasPath(p) ? join(dist, "library.html") : join(dist, p === "/" ? "index.html" : p);
     const page = csp ? { "content-security-policy": csp } : {};
     try { send(200, MIME[extname(file)] || "application/octet-stream", await readFile(file), page); }
     catch { send(404, MIME[".html"], await readFile(join(dist, "404.html")).catch(() => "Not found"), page); }
@@ -150,6 +151,20 @@ async function main() {
     expect("landing errors", l.errors === "0", l.errors);
     expect("one week listed", l.weeks === "1", l.weeks);
     expect("hero is the week", l.hero === slug, l.hero);
+    // The library's short addresses: the fixture week is filed under its parashah and year.
+    const key = L.parashahKey(raw.shabbat.parashah.en), cycle = String(raw.series.year);
+    const book = (PARASHOT.find(x => x.key === key) || { book: "Genesis" }).book;
+    console.log(`\nlibrary: /${key}, /${cycle}/${key}, /5790/${key}, /torah/${keyOf(book)}, /not-a-parashah`);
+    const al = attrs(await dumpDom(browser, `${base}/${key}?check=1`, { size: "1440,900" }));
+    expect("a parashah alias finds the week", al.resolved === slug && al.errors === "0", `${al.resolved} ${al.errors}`);
+    const ay = attrs(await dumpDom(browser, `${base}/${cycle}/${key}?check=1`, { size: "1440,900" }));
+    expect("a year alias finds the week", ay.resolved === slug, ay.resolved);
+    const am = attrs(await dumpDom(browser, `${base}/5790/${key}?check=1`, { size: "1440,900" }));
+    expect("an alias with no sheet says so", am.missing === key && am.errors === "0", `${am.missing} ${am.errors}`);
+    const at = attrs(await dumpDom(browser, `${base}/torah/${keyOf(book)}?check=1`, { size: "1440,900" }));
+    expect("a Torah book lists its weeks", at.listed === "1" && at.errors === "0", `${at.listed} ${at.errors}`);
+    const unknown = await fetch(`${base}/not-a-parashah`);
+    expect("an unknown alias is a 404", unknown.status === 404, unknown.status);
   } finally { server.close(); }
   if (failures.length) { console.error(`\n${failures.length} check${failures.length === 1 ? "" : "s"} failed.`); process.exit(1); }
   console.log("\nAll web checks passed.");

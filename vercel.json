@@ -7,7 +7,12 @@
   "trailingSlash": false,
   "rewrites": [
     { "source": "/data/:path*", "destination": "https://wogdaqvpmtfjkrmy.public.blob.vercel-storage.com/:path*" },
-    { "source": "/:slug(\\d{4}-\\d{2}-\\d{2}-[a-z0-9-]+)", "destination": "/sheet.html" }
+    { "source": "/:slug(\\d{4}-\\d{2}-\\d{2}-[a-z0-9-]+)", "destination": "/sheet.html" },
+    { "source": "/:year(\\d{4})/:parashah(bereshit|noach|lech-lecha|vayera|chayei-sara|toldot|vayetzei|vayishlach|vayeshev|miketz|vayigash|vayechi|shemot|vaera|bo|beshalach|yitro|mishpatim|terumah|tetzaveh|ki-tisa|vayakhel|pekudei|vayikra|tzav|shmini|tazria|metzora|achrei-mot|kedoshim|emor|behar|bechukotai|bamidbar|nasso|behaalotcha|shlach|korach|chukat|balak|pinchas|matot|masei|devarim|vaetchanan|eikev|reeh|shoftim|ki-teitzei|ki-tavo|nitzavim|vayeilech|haazinu|vezot-haberakhah|vayakhel-pekudei|tazria-metzora|achrei-mot-kedoshim|behar-bechukotai|chukat-balak|matot-masei|nitzavim-vayeilech)", "destination": "/library.html" },
+    { "source": "/:parashah(bereshit|noach|lech-lecha|vayera|chayei-sara|toldot|vayetzei|vayishlach|vayeshev|miketz|vayigash|vayechi|shemot|vaera|bo|beshalach|yitro|mishpatim|terumah|tetzaveh|ki-tisa|vayakhel|pekudei|vayikra|tzav|shmini|tazria|metzora|achrei-mot|kedoshim|emor|behar|bechukotai|bamidbar|nasso|behaalotcha|shlach|korach|chukat|balak|pinchas|matot|masei|devarim|vaetchanan|eikev|reeh|shoftim|ki-teitzei|ki-tavo|nitzavim|vayeilech|haazinu|vezot-haberakhah|vayakhel-pekudei|tazria-metzora|achrei-mot-kedoshim|behar-bechukotai|chukat-balak|matot-masei|nitzavim-vayeilech)", "destination": "/library.html" },
+    { "source": "/torah/:book(genesis|exodus|leviticus|numbers|deuteronomy)", "destination": "/library.html" },
+    { "source": "/prophets/:book(joshua|judges|i-samuel|ii-samuel|i-kings|ii-kings|isaiah|jeremiah|ezekiel|hosea|joel|amos|obadiah|jonah|micah|nahum|habakkuk|zephaniah|haggai|zechariah|malachi)", "destination": "/library.html" },
+    { "source": "/special/:tag(shuva|chazon|nachamu|shekalim|zachor|parah|hachodesh|hagadol|chanukah|rosh-chodesh|machar-chodesh|rosh-hashana|yom-kippur|sukkot|shmini-atzeret|pesach|shavuot)", "destination": "/library.html" }
   ],
   "headers": [
     { "source": "/fonts/(.*)", "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }] },

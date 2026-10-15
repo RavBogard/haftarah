@@ -4,6 +4,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SLUG, isSlug, weekPath, dataUrl, indexUrl, INDEX_PATH, slugFromPath, VERCEL_WEEK_SOURCE, verseAnchor, parseVerseAnchor } from "../site/app/contract.js";
+import { aliasRewrites } from "../site/app/parashot.js";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 
@@ -46,4 +47,12 @@ test("verse anchors: <reading>-<chapter>-<verse>, and the first release's v<chap
   assert.deepEqual(parseVerseAnchor("torah-6-9"), { reading: "torah", chapter: 6, verse: 9 });
   assert.deepEqual(parseVerseAnchor("#v20-18"), { reading: null, chapter: 20, verse: 18 });
   for (const h of ["", "#", "#top", "#haftarah-54", "#haftarah-x-3", "#m=54-3", "#Haftarah-54-3", "#v-1-2", null]) assert.equal(parseVerseAnchor(h), null, String(h));
+});
+
+test("vercel.json routes exactly parashot.js's allow-list to library.html, after the week route", () => {
+  const v = JSON.parse(readFileSync(join(ROOT, "vercel.json"), "utf8"));
+  assert.deepEqual(v.rewrites.filter(r => r.destination === "/library.html"), aliasRewrites());
+  const week = v.rewrites.findIndex(r => r.destination === "/sheet.html");
+  const first = v.rewrites.findIndex(r => r.destination === "/library.html");
+  assert.ok(week >= 0 && first > week);
 });

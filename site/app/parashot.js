@@ -88,3 +88,28 @@ export function weekTags({ parashah = "", special = null } = {}) {
   const text = `${special || ""} ${festival || ""}`;
   return SPECIALS.filter(s => s.re.test(text)).map(s => s.tag);
 }
+
+const alt = list => list.join("|");
+const PARASHAH_ALIASES = () => [...PARASHOT.map(p => p.key), ...Object.keys(COMBINED)];
+
+/**
+ * vercel.json's rewrites for the library's short addresses, an explicit allow-list (any other path
+ * stays the site's 404). tests/contract.test.mjs holds vercel.json to this. The week's own address,
+ * /<date-slug>, stays the permanent page; these only lead to it.
+ */
+export function aliasRewrites() {
+  const keys = alt(PARASHAH_ALIASES());
+  return [
+    { source: `/:year(\\d{4})/:parashah(${keys})`, destination: "/library.html" },
+    { source: `/:parashah(${keys})`, destination: "/library.html" },
+    { source: `/torah/:book(${alt(TORAH_BOOKS.map(keyOf))})`, destination: "/library.html" },
+    { source: `/prophets/:book(${alt(PROPHET_BOOKS.map(keyOf))})`, destination: "/library.html" },
+    { source: `/special/:tag(${alt(SPECIALS.map(s => s.tag))})`, destination: "/library.html" },
+  ];
+}
+
+/** The same allow-list as a test of one path (web-check's local server routes with it). */
+export function isAliasPath(pathname) {
+  const re = new RegExp(`^/(?:(?:\\d{4}/)?(?:${alt(PARASHAH_ALIASES())})|torah/(?:${alt(TORAH_BOOKS.map(keyOf))})|prophets/(?:${alt(PROPHET_BOOKS.map(keyOf))})|special/(?:${alt(SPECIALS.map(s => s.tag))}))$`);
+  return re.test(String(pathname == null ? "" : pathname));
+}
