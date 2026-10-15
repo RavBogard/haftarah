@@ -80,7 +80,10 @@ test("web-check passes on a two-reading week (Torah first), with a Last time lin
     const two = makeWeekTorah(JSON.parse(await readFile(join(ROOT, "tests", "fixtures", "week-notes", "sheet.json"), "utf8")));
     two.prior = { slug: "2025-10-04-bereshit-machar-chodesh", hebrewEn: "10 Tishrei 5786", cycle: "5786" };
     await writeFile(join(dir, "sheet.json"), JSON.stringify(two, null, 2));
+    // JPS 1985 for the haftarah only: the Torah reading keeps JPS 2023 and says so under its heading.
+    await copyFile(join(ROOT, "tests", "fixtures", "week-notes", "translations.json"), join(dir, "translations.json"));
     const { stdout } = await run(process.execPath, [join(ROOT, "scripts", "web-check.mjs"), dir, "--out", join(iso.home, "dist")], { env: iso.env, cwd: ROOT, maxBuffer: 1 << 24 });
+    assert.match(stdout, /ok {2,}a reading without the edition says it shows JPS 2023/);
     assert.match(stdout, /ok {2,}a heading per reading/);
     assert.match(stdout, /ok {2,}the Last time link goes to last year's sheet/);
     assert.match(stdout, /ok {2,}rows carry the reading in their id/);

@@ -82,7 +82,7 @@ export function initSettings({ host, button, pdfHref = null, trope = true, langs
   // The Translation row, added once the week's data says what it offers (JPS 2023 is always first).
   const setTranslations = (options, current, onChange) => {
     const old = host.querySelector("#trSeg"); if (old) old.closest(".row").remove();
-    if (!options || options.length < 2) return;
+    if (!options || options.length < 2) return { setPressed() {} };
     const row = document.createElement("div");
     row.className = "row";
     const label = document.createElement("span"); label.className = "label"; label.textContent = "Translation";
@@ -96,6 +96,8 @@ export function initSettings({ host, button, pdfHref = null, trope = true, langs
     row.append(label, seg);
     const after = host.querySelector("#langSeg");
     if (after) after.closest(".row").after(row); else host.prepend(row);
+    // The page says which edition is showing once it has switched (a failed load stays on JPS 2023).
+    return { setPressed: key => seg.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", String(x.dataset.translation === key))) };
   };
   return { close, addDownload, setTranslations };
 }

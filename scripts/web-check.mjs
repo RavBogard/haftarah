@@ -174,6 +174,7 @@ async function main() {
         expect("the word panel analyses the first word from words.json", a["word-analysed"] === "true", a["word-analysed"]);
         expect("the word panel leads with a plain-English sentence", /^(A|An|The) /.test(a["word-sentence"] || ""), a["word-sentence"]);
         expect("the word panel never shows a raw code by default", a["word-code"] === "true", a["word-code"]);
+        expect("Show the code opens", a["word-code-opens"] === "true", `${a["word-code-opens"]} (visible closed, open: ${a["word-code-seen"]})`);
         expect("This word here lists the occurrences", Number(a["word-here"]) >= 1, a["word-here"]);
         expect("the whole-Tanakh count is shown", /in the Hebrew Bible/.test(a["word-freq"] || ""), a["word-freq"]);
         expect("STEPBible and Bible Hub links", Number(a["word-links"]) === 2, a["word-links"]);
@@ -188,6 +189,14 @@ async function main() {
         expect("the footer credits the edition shown", /Jewish Publication Society, 1985/.test(a["tr-credit"] || ""), a["tr-credit"]);
         expect("Copy verse would name the edition", a["tr-label"] === "JPS 1985", a["tr-label"]);
         expect("JPS 2023 comes back exactly", a["tr-restored"] === "true", a["tr-restored"]);
+        const altKey = (a["tr-offered"] || "").split(",")[1];
+        expect("the Translation row presses the edition shown, switched from code", a["tr-pressed"] === altKey, a["tr-pressed"]);
+        expect("the Translation row presses JPS 2023 after the restore", a["tr-pressed-back"] === "jps2023", a["tr-pressed-back"]);
+        // A reading the edition is not offered for says so under its heading, naming the edition and the book.
+        const gapReadings = order.length > 1 ? order.filter(r => !(side.translations[r.id] || []).some(v => v.key === altKey)) : [];
+        const altLabel = (Object.values(side.translations).flat().find(v => v.key === altKey) || {}).label;
+        const gapWant = gapReadings.map(r => `${altLabel} is not on Sefaria for ${L.readingModel(raw, r.id).book}; this reading shows JPS 2023.`).join(" | ");
+        expect(gapReadings.length ? "a reading without the edition says it shows JPS 2023" : "no gap line when every reading has the edition", a["tr-gap"] === gapWant, `${a["tr-gap"]} (want ${gapWant})`);
       } else expect("no Translation row without versions", a["tr-offered"] === "", a["tr-offered"]);
       if (side && side.links) {
         expect("a control on every verse for everything on this verse", Number(a["rel-buttons"]) === flat.length, a["rel-buttons"]);
@@ -195,7 +204,8 @@ async function main() {
         expect("the related panel says it is from Sefaria", a["rel-banner"] === "From Sefaria, not edited by CRC", a["rel-banner"]);
         expect("the related panel is visibly not the sheet", a["rel-alt"] === "true" && a["rel-alt-gone"] === "true", `${a["rel-alt"]} ${a["rel-alt-gone"]}`);
         expect("groups start collapsed", a["rel-closed"] === "true", a["rel-closed"]);
-        expect("a work the sheet cites is marked", Number(a["rel-used"]) >= 1, a["rel-used"]);
+        // Depends on the fixture: its first verse's links.json entry lists a work the sheet itself cites.
+        expect("a work the sheet cites is marked",Number(a["rel-used"]) >= 1, a["rel-used"]);
         expect("Hebrew-only texts hide until asked for", a["rel-he-hidden"] === "true" && (a["rel-he-shown"] === undefined || a["rel-he-shown"] === "true"), `${a["rel-he-hidden"]} ${a["rel-he-shown"]}`);
         expect("Quoting Commentary comes last when present", a["rel-has-qc"] !== "true" || /^Quoting Commentary/.test(a["rel-last"] || ""), `${a["rel-has-qc"]} ${a["rel-last"]}`);
         expect("the panel kind is On this verse", a["rel-kind"] === "On this verse", a["rel-kind"]);

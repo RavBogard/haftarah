@@ -21,6 +21,16 @@ export function clean(html) {
   return t.innerHTML;
 }
 
+// One fetch shared by every caller, unless it fails: a null answer is not kept, so the next tap retries.
+export function retryMemo(load) {
+  let p = null;
+  return () => {
+    if (!p) p = Promise.resolve().then(load).catch(() => null).then(x => { if (x == null) { p = null; return null; } return x; });
+    return p;
+  };
+}
+const jsonOrNull = url => fetch(url).then(r => (r.ok ? r.json() : null));
+
 export function initPanel({ page, L, sefariaUrl, track = () => {} }) {
   const esc = L.escapeHtml, dash = L.enDash, SIG = L.SIGLA, NAMES = L.REGISTER_NAMES;
   const $ = id => document.getElementById(id);
@@ -105,14 +115,10 @@ export function initPanel({ page, L, sefariaUrl, track = () => {} }) {
   const senses = arr => !arr || !arr.length ? "" : `<ol>${arr.map(s => `<li>${clean(s && s.definition)}${senses(s && s.senses)}</li>`).join("")}</ol>`;
   const lexBlock = x => `<span class="hw" lang="he" dir="rtl">${esc(x.headword)}</span><span class="lexname">${esc(x.lexicon)}${x.morphology ? " · " + esc(x.morphology) : ""}</span>${senses(x.senses)}`;
   // words.json, fetched once per page on the first word tap, only when the week has it.
-  let wordsFile = null;
-  const loadWords = () => {
-    if (!page.side || !page.side.words) return Promise.resolve(null);
-    if (!wordsFile) wordsFile = fetch(dataUrl(page.slug, SIDE_FILES.words)).then(r => (r.ok ? r.json() : null)).catch(() => null);
-    return wordsFile;
-  };
+  const wordsFile = retryMemo(() => jsonOrNull(dataUrl(page.slug, SIDE_FILES.words)));
+  const loadWords = () => (!page.side || !page.side.words ? Promise.resolve(null) : wordsFile());
   const chips = (list) => list.map(c => `<span class="chip"><span class="he hebrew" lang="he" dir="rtl">${esc(c.t)}</span>${esc(c.text)}</span>`).join("");
-  function analysisHtml(d, entry, row, readingId, words) {
+  function analysisHtml(d, entry, readingId, words) {
     const parts = [`<p class="sense">${esc(d.sentence)}</p>`];
     if (d.before.length || d.after.length) parts.push(`<p class="chips"><span class="chips-label">Prefixes and suffixes</span>${chips(d.before)}${chips(d.after)}</p>`);
     if (d.detail) parts.push(`<div class="detail">${esc(d.detail)}<details class="code"><summary>Show the code</summary><code>${esc(d.code)}</code></details></div>`);   // a div: a <p> cannot hold a <details>
@@ -151,7 +157,7 @@ export function initPanel({ page, L, sefariaUrl, track = () => {} }) {
       const entry = list ? list.find(x => x.i === i) : null;
       const d = describe(entry || null, (words && words.lemmas) || {});
       const analysed = !!(entry && entry.seg && entry.seg.length);
-      fill(token, `${head}${analysisHtml(d, entry, row, readingId, words)}<div class="bdb" id="bdb">${analysed ? `<details class="lex"><summary>Dictionary (BDB)</summary><p class="loading">Looking it up…</p></details>` : `<p class="loading">Looking it up…</p>`}</div>` + openLink(esc(sefariaUrl(ref)), "Open the verse on Sefaria"));
+      fill(token, `${head}${analysisHtml(d, entry, readingId, words)}<div class="bdb" id="bdb">${analysed ? `<details class="lex"><summary>Dictionary (BDB)</summary><p class="loading">Looking it up…</p></details>` : `<p class="loading">Looking it up…</p>`}</div>` + openLink(esc(sefariaUrl(ref)), "Open the verse on Sefaria"));
       return { analysed, entry };
     });
     shown.catch(() => {});
@@ -176,16 +182,13 @@ export function initPanel({ page, L, sefariaUrl, track = () => {} }) {
   text.addEventListener("keydown", e => { const w = e.target.closest(".he .w"); if (w && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openWord(w); } });
 
   // ---- everything on this verse (spec 5.7): Sefaria's related texts, visibly not the sheet ----
-  let linksFile = null;
-  const loadLinks = () => {
-    if (!page.side || !page.side.links) return Promise.resolve(null);
-    if (!linksFile) linksFile = fetch(dataUrl(page.slug, SIDE_FILES.links)).then(r => (r.ok ? r.json() : null)).catch(() => null);
-    return linksFile;
-  };
+  const linksFile = retryMemo(() => jsonOrNull(dataUrl(page.slug, SIDE_FILES.links)));
+  const loadLinks = () => (!page.side || !page.side.links ? Promise.resolve(null) : linksFile());
   const shortRef = (ref, title) => { const s = String(ref).startsWith(title) ? String(ref).slice(title.length).replace(/^\s*on\s+/, "").trim() : String(ref); return s || String(ref); };
   const BANNER = `<p class="from-sefaria">From Sefaria, not edited by CRC</p>`;
-  function relatedHtml(r, data) {
+  function relatedHtml(r, data, unloaded = false) {
     const ref = esc(dash(r.v.ref));
+    if (unloaded) return `<h2>${ref}</h2>${BANNER}<p class="inverse">The related texts could not be loaded; try again in a minute.</p>`;
     if (!data) return `<h2>${ref}</h2>${BANNER}<p class="inverse">Nothing is listed for this verse.</p>`;
     if (data.failed) return `<h2>${ref}</h2>${BANNER}<p class="inverse">Sefaria did not answer for this verse when the sheet was published.</p>`;
     const work = w => {
@@ -207,7 +210,7 @@ export function initPanel({ page, L, sefariaUrl, track = () => {} }) {
     const file = await loadLinks();
     if (token !== seq) return { groups: 0, n: 0 };
     const data = file && file.readings && file.readings[r.reading] && file.readings[r.reading].verses && file.readings[r.reading].verses[r.row.dataset.verse];
-    fill(token, relatedHtml(r, data || null));
+    fill(token, relatedHtml(r, data || null, file == null && !!(page.side && page.side.links)));   // the file failed to load, not a verse it lacks
     pBody.dataset.related = r.row.id;
     return { groups: (data && data.groups || []).length, n: (data && data.n) || 0 };
   }

@@ -404,11 +404,12 @@ html[data-present] { overflow: hidden; }
 .panel .wlinks { display: flex; flex-wrap: wrap; gap: 0 1.2rem; margin: 0; }
 .panel .wlinks .open { min-height: max(2.75rem, 44px); margin-top: 0; }
 .panel .bdb { margin-top: .9rem; }
+.panel .bdb > details.lex > .lex { border-top: 0; margin-top: .35rem; }   /* the fold draws the rule once */
 
 /* ---- the translation picker: another edition in the English column; the notes stay JPS's ---- */
-.tr-note { color: var(--ink-2); font-style: italic; font-size: .88rem; margin: 0 0 .75rem; }
+.tr-note, .tr-gap { color: var(--ink-2); font-style: italic; font-size: .88rem; margin: 0 0 .75rem; }
 .row .en.alt { color: var(--ink); }
-.foot .tr-credit { display: block; width: 100%; }
+.foot .tr-credits, .foot .tr-credit { display: block; width: 100%; }
 
 /* ---- everything on this verse: Sefaria's related texts, visibly not the sheet ---- */
 :root { --panel-alt: #f6f4ef; }

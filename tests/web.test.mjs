@@ -370,3 +370,30 @@ test("the word-analysis and translation credits are in README and the page", () 
   const sheetSrc = readSite(new URL("../site/app/sheet.js", import.meta.url), "utf8");
   assert.ok(sheetSrc.includes("Word analysis:"), "the page credits the word data while a week has it");
 });
+
+import { altLines } from "../site/app/sheet.js";
+import { retryMemo } from "../site/app/panel.js";
+test("altLines: another edition's verse copies as one line per <br>, without its tags", () => {
+  assert.equal(altLines("The first line,<br>the <i>second</i> line.<br/>  ", L), "The first line,\nthe second line.");
+  assert.equal(altLines("One line only.", L), "One line only.");
+  assert.equal(altLines(null, L), "");
+});
+
+test("retryMemo shares one load, but a failed or empty load is not kept: the next call retries", async () => {
+  let n = 0;
+  const answers = [() => { throw new Error("offline"); }, () => null, () => ({ ok: 1 })];
+  const get = retryMemo(async () => answers[n++]());
+  assert.equal(await get(), null);
+  assert.equal(await get(), null);
+  const [a, b] = await Promise.all([get(), get()]);
+  assert.deepEqual(a, { ok: 1 }); assert.equal(a, b);
+  assert.equal(await get(), a);
+  assert.equal(n, 3, "the good answer is kept; nothing loads again");
+});
+
+test("the gap line and the failed-links line are the agreed strings", () => {
+  const sheetSrc = readSite(new URL("../site/app/sheet.js", import.meta.url), "utf8");
+  assert.ok(sheetSrc.includes("is not on Sefaria for ${part.model.book}; this reading shows JPS 2023."));
+  const panelSrc = readSite(new URL("../site/app/panel.js", import.meta.url), "utf8");
+  assert.ok(panelSrc.includes("The related texts could not be loaded; try again in a minute."));
+});

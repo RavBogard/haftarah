@@ -1,7 +1,7 @@
 // The week page. Data comes from /data/weeks/<slug>/sheet.json (the Blob store behind the rewrite);
 // the model comes from lib.js's sheetModel, so the page prepares verses exactly as the print does.
 import { applyStored, initSettings } from "./settings.js";
-import { initPanel, clean } from "./panel.js";
+import { initPanel, clean, retryMemo } from "./panel.js";
 import { slugFromPath, dataUrl, verseAnchor, parseVerseAnchor, PDF_FILES, isSlug, SIDE_FILES } from "./contract.js";
 import { load } from "./storage.js";
 
@@ -47,6 +47,11 @@ export function citationText({ he, en, ref, translation, url, mode = "both" }) {
   lines.push(`— ${ref}${mode !== "he" && translation ? ` (${translation})` : ""}`);
   lines.push(url);
   return lines.join("\n");
+}
+
+// Another edition's verse as plain lines: split on <br> first, since plainText folds a newline into a space.
+export function altLines(html, L) {
+  return String(html == null ? "" : html).split(/<br\s*\/?>/i).map(p => L.plainText(p).text.trim()).filter(Boolean).join("\n");
 }
 
 // The teacher highlights on one verse. A highlight without "reading" belongs to the haftarah.
@@ -377,7 +382,7 @@ export async function run() {
     const alt = html.dataset.translation && html.dataset.translation !== "jps2023" && r.row.querySelector(".en.alt");
     const text = b.dataset.act === "link" ? url : citationText({
       he: L.plainText(r.v.heHtml).text.trim(),
-      en: alt ? L.plainText(r.row.querySelector(".en").innerHTML.replace(/<br\s*\/?>/g, "\n")).text.trim() : r.v.enLines.map(t => L.plainText(t).text.trim()).join("\n"),
+      en: alt ? altLines(r.row.querySelector(".en").innerHTML, L) :r.v.enLines.map(t => L.plainText(t).text.trim()).join("\n"),
       ref: L.enDash(r.v.ref), translation: alt ? api.translation.label : translationLabel(r.model.front.provenance.en), url,
       mode: html.dataset.lang || "both",
     });
@@ -398,18 +403,21 @@ export async function run() {
 
   // ---- the translation picker (spec 5.6): the English column shows another edition; the notes stay JPS's ----
   const trOptions = translationOptions(api.side);
-  let trFile = null;
-  const loadTranslations = () => { if (!trFile) trFile = fetch(dataUrl(slug, SIDE_FILES.translations)).then(r => (r.ok ? r.json() : null)).catch(() => null); return trFile; };
+  const loadTranslations = retryMemo(() => fetch(dataUrl(slug, SIDE_FILES.translations)).then(r => (r.ok ? r.json() : null)));
   api.translation = { key: "jps2023", label: "JPS 2023", credits: [] };
+  let trSeq = 0, trButtons = null;   // trSeq: a slow load for an earlier choice is dropped
   api.setTranslation = async key => {
     const opt = trOptions.find(o => o.key === key) || trOptions[0];
+    const my = ++trSeq;
     const file = opt.key === "jps2023" ? null : await loadTranslations();
-    const credits = [];
+    if (my !== trSeq) return;
+    const credits = [], gaps = new Set();
     for (const r of rows) {
       const en = r.row.querySelector(".en");
       const version = file && file.readings && file.readings[r.reading] && (file.readings[r.reading].versions || []).find(v => v.key === opt.key);
-      const html = version && version.verses && version.verses[r.row.dataset.verse];
-      if (html) { en.innerHTML = clean(html); en.classList.add("alt"); if (version.credit && !credits.includes(version.credit)) credits.push(version.credit); }
+      if (file && !version) gaps.add(r.reading);
+      const verseHtml = version && version.verses && version.verses[r.row.dataset.verse];
+      if (verseHtml) { en.innerHTML = clean(verseHtml); en.classList.add("alt"); if (version.credit && !credits.includes(version.credit)) credits.push(version.credit); }
       else { en.innerHTML = r.enHtml; en.classList.remove("alt"); }   // enHtml was captured after keyButtons ran: the letters are in it
     }
     const shown = opt.key !== "jps2023" && credits.length > 0;
@@ -417,13 +425,23 @@ export async function run() {
     let note = text.querySelector(".tr-note");
     if (shown && !note) { note = el("p", "tr-note", "Notes and glosses refer to the JPS translation."); text.prepend(note); }
     if (!shown && note) note.remove();
+    // Two readings, the edition on Sefaria for one only: the other says it keeps JPS 2023.
+    text.querySelectorAll(".tr-gap").forEach(n => n.remove());
+    if (shown && multi) for (const part of parts) {
+      if (!gaps.has(part.reading.id)) continue;
+      const head = $(`reading-${part.reading.id}`); if (!head) continue;
+      head.after(el("p", "tr-gap", esc(`${opt.label} is not on Sefaria for ${part.model.book}; this reading shows JPS 2023.`)));
+    }
     let credit = $("footTr");
-    if (shown) { if (!credit) { credit = el("span", "tr-credit"); credit.id = "footTr"; $("foot").append(credit); } credit.textContent = credits.join(" "); }
-    else if (credit) credit.remove();
+    if (shown) {
+      if (!credit) { credit = el("span", "tr-credits"); credit.id = "footTr"; $("foot").append(credit); }
+      credit.replaceChildren(...credits.map(c => el("span", "tr-credit", esc(c))));   // one line per edition credited
+    } else if (credit) credit.remove();
     api.translation = { key: html.dataset.translation, label: shown ? opt.label : "JPS 2023", credits };
+    if (trButtons) trButtons.setPressed(api.translation.key);   // a failed load or a switch from code leaves the row right
   };
   const stored = load("translation");
-  settings.setTranslations(trOptions, trOptions.some(o => o.key === stored) ? stored : "jps2023", k => { api.setTranslation(k); });
+  trButtons = settings.setTranslations(trOptions, trOptions.some(o => o.key === stored) ? stored : "jps2023", k => { api.setTranslation(k); });
   if (stored && trOptions.some(o => o.key === stored)) api.setTranslation(stored);
 
   // ---- presenter view: ?present on load, or the Aa card's button (which starts at the verse on screen) ----
@@ -555,15 +573,20 @@ async function runCheck(api, L) {
   const trSeg = document.getElementById("trSeg");
   h.dataset.checkTrOffered = trSeg ? [...trSeg.querySelectorAll("button")].map(b => b.dataset.translation).join(",") : "";
   if (trSeg && api.setTranslation) {
-    const first = rows[0].row.querySelector(".en"), was = first.innerHTML;
+    const was = rows.map(r => r.row.querySelector(".en").innerHTML);
+    const pressed = () => (trSeg.querySelector('button[aria-pressed="true"]') || { dataset: {} }).dataset.translation || "";
     const alt = trSeg.querySelector("button:nth-child(2)").dataset.translation;
-    await api.setTranslation(alt);
-    h.dataset.checkTrEn = first.textContent.trim();
+    await api.setTranslation(alt);   // from code, as a stored choice is applied: the row must follow
+    h.dataset.checkTrPressed = pressed();
+    const shownRow = rows.find(r => r.row.querySelector(".en.alt"));   // a reading the edition skips keeps JPS 2023
+    h.dataset.checkTrEn = shownRow ? shownRow.row.querySelector(".en").textContent.trim() : "";
     h.dataset.checkTrNote = String(!!document.querySelector("#text > .tr-note:first-child"));
     h.dataset.checkTrCredit = (document.getElementById("footTr") || {}).textContent || "";
     h.dataset.checkTrLabel = api.translation.label;
+    h.dataset.checkTrGap = [...document.querySelectorAll("#text .tr-gap")].map(n => n.textContent).join(" | ");
     await api.setTranslation("jps2023");
-    h.dataset.checkTrRestored = String(first.innerHTML === was && !document.querySelector(".tr-note") && !document.getElementById("footTr"));
+    h.dataset.checkTrPressedBack = pressed();
+    h.dataset.checkTrRestored = String(rows.every((r, i) => r.row.querySelector(".en").innerHTML === was[i]) && !document.querySelector(".tr-note, .tr-gap") && !document.getElementById("footTr"));
   }
   // Everything on this verse: a control per verse when the week has links.json; the panel is visibly not the sheet.
   h.dataset.checkRelButtons = String(document.querySelectorAll('.vapp .act[data-act="related"]').length);
@@ -578,7 +601,7 @@ async function runCheck(api, L) {
     h.dataset.checkRelHeHidden = String([...pb.querySelectorAll(".rel.he-only")].every(b => getComputedStyle(b).display === "none"));
     const cb = pb.querySelector("#relHe"); if (cb) { cb.click(); h.dataset.checkRelHeShown = String([...pb.querySelectorAll(".rel.he-only")].every(b => getComputedStyle(b).display !== "none")); }
     h.dataset.checkRelHasQc = String([...pb.querySelectorAll(".rel-group summary")].some(s => /^Quoting Commentary/.test(s.textContent)));
-    h.dataset.checkRelLast =(pb.querySelector(".rel-group:last-of-type summary") || {}).textContent || "";
+    h.dataset.checkRelLast = (pb.querySelector(".rel-group:last-of-type summary") || {}).textContent || "";
     h.dataset.checkRelKind = document.getElementById("panelKind").textContent;
     api.closeAll();
     h.dataset.checkRelAltGone = String(!panelEl.dataset.alt);
@@ -595,6 +618,10 @@ async function runCheck(api, L) {
     h.dataset.checkWordFreq = (pb.querySelector(".freq") || {}).textContent || "";
     h.dataset.checkWordLinks = String(pb.querySelectorAll(".wlinks a").length);
     h.dataset.checkWordCode = String(!!pb.querySelector(".code") && !pb.querySelector(".code").open);
+    // "Show the code" opens: the code is hidden while folded and shows once the fold is open.
+    const codeFold = pb.querySelector("details.code");
+    // checkVisibility, not a box: a closed fold's content still measures, it is just not rendered.
+    if (codeFold) { const c = codeFold.querySelector("code"), before = c.checkVisibility(); codeFold.open = true; const after = c.checkVisibility(); h.dataset.checkWordCodeOpens = String(!before && after && getComputedStyle(c).display !== "none"); h.dataset.checkWordCodeSeen = `${before} ${after}`; codeFold.open = false; }
     h.dataset.checkWordBdbOpen = String(!pb.querySelector(".bdb > details"));
     const wordControls = [...pb.querySelectorAll(".code summary, .bdb summary, .wlinks a, .occ-go")];
     h.dataset.checkWordMin = wordControls.length ? String(Math.floor(Math.min(...wordControls.map(x => x.getBoundingClientRect().height)))) : "none";
