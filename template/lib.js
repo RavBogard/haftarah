@@ -389,7 +389,7 @@
   // the verses lose `book` and the entries lose `id` (the print never read them); the glosses array
   // is the reading's own, so a fix written into the view (lint --fix) lands in the file.
   function readingView(data, readingId) {
-    if (!data || Number(data.schema) < 3) return data;
+    if (!data || !(Number(data.schema) >= 3)) return data;
     const all = readings(data);
     const r = readingId ? all.find(x => x.id === readingId) : primaryReading(data);
     if (!r) throw new Error(readingId ? `no reading "${readingId}" in this sheet` : "this sheet has no readings");
@@ -412,6 +412,8 @@
     return String(name == null ? "" : name).toLowerCase().replace(/['’]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
   }
 
+  // The hash runs over UTF-16 code units of the joined string (charCodeAt), not bytes: any other
+  // producer of ids (the MCP, a script in another language) must hash the same way.
   // A commentary entry's id: given once and kept when the entry is edited, never recomputed. Made
   // from where the entry sits and what it cites when it is first given, so the same file always gets
   // the same ids: "e-" and eight hex digits of FNV-1a.

@@ -1,10 +1,9 @@
-import { test } from "node:test";
+import { test, mock } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { mock } from "node:test";
 import { fileURLToPath } from "node:url";
 import { isolatedEnv } from "./helpers/isolatedEnv.mjs";
 import { createRequire } from "node:module";
@@ -124,4 +123,11 @@ test("migrate3 warns on stderr when a schema-2 file has no haftarah.book, and st
   assert.equal(m.mock.calls.length, 1);
   assert.match(String(m.mock.calls[0].arguments[0]), /no haftarah\.book; verses get no book/);
   assert.ok(out.readings[0].verses.every(v => !("book" in v)));
+});
+
+test("readingView returns a file with no schema key as the same object, like readings()", () => {
+  const d = { slug: "x", haftarah: { ref: "A 1:1", book: "A" }, verses: [] };
+  assert.equal(L.readingView(d), d);
+  assert.equal(L.readingView(d, "haftarah"), d);
+  assert.equal(L.readingView({ schema: "garbage", verses: [] }).schema, "garbage");
 });
