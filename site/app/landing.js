@@ -29,7 +29,7 @@ export async function run() {
     document.addEventListener("securitypolicyviolation", e => errors.push(`CSP blocked ${e.blockedURI || "inline"} (${e.violatedDirective})`));
   }
   applyStored();
-  initSettings({ host: $("settings"), button: $("aaBtn"), trope: false });
+  initSettings({ host: $("settings"), button: $("aaBtn"), trope: false, langs: false });
   const status = (msg) => { $("status").innerHTML = msg; $("status").hidden = false; };
   let index;
   try {

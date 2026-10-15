@@ -102,3 +102,32 @@ test("trapTarget wraps Tab at the last control and Shift+Tab at the first, and l
   assert.equal(trapTarget(-1, 5, true), 4);
   assert.equal(trapTarget(0, 0, false), null);
 });
+
+import { PREFIX, key, load, store, migrateKeys } from "../site/app/storage.js";
+
+// A Storage that keeps its items in a Map.
+function memoryStorage(init = {}) {
+  const m = new Map(Object.entries(init));
+  return { getItem: k => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)), removeItem: k => m.delete(k), dump: () => Object.fromEntries(m) };
+}
+
+test("migrateKeys moves the first release's keys under the prefix once; a prefixed value wins", () => {
+  const s = memoryStorage({ size: "4", theme: "dark", trope: "1", "haftarah:v1:theme": "light", other: "x" });
+  assert.deepEqual(migrateKeys(s), ["size", "trope"]);
+  assert.deepEqual(s.dump(), { "haftarah:v1:theme": "light", other: "x", "haftarah:v1:size": "4", "haftarah:v1:trope": "1" });
+  assert.deepEqual(migrateKeys(s), []);
+});
+
+test("load and store use the prefix and survive a storage that throws", () => {
+  const s = memoryStorage();
+  store("lang", "he", s);
+  assert.equal(s.getItem("haftarah:v1:lang"), "he");
+  assert.equal(load("lang", s), "he");
+  store("lang", null, s);
+  assert.equal(load("lang", s), null);
+  assert.equal(key("size"), `${PREFIX}size`);
+  const broken = { getItem() { throw new Error("SecurityError"); }, setItem() { throw new Error("QuotaExceededError"); }, removeItem() { throw new Error("SecurityError"); } };
+  assert.equal(load("size", broken), null);
+  assert.doesNotThrow(() => store("size", "3", broken));
+  assert.deepEqual(migrateKeys(broken), []);
+});

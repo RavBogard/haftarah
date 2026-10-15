@@ -97,6 +97,8 @@ async function main() {
       expect("current verse marked", a.current === v.ref, a.current);
       expect("dark paper", a.paper === "rgb(18, 17, 16)", a.paper);
       expect("title", /·/.test(a.title || ""), a.title);
+      expect("Show Hebrew hides the English", a["lang-he"] === "none", a["lang-he"]);
+      expect("Show English hides the Hebrew", a["lang-en"] === "none", a["lang-en"]);
       expect("one tab stop per verse for the Hebrew words", Number(a["word-stops"]) === sheet.verses.length, a["word-stops"]);
       expect("the closed panel is inert", a["panel-inert"] === "true", a["panel-inert"]);
       expect("every source button names the panel", a["src-uncontrolled"] === "0", a["src-uncontrolled"]);

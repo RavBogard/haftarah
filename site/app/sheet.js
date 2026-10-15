@@ -259,6 +259,11 @@ function runCheck(api, L) {
   controls.at(-1).dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true }));
   h.dataset.checkTrap = document.activeElement === controls[0] ? "ok" : "fail";
   document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  // Show: Hebrew alone hides the English, English alone the Hebrew.
+  const r0 = rows[0].row;
+  h.dataset.lang = "he"; h.dataset.checkLangHe = getComputedStyle(r0.querySelector(".en")).display;
+  h.dataset.lang = "en"; h.dataset.checkLangEn = getComputedStyle(r0.querySelector(".he")).display;
+  h.dataset.lang = "both";
   // Two thirds down: far enough that a rail which scrolls short of its target misses it.
   const target = rows[Math.floor(rows.length * 2 / 3)];
   target.row.scrollIntoView({ block: "start" });
