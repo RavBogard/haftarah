@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { slugFromPath, dataUrl, rangeLabel, countLabel } from "../site/app/sheet.js";
+import { readFileSync as readSite } from "node:fs";
 
 test("slugFromPath normalizes case and a trailing slash", () => {
   assert.equal(slugFromPath("/2026-10-17-noach"), "2026-10-17-noach");
@@ -258,4 +259,9 @@ test("rowHtml shows a week with a Torah reading on two lines: the Torah's ref, t
   const html = rowHtml({ slug: "s", shabbat: "S", ref: "Isaiah 54:1–55:5", readings: [{ kind: "torah", ref: "Genesis 6:9–7:16" }, { kind: "haftarah", ref: "Isaiah 54:1–55:5" }] }, false, esc);
   assert.match(html, /<span class="r two"><span>Genesis 6:9–7:16<\/span><span>Isaiah 54:1–55:5<\/span><\/span>/);
   assert.match(rowHtml({ slug: "s", shabbat: "S", ref: "R" }, false, esc), /<span class="r">R<\/span>/);
+});
+
+test("Hebcal is credited (CC BY 4.0) on every page and in README", () => {
+  const line = "Calendar and readings: Hebcal (CC BY 4.0).";
+  for (const f of ["../site/index.html", "../site/library.html", "../site/app/sheet.js", "../README.md"]) assert.ok(readSite(new URL(f, import.meta.url), "utf8").includes(line), f);
 });

@@ -1,4 +1,4 @@
-# Weekly haftarah sheet: runbook v5
+# Weekly haftarah sheet: runbook v6
 
 One sheet a week for Torah from Scratch at Central Reform Congregation. The template never changes during a weekly run; only `weeks/<slug>/sheet.json` does. `README.md` documents every field of that file. Read `PRODUCT.md` once per session. This file is the one home of the standing rules; the Cowork skill only points here and carries the drop-box credentials.
 
@@ -36,7 +36,11 @@ node scripts/fetch.mjs --ref "Isaiah 54:1-55:5" --date 2026-10-17           # Da
 
 With no `--date`, when the coming Shabbat already has a folder, fetch names both Shabbatot and stops; offer both in one line. Otherwise tell Daniel in one line: the date, the parashah, the haftarah (and why, if special), and the parashah's own haftarah when they differ. When there is a real choice (special Shabbat, Ashkenazi/Sephardi ranges), it goes in the briefing's "This Shabbat" section and he picks by pop-up after the briefing.
 
-If the working folder holds an earlier year's record of the same reading, load its `sheet.json` and `briefing.md`, show Daniel last time's entries, and ask what to keep.
+Fetch also prints Hebcal's aliyot for the week (the full list, the maftir with its reason on a special Shabbat, the triennial range) and looks up last year's sheet for the same parashah in the web library, writing `prior.json` and saying `Last time: <slug>` or `Last time: none`. Carry-forward is on by default (Daniel cuts): last year's entries that fall in this year's readings come into `sheet.json` as `status: "carried"`, with a "See also" sentence in the opening note; `--no-carry` skips that when Daniel asks for a fresh start. The web copy has only what printed; when last year's cuts matter, restore that week's folder from `Haftarah working/` and run fetch with `--prior <folder>` (`--prior` requires a folder path; with no value fetch refuses). The `customs/crc.json: not yet confirmed …` line is a reminder for Daniel, not an error.
+
+A fetch that gets both the haftarah's and the Torah's texts takes about 3.5 minutes. Run it with a long timeout or in the background, and do not treat silence as a hang.
+
+`--ref "<ref>"` on a kept week (one whose folder already exists) no longer refreshes `candidates.json` or `texts.json` for the new ref. Use `--force` (which also wipes the haftarah's entries; the message says so), or delete the folder's texts files first.
 
 Sheets are not numbered. Each is known by its date ("6 Cheshvan 5787").
 
@@ -44,29 +48,31 @@ Sheets are not numbered. Each is known by its date ("6 Cheshvan 5787").
 
 `fetch.mjs` writes:
 
-- `sheet.json`: Hebrew (Miqra according to the Masorah) and English (JPS Gender-Sensitive), verse-aligned. Never overwritten without `--force`. Leave the divine name alone in the data; the renderer sets it as יי.
+- `sheet.json`: schema 3: the haftarah (and, once Daniel picks it, the Torah selection, first), Hebrew and English verse-aligned, and `leyning`, Hebcal's aliyot. Never overwritten without `--force`; a later run with a Torah pick adds the Torah reading to it. Leave the divine name alone in the data; the renderer sets it as יי.
 - `candidates.json`: every source Sefaria links to the passage.
 - `texts.json`: the full Hebrew and every English version of the core commentators on the range, and of the linked Talmud, midrash, liturgy, Targum and Zohar segments. Section-filed commentaries are marked `sectionFiled` (Abarbanel files a whole unit under its first verse: his comment on Isaiah 54:7 is at "Abarbanel on Isaiah 54:6"). Draft from this file instead of calling Sefaria verse by verse.
+- `candidates-torah.json` and `texts-torah.json`: the same for the Torah selection, once there is one (a core list of Torah commentators; super-commentaries and quoting commentaries set aside).
+- `prior.json`: last year's sheet for this parashah, by reading, with its entry ids; or why there is none.
 
-Then run `node scripts/digest.mjs weeks/<slug>` and read `digest.md`: one page, verse by verse, of what the tradition says where. It is the map for the briefing.
+Then run `node scripts/digest.mjs weeks/<slug>` and read `digest.md`: the Torah calendar, Last time, then each reading verse by verse. It is the map for the briefing.
 
 Check fetch's proposed incipit against the verse; the name a haftarah is known by is not always its first words.
 
 ## 3. The briefing
 
-Before any question about sources, give Daniel a briefing in chat of about one printed page (500 to 700 words), plain prose under short labelled sections, written so he can read it cold. Every named source must be real: take refs from `digest.md`/`texts.json`.
+Before any question about sources, give Daniel a briefing in chat of about one printed page (500 to 700 words for the haftarah; about 350 more for the Torah), plain prose under short labelled sections, written so he can read it cold. Every named source must be real: take refs from `digest.md`/`texts.json`.
 
 1. **The portion.** Panel by panel, with verse ranges: who speaks, to whom, the images, how it ends.
-2. **This Shabbat.** The calendar reason, other Shabbatot that use the same verses, the link to the parashah, and any choice of range.
+2. **This Shabbat.** The calendar reason, other Shabbatot that use the same verses, the link to the parashah, and any choice of range. **The Torah selection** (CRC picks it weekly; spec 11.4 is open until Daniel says otherwise): give the parashah's shape by aliyah from the aliyot list in `digest.md`, the special maftir and why on a special Shabbat, and a recommended selection with a sentence on why.
 3. **Major themes.** Three to five, two or three sentences each, tied to verses.
 4. **The commentary tradition.** The famous verses and the Talmud, midrash and liturgy built on them; where Targum, Rashi, Radak, Ibn Ezra, Abarbanel, Malbim and others agree and split; any textual crux. Name each source by its Sefaria ref and say in a sentence what it argues.
 5. **The critical view.** Date, setting, authorship, composition, inner-biblical allusion, naming only works in `bibliography/<book>.md`.
 
-No questions inside the briefing. Then number the issues it raised (one line each) and offer them as a multi-select pop-up with "Take the whole map", plus the range pop-up when there is a choice. Save the briefing, the numbered issues and Daniel's picks to `weeks/<slug>/briefing.md`; it is delivered with the week.
+No questions inside the briefing. Then number the issues it raised (one line each) and offer them as a multi-select pop-up with "Take the whole map", plus the range pop-up when there is a choice. Then a pop-up for the Torah selection: the aliyot one by one, a run of them (aliyot 1-2), the triennial range, the maftir, or "my own range" (prose). Run `node scripts/fetch.mjs --date <date> --torah-pick aliyah:1-2` (or `--torah "<ref>"`), then `node scripts/digest.mjs weeks/<slug>` again. Every fetch run (unless `--no-carry`, which Daniel may ask for) copies last year's entries that fall in this year's readings into the sheet as `status: "carried"` and adds a "See also the <year> sheet" sentence to the opening note; show Daniel the carried entries with the rest and set any he cuts to `rejected` (deleting a carried entry brings it back on the next run). A "See also" sentence Daniel removes by hand comes back on the next fetch unless `--no-carry` is passed. Save the briefing, the numbered issues and Daniel's picks to `weeks/<slug>/briefing.md`; it is delivered with the week.
 
 ## 4. Digging in
 
-Do not run a second round of explanation; the briefing is that round. Hand the drafting to a subagent with `docs/prompts/draft-entries.md`, filled in with the week's slug, reading and chosen issues. It drafts from `texts.json`, writes `weeks/<slug>/draft_entries.json`, and reports every entry in full. Review its work (citations, translation, God-language, whether it missed a section-filed commentary), then merge the entries into `sheet.json`.
+Do not run a second round of explanation; the briefing is that round. Hand the drafting to a subagent with `docs/prompts/draft-entries.md`, filled in with the week's slug, reading and chosen issues. It drafts from `texts.json`, writes `weeks/<slug>/draft_entries.json`, and reports every entry in full. Brief the drafting subagent per reading: the Torah from `texts-torah.json`, the haftarah from `texts.json`; it should prefer voices not carried from last year unless Daniel keeps one. Review its work (citations, translation, God-language, whether it missed a section-filed commentary), then merge the entries into the reading's `commentary` in `sheet.json`. The Torah gets the same three registers. Lint prints each reading's entries against the cap (24 to start) and warns above it; cut before the build rather than after.
 
 - **Classical** (red square) and **modern** (blue circle): quote, adapt or abridge a Sefaria text; set `sourceRef`. A Hebrew-only source is translated faithfully with `translation: "claude"`; abridge with `kind: "abridged"`.
 - **What historians say** (teal triangle): 60 to 120 words, a short descriptive `source` title, naming only works from `bibliography/<book>.md` in `works`. The works themselves cannot be checked from a session, so a summary gives the standard reading and points to the work ("see Blenkinsopp"); it never claims a page number or a quotation it has not seen (Daniel's ruling, 2026-10-08). When a week needs a work not yet listed, add the line, verify the work exists (publisher catalogue or WorldCat), and mention the addition in the delivery line.
@@ -78,7 +84,7 @@ Do not run a second round of explanation; the briefing is that round. Hand the d
 Draft each and show it with the rest.
 
 - `openingNote`: the calendar paragraph, then the historical setting in one or two paragraphs.
-- `haftarah.incipit`: check what fetch proposed (step 2).
+- each reading's `incipit`: check what fetch proposed (step 2). Keep the opening note's "See also" sentence unless Daniel cuts it; it prints on both front pages.
 - `glossary[]`: names and places in the passage, one or two sentences each, with the Hebrew.
 - `nextWeek`: fetch fills it from Hebcal. When the coming Shabbat has a choice, show both and let Daniel pick, or set it to null.
 
@@ -86,12 +92,12 @@ Draft each and show it with the rest.
 
 ```
 node scripts/lint.mjs weeks/<slug> --fix    # optional: lint runs inside build; --fix rewrites near-miss Hebrew lemmas
-node scripts/build.mjs weeks/<slug> --png   # lint, then sheet.pdf and page images; refuses on a broken citation or failed lint
+node scripts/build.mjs weeks/<slug> --png   # lint, then sheet.pdf (haftarah) and sheet-torah.pdf (Torah, when the week has one) with page images (preview/, preview-torah/)
 node scripts/build.mjs weeks/<slug> --trope # optional; also sheet-trope.pdf, the chanter's copy: trope phrases highlighted by family
-node scripts/check.mjs weeks/<slug>         # layout invariants
+node scripts/check.mjs weeks/<slug>         # layout invariants for every built reading
 ```
 
-Clear lint warnings that matter (God-language, voices, stacked note letters, word counts). If check fails on a gap, it names the entry to trim and by how many words. Look at the page images before calling anything done. Then show Daniel the Claude-written texts in full (standing rules) together with the PDF. If he asks for changes, edit `sheet.json` and build again; the sheet he prints is the last one built. Build the chanter's copy only when Daniel asks for it that week (to look first, open `sheet.html` in a browser and use the review bar's "Trope colors" button, or add `?trope=1`), check it with `check.mjs weeks/<slug> --trope`, and hand him the PDF; step 7 does not deliver it.
+Clear lint warnings that matter (God-language, voices, stacked note letters, word counts). If check fails on a gap, it names the entry to trim and by how many words. Look at both PDFs' page images before calling anything done. The chanter's copy is the haftarah's only. Then show Daniel the Claude-written texts in full (standing rules) together with the PDF. If he asks for changes, edit `sheet.json` and build again; the sheet he prints is the last one built. Build the chanter's copy only when Daniel asks for it that week (to look first, open `sheet.html` in a browser and use the review bar's "Trope colors" button, or add `?trope=1`), check it with `check.mjs weeks/<slug> --trope`, and hand him the PDF; step 7 does not deliver it.
 
 ## 7. Deliver
 
@@ -106,9 +112,13 @@ NODE_USE_ENV_PROXY=1 node scripts/deliver.mjs weeks/<slug>
 
 After Drive, the same command puts the week on the web: `scripts/publish.mjs` uploads the cleaned `sheet.json` (rejected items and statuses removed) and the PDF to the site's Blob store and updates the index, and the page is live at `https://haftarah.centralreform.org/<slug>` within a minute. The Blob token comes from the Cowork skill, which writes it to `~/.haftarah-web.json`; never print it. Without a token the step says `Web: skipped` and the Drive delivery still counts; `--no-web` skips it on purpose. Re-delivering a week republishes it; if the web step alone fails after Drive succeeded, retry just that with `node scripts/publish.mjs weeks/<slug>`.
 
-- **Public folder** `Haftarah` (id `1TbSmoeBaCSLciL_-_HSCuKWkJMSZvGwd`): the PDF, named `2026-10-17 Noach — Isaiah 54.1-55.5.pdf`.
-- **Working folder** `Haftarah working/<slug>/`: `sheet.json`, `candidates.json`, `texts.json`, `digest.md`, `briefing.md` and a copy of the PDF.
+- **Public folder** `Haftarah` (id `1TbSmoeBaCSLciL_-_HSCuKWkJMSZvGwd`): the PDF, named `2026-10-17 Noach — Isaiah 54.1-55.5.pdf`; with a Torah selection, two: `2026-10-17 Noach Torah — Genesis 6.9-7.16.pdf` and `2026-10-17 Noach Haftarah — Isaiah 54.1-55.5.pdf`.
+- **Working folder** `Haftarah working/<slug>/`: `sheet.json`, `candidates.json`, `texts.json`, `candidates-torah.json`, `texts-torah.json`, `prior.json`, `digest.md`, `briefing.md` and a copy of the PDF.
 
 The script checks every file's sha256 against what Drive stored. If the drop box is not configured or fails, send Daniel the PDF in chat, create the week's working subfolder with the Drive connector, and say in the delivery line which files still need to go in by hand. Never retype file contents into the Drive connector.
 
-One line back to Daniel: Shabbat, reading, page count, entries by register, Drive links and the page address, any bibliography additions, and any GitHub issues filed.
+A Torah week's `sheet-torah.pdf` must be newer than `sheet.json` or deliver refuses (the haftarah's `sheet.pdf` is not checked); build both before delivering.
+
+After a deploy that changes the index's shape (Wave 2 did), run `node scripts/publish.mjs --reindex --dry-run`, read the rows, then `node scripts/publish.mjs --reindex` once, so every live row gets `parashahKeys`, `cycle`, `tags`, `readings` and `pdfTorah`. Rows published before Wave 2 lack `cycle`, and `/5786/noach` cannot find them until then.
+
+One line back to Daniel: Shabbat, readings (Torah selection and haftarah), page counts of both PDFs, entries by register per reading (and how many were carried), Drive links and the page address, any bibliography additions, and any GitHub issues filed.

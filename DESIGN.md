@@ -328,3 +328,12 @@ Hebrew, Both or English. One language alone turns the wide row into two tracks, 
 
 ### No inline styles
 The Content-Security-Policy forbids style attributes, so every style lives in web.css; a script that positions something (the note popover, the presenter's fit) uses the CSSOM, which the policy allows.
+
+### The library
+The landing's index has four doors, pill buttons 44px high in a row (ink-2 outline; the open one filled ink on paper): By week, By parashah, By book, Special Shabbatot. By week is the list as before; a week with a Torah reading sets its two refs on two lines, Torah first. By parashah is five bands, one per book of the Torah, each a grid of cells at least 8.5rem wide: the English name, the Hebrew under it in Ezra SIL ink-2, and a 6px rubric dot per year held. An empty cell is the same box in the unused grey, not a link. This week's cell has a 1.5px rubric ring inside its edge and says "this week" to a screen reader; the dots' years are read out as words. By book is two columns, the Torah books and the haftarah books with the chapters covered in ink-2 lining figures; Special Shabbatot is a list. Each row's count reads "3 sheets". The short addresses (/noach, /torah/genesis, …) use the same rows under a plain heading.
+
+### Two readings
+A week with a Torah selection shows it first. Each reading opens with a heading in rubric at 1.05rem, 600: "Torah" or "Haftarah", then its ref in ink at 500 and its selection in ink-2 italic; a .5px rule above every heading but the first. Verse rows, keys (one letter series per reading), the rail and the presenter run on through both. The hero lists both refs on two lines ("Torah · Genesis 6:9–7:16", "Haftarah · Isaiah 54:1–55:5") and both printed sheets; "Last time: the 5786 sheet" sits under them in ink-2, rubric on hover, when there is one.
+
+### The Torah sheet in print
+`sheet-torah.pdf` is the same template as the haftarah's, page for page, with three differences set by the build option `reading: "torah"`: the front page's head reads "Torah · <date>", the running heads give the Torah book and range, and the last verse ends on a plain sof pasuk, not the haftarah's closing cadence.
