@@ -1,8 +1,9 @@
 // The week page. Data comes from /data/weeks/<slug>/sheet.json (the Blob store behind the rewrite);
 // the model comes from lib.js's sheetModel, so the page prepares verses exactly as the print does.
 import { applyStored, initSettings } from "./settings.js";
-import { initPanel } from "./panel.js";
-import { slugFromPath, dataUrl, verseAnchor, parseVerseAnchor, PDF_FILES, isSlug } from "./contract.js";
+import { initPanel, clean } from "./panel.js";
+import { slugFromPath, dataUrl, verseAnchor, parseVerseAnchor, PDF_FILES, isSlug, SIDE_FILES } from "./contract.js";
+import { load } from "./storage.js";
 
 export { slugFromPath, dataUrl };
 import { initRoving, focusables } from "./a11y.js";
@@ -51,6 +52,13 @@ export function citationText({ he, en, ref, translation, url, mode = "both" }) {
 // The teacher highlights on one verse. A highlight without "reading" belongs to the haftarah.
 export function highlightsFor(list, readingId, chapter, verse) {
   return (Array.isArray(list) ? list : []).filter(h => h && (h.reading || "haftarah") === readingId && Number(h.chapter) === chapter && Number(h.verse) === verse);
+}
+
+// The Translation row's choices: the sheet's own English first, then every version the readings offer.
+export function translationOptions(side) {
+  const out = [{ key: "jps2023", label: "JPS 2023" }];
+  for (const list of Object.values((side && side.translations) || {})) for (const v of list || []) if (!out.some(o => o.key === v.key)) out.push({ key: v.key, label: v.label });
+  return out;
 }
 
 // A highlight's [first, last] word (0-based, inclusive) cut to a verse of `count` words; null when nothing of it is in the verse.
@@ -254,6 +262,7 @@ export async function run() {
     if (!count) app.classList.add("empty");
     rail.append(app); text.append(row);
     const r = { v, row, app, keys: v.keys, reading: reading.id, model: part.model };
+    r.enHtml = en.innerHTML;   // the sheet's own English, for the Translation row to come back to
     // Narrow, the verse number opens the fold below it; keep its state announced however the fold moves.
     if (count) app.addEventListener("toggle", () => { if (!wide.matches) gutButton(r).setAttribute("aria-expanded", String(app.open)); });
     rows.push(r);
@@ -353,10 +362,12 @@ export async function run() {
     const b = e.target.closest("button.act"); if (!b) return;
     const r = rows.find(x => x.app === b.closest(".vapp")); if (!r) return;
     const url = verseUrl(location.origin, slug, r.row.id);
+    // Another edition shown in this verse: copy that English, under its name (a verse the edition lacks keeps the sheet's own).
+    const alt = html.dataset.translation && html.dataset.translation !== "jps2023" && r.row.querySelector(".en.alt");
     const text = b.dataset.act === "link" ? url : citationText({
       he: L.plainText(r.v.heHtml).text.trim(),
-      en: r.v.enLines.map(t => L.plainText(t).text.trim()).join("\n"),
-      ref: L.enDash(r.v.ref), translation: translationLabel(r.model.front.provenance.en), url,
+      en: alt ? L.plainText(r.row.querySelector(".en").innerHTML.replace(/<br\s*\/?>/g, "\n")).text.trim() : r.v.enLines.map(t => L.plainText(t).text.trim()).join("\n"),
+      ref: L.enDash(r.v.ref), translation: alt ? api.translation.label : translationLabel(r.model.front.provenance.en), url,
       mode: html.dataset.lang || "both",
     });
     await copyWithStatus(b, text, { write: t => navigator.clipboard.writeText(t), status: copyStatus });
@@ -372,6 +383,36 @@ export async function run() {
   const panel = initPanel({ page: api, L, sefariaUrl, track });
   api.openWord = w => panel.openWord(w);
 
+  // ---- the translation picker (spec 5.6): the English column shows another edition; the notes stay JPS's ----
+  const trOptions = translationOptions(api.side);
+  let trFile = null;
+  const loadTranslations = () => { if (!trFile) trFile = fetch(dataUrl(slug, SIDE_FILES.translations)).then(r => (r.ok ? r.json() : null)).catch(() => null); return trFile; };
+  api.translation = { key: "jps2023", label: "JPS 2023", credits: [] };
+  api.setTranslation = async key => {
+    const opt = trOptions.find(o => o.key === key) || trOptions[0];
+    const file = opt.key === "jps2023" ? null : await loadTranslations();
+    const credits = [];
+    for (const r of rows) {
+      const en = r.row.querySelector(".en");
+      const version = file && file.readings && file.readings[r.reading] && (file.readings[r.reading].versions || []).find(v => v.key === opt.key);
+      const html = version && version.verses && version.verses[r.row.dataset.verse];
+      if (html) { en.innerHTML = clean(html); en.classList.add("alt"); if (version.credit && !credits.includes(version.credit)) credits.push(version.credit); }
+      else { en.innerHTML = r.enHtml; en.classList.remove("alt"); }   // enHtml was captured after keyButtons ran: the letters are in it
+    }
+    const shown = opt.key !== "jps2023" && credits.length > 0;
+    html.dataset.translation = shown ? opt.key : "jps2023";
+    let note = text.querySelector(".tr-note");
+    if (shown && !note) { note = el("p", "tr-note", "Notes and glosses refer to the JPS translation."); text.prepend(note); }
+    if (!shown && note) note.remove();
+    let credit = $("footTr");
+    if (shown) { if (!credit) { credit = el("span", "tr-credit"); credit.id = "footTr"; $("foot").append(credit); } credit.textContent = credits.join(" "); }
+    else if (credit) credit.remove();
+    api.translation = { key: html.dataset.translation, label: shown ? opt.label : "JPS 2023", credits };
+  };
+  const stored = load("translation");
+  settings.setTranslations(trOptions, trOptions.some(o => o.key === stored) ? stored : "jps2023", k => { api.setTranslation(k); });
+  if (stored && trOptions.some(o => o.key === stored)) api.setTranslation(stored);
+
   // ---- presenter view: ?present on load, or the Aa card's button (which starts at the verse on screen) ----
   let presenter = null;
   startPresent = (fromCard = false) => {
@@ -382,7 +423,7 @@ export async function run() {
     }
     settings.close(); panel.close();
     // On exit focus goes back where the presenter was opened: the Aa button, or (from ?present) the verse's number.
-    presenter = initPresent({ model, rows, L, track, onExit: r => {
+    presenter = initPresent({ model, rows, L, track, translate: r => (html.dataset.translation && html.dataset.translation !== "jps2023" && r.row.querySelector(".en.alt") ? r.row.querySelector(".en").innerHTML.split(/<br\s*\/?>/) : null), onExit: r => {
       presenter = null; current = null; sync();
       (fromCard ? $("aaBtn") : gutButton(r)).focus({ preventScroll: true });
     } });
@@ -495,6 +536,20 @@ async function runCheck(api, L) {
   h.dataset.theme = "dark";
   h.dataset.checkPaper = getComputedStyle(document.body).backgroundColor;
   h.dataset.checkTitle = document.title;
+  // The Translation row: offered when the week has versions; switching swaps the English and shows the note and the credit; back restores.
+  const trSeg = document.getElementById("trSeg");
+  h.dataset.checkTrOffered = trSeg ? [...trSeg.querySelectorAll("button")].map(b => b.dataset.translation).join(",") : "";
+  if (trSeg && api.setTranslation) {
+    const first = rows[0].row.querySelector(".en"), was = first.innerHTML;
+    const alt = trSeg.querySelector("button:nth-child(2)").dataset.translation;
+    await api.setTranslation(alt);
+    h.dataset.checkTrEn = first.textContent.trim();
+    h.dataset.checkTrNote = String(!!document.querySelector("#text > .tr-note:first-child"));
+    h.dataset.checkTrCredit = (document.getElementById("footTr") || {}).textContent || "";
+    h.dataset.checkTrLabel = api.translation.label;
+    await api.setTranslation("jps2023");
+    h.dataset.checkTrRestored = String(first.innerHTML === was && !document.querySelector(".tr-note") && !document.getElementById("footTr"));
+  }
   // The word panel: the first word of the first row, analysed from words.json when the week has it.
   const firstWord = document.querySelector("#text .row .he .w");
   if (firstWord && api.openWord) {

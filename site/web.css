@@ -404,3 +404,8 @@ html[data-present] { overflow: hidden; }
 .panel .wlinks { display: flex; flex-wrap: wrap; gap: 0 1.2rem; margin: 0; }
 .panel .wlinks .open { min-height: max(2.75rem, 44px); margin-top: 0; }
 .panel .bdb { margin-top: .9rem; }
+
+/* ---- the translation picker: another edition in the English column; the notes stay JPS's ---- */
+.tr-note { color: var(--ink-2); font-style: italic; font-size: .88rem; margin: 0 0 .75rem; }
+.row .en.alt { color: var(--ink); }
+.foot .tr-credit { display: block; width: 100%; }

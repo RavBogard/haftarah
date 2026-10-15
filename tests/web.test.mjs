@@ -341,3 +341,17 @@ test("occurrences, hereLine, allLine, link urls", () => {
   assert.equal(bibleHubUrl("H0559"), "https://biblehub.com/hebrew/559.htm");
   assert.equal(bibleHubUrl("H9023"), null);
 });
+
+import { translationOptions } from "../site/app/sheet.js";
+test("translationOptions: JPS 2023 first, then the union of what the readings offer, in first-seen order; nothing to pick without a second version", () => {
+  assert.deepEqual(translationOptions({ translations: { torah: [{ key: "metsudah", label: "Metsudah" }], haftarah: [{ key: "jps1985", label: "JPS 1985" }, { key: "koren", label: "Koren" }, { key: "metsudah", label: "Metsudah" }] } }), [{ key: "jps2023", label: "JPS 2023" }, { key: "metsudah", label: "Metsudah" }, { key: "jps1985", label: "JPS 1985" }, { key: "koren", label: "Koren" }]);
+  assert.deepEqual(translationOptions({ translations: { haftarah: [] } }), [{ key: "jps2023", label: "JPS 2023" }]);
+  assert.deepEqual(translationOptions(null), [{ key: "jps2023", label: "JPS 2023" }]);
+});
+
+test("the settings card's Translation row and the note are the agreed strings", () => {
+  const src = readSite(new URL("../site/app/settings.js", import.meta.url), "utf8");
+  assert.ok(src.includes('label.textContent = "Translation"'));
+  const sheetSrc = readSite(new URL("../site/app/sheet.js", import.meta.url), "utf8");
+  assert.ok(sheetSrc.includes("Notes and glosses refer to the JPS translation."));
+});

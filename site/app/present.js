@@ -44,7 +44,7 @@ export function startIndex(rows, hash) {
 /** The verse without its footnote and gloss letters: they mean nothing on a shared screen. */
 export const stripKeys = html => String(html == null ? "" : html).replace(/<sup class="fn(?: he)?">[a-z]+<\/sup>/g, "");
 
-export function initPresent({ model, rows, L, track = () => {}, onExit = () => {} }) {
+export function initPresent({ model, rows, L, track = () => {}, onExit = () => {}, translate = null }) {
   const html = document.documentElement, esc = L.escapeHtml, SIG = L.SIGLA;
   const tropeBefore = html.dataset.trope;
   if (new URLSearchParams(location.search).get("trope") !== "1") delete html.dataset.trope;   // pastels blur in a video stream
@@ -84,7 +84,8 @@ export function initPresent({ model, rows, L, track = () => {}, onExit = () => {
     $("pLabel").textContent = L.enDash(v.ref);
     $("pCount").textContent = `${i + 1} / ${rows.length}`;
     $("pHe").innerHTML = stripKeys(v.heHtml);
-    $("pEn").innerHTML = v.enLines.map(t => `<span class="ln">${stripKeys(t)}</span>`).join("");
+    const lines = (translate && translate(r)) || v.enLines;
+    $("pEn").innerHTML = lines.map(t => `<span class="ln">${stripKeys(t)}</span>`).join("");
     $("pNotes").innerHTML = v.entries.length
       ? v.entries.map(e => `<p class="p-entry reg-${e.register}"><span class="sig">${SIG[e.register]}</span><b>${esc(e.source)}</b> ${e.bodyHtml}</p>`).join("")
       : `<p class="p-entry">No commentary on this verse.</p>`;

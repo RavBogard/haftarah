@@ -79,5 +79,23 @@ export function initSettings({ host, button, pdfHref = null, trope = true, langs
     const first = host.querySelector("a.dl");
     if (first) first.closest(".row").after(row); else host.append(row);
   };
-  return { close, addDownload };
+  // The Translation row, added once the week's data says what it offers (JPS 2023 is always first).
+  const setTranslations = (options, current, onChange) => {
+    const old = host.querySelector("#trSeg"); if (old) old.closest(".row").remove();
+    if (!options || options.length < 2) return;
+    const row = document.createElement("div");
+    row.className = "row";
+    const label = document.createElement("span"); label.className = "label"; label.textContent = "Translation";
+    const seg = document.createElement("span"); seg.className = "seg"; seg.id = "trSeg"; seg.setAttribute("role", "group"); seg.setAttribute("aria-label", "Translation");
+    for (const o of options) {
+      const b = document.createElement("button"); b.type = "button"; b.dataset.translation = o.key; b.textContent = o.label;
+      b.setAttribute("aria-pressed", String(o.key === current));
+      b.addEventListener("click", () => { store("translation", o.key === options[0].key ? null : o.key); seg.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", String(x === b))); onChange(o.key); });
+      seg.append(b);
+    }
+    row.append(label, seg);
+    const after = host.querySelector("#langSeg");
+    if (after) after.closest(".row").after(row); else host.prepend(row);
+  };
+  return { close, addDownload, setTranslations };
 }

@@ -146,6 +146,14 @@ async function main() {
         expect("an occurrence closes the panel on a phone and keeps it on a desktop", a["word-go-panel"] === String(wide), a["word-go-panel"]);
         expect("every control in the word panel is a 44px target", Number(a["word-min"]) >= 44, a["word-min"]);
       } else expect("a week with no words.json falls back to the dictionary alone", a["word-analysed"] === "false" && a["word-sentence"] === "No word analysis for this word." && a["word-bdb-open"] === "true", `${a["word-analysed"]} / ${a["word-sentence"]} / bdb open ${a["word-bdb-open"]}`);
+      if (side && side.translations) {
+        expect("the Translation row offers what the week has", a["tr-offered"] === ["jps2023", ...new Set(Object.values(side.translations).flat().map(v => v.key))].join(","), a["tr-offered"]);
+        expect("switching shows that edition's verse", /^A fixture rendering \(1985\) of verse \d+\.$/.test(a["tr-en"] || ""), a["tr-en"]);
+        expect("the note says the notes are JPS's", a["tr-note"] === "true", a["tr-note"]);
+        expect("the footer credits the edition shown", /Jewish Publication Society, 1985/.test(a["tr-credit"] || ""), a["tr-credit"]);
+        expect("Copy verse would name the edition", a["tr-label"] === "JPS 1985", a["tr-label"]);
+        expect("JPS 2023 comes back exactly", a["tr-restored"] === "true", a["tr-restored"]);
+      } else expect("no Translation row without versions", a["tr-offered"] === "", a["tr-offered"]);
     }
     const lv = sheet.verses[Math.min(5, sheet.verses.length - 1)];
     const t = attrs(await dumpDom(browser, `${base}/${slug}?check=1#v${lv.chapter}-${lv.verse}`, { size: "1440,900" }));
