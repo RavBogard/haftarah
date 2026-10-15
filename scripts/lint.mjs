@@ -12,6 +12,7 @@
  *   - a gloss's English anchor occurs in its verse's English (error if not)
  *   - a gloss anchor that overlaps or touches a JPS note marker (two keys would stack)
  *   - a named source with no line in template/voices.json
+ *   - more entries in a reading than customs.entryCap (warning, with the count by register)
  *   - masculine God-language (He/His/Him/Himself/Lord/King/Father) in anything written for the sheet
  *   - word counts: commentary 25–120, historians 60–130, glosses 12–35
  */
@@ -19,6 +20,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
+import { loadCustoms } from "./customs.mjs";
 
 const L = createRequire(import.meta.url)("../template/lib.js");
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -124,15 +126,41 @@ export function applyFixes(data, fixes) {
 
 export const formatLint = list => list.map(x => `  - ${x.where}: ${x.msg}`).join("\n");
 
+/** A reading's printed entries by register (rejected ones left out; an unknown register is traditional, as it prints). */
+export function entryCounts(reading) {
+  const out = { total: 0, traditional: 0, modern: 0, critical: 0, reference: 0 };
+  for (const e of (reading.commentary || []).filter(visible)) {
+    out.total++;
+    out[L.SIGLA[e.register] ? e.register : "traditional"]++;
+  }
+  return out;
+}
+
 /**
- * Lint a sheet of either schema: its primary reading, through readingView. With fix, the gloss fixes
- * are written into `file` itself (the view shares the reading's glosses).
+ * Lint a sheet of either schema: every reading that has verses (or the ids in `only`), each through
+ * readingView. When the week has more than one reading, every message names its reading. Above
+ * customs.entryCap a reading gets a warning with its count by register; the cap never stops a build.
+ * With fix, the gloss fixes are written into `file` itself (each view shares its reading's glosses).
  */
-export function lintSheet(file, { voices = {}, fix = false } = {}) {
-  const view = L.readingView(file);
-  const r = lint(view, { voices });
-  if (fix && r.fixes.length) applyFixes(view, r.fixes);
-  return r;
+export function lintSheet(file, { voices = {}, fix = false, customs = null, only = null } = {}) {
+  const all = L.readings(file).filter(r => (r.verses || []).length);
+  const multi = all.length > 1;
+  const out = { errors: [], warnings: [], fixes: [], counts: [] };
+  for (const r of all) {
+    if (only && !only.includes(r.id)) continue;
+    const view = L.readingView(file, r.id);
+    const res = lint(view, { voices });
+    const tag = x => (multi ? { ...x, where: `${r.id}: ${x.where}` } : x);
+    out.errors.push(...res.errors.map(tag));
+    out.warnings.push(...res.warnings.map(tag));
+    if (fix && res.fixes.length) applyFixes(view, res.fixes);
+    out.fixes.push(...res.fixes.map(f => (multi ? { ...f, reading: r.id } : f)));
+    const c = entryCounts(r);
+    const cap = customs && customs.entryCap ? customs.entryCap : null;
+    out.counts.push({ reading: r.id, total: c.total, cap, traditional: c.traditional, modern: c.modern, critical: c.critical, reference: c.reference });
+    if (cap && c.total > cap) out.warnings.push({ where: r.id, msg: `${c.total} entries, over the cap of ${cap} (${L.REGISTER_ORDER.map(k => `${k} ${c[k]}`).join(", ")})` });
+  }
+  return out;
 }
 
 export async function loadVoices() {
@@ -140,13 +168,17 @@ export async function loadVoices() {
 }
 
 async function main() {
-  const dirArg = process.argv.slice(2).find(a => !a.startsWith("--"));
-  if (!dirArg) { console.error("usage: node scripts/lint.mjs weeks/<slug> [--fix]"); process.exit(1); }
+  const args = process.argv.slice(2);
+  const dirArg = args.find((a, i) => !a.startsWith("--") && args[i - 1] !== "--customs");
+  if (!dirArg) { console.error("usage: node scripts/lint.mjs weeks/<slug> [--fix] [--customs <id>]"); process.exit(1); }
   const sheetPath = join(resolve(dirArg), "sheet.json");
   const raw = await readFile(sheetPath, "utf8");
   const data = JSON.parse(raw);
   const fix = process.argv.includes("--fix");
-  const r = lintSheet(data, { voices: await loadVoices(), fix });
+  const ci = process.argv.indexOf("--customs");
+  const customs = await loadCustoms(ci > 0 ? process.argv[ci + 1] : "crc");
+  const r = lintSheet(data, { voices: await loadVoices(), fix, customs });
+  for (const c of r.counts) console.log(`${c.reading}: ${c.total} entries (cap ${c.cap}): ${L.REGISTER_ORDER.map(k => `${k} ${c[k]}`).join(", ")}`);
   if (r.errors.length) console.error(`Lint errors:\n${formatLint(r.errors)}`);
   if (r.warnings.length) console.warn(`Lint warnings:\n${formatLint(r.warnings)}`);
   if (fix && r.fixes.length) {

@@ -2,7 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { readFile } from "node:fs/promises";
-import { lint, lintSheet, applyFixes, godLanguage, wordCount } from "../scripts/lint.mjs";
+import { lint, lintSheet, entryCounts, applyFixes, godLanguage, wordCount } from "../scripts/lint.mjs";
+import { makeWeekTorah } from "./helpers/makeWeekTorah.mjs";
 import { migrate3 } from "../scripts/migrate.mjs";
 import { gapReport, analyse } from "../scripts/check.mjs";
 const require = createRequire(import.meta.url);
@@ -206,4 +207,29 @@ test("lintSheet lints the primary reading of either schema, and --fix writes int
   for (const f of r.fixes) assert.equal(m.readings[0].glosses[f.index][f.field], f.to);
   assert.equal(lintSheet(m).fixes.length, 0);
   assert.deepEqual(lintSheet(d).warnings, lint(d).warnings);
+});
+
+test("lintSheet lints every reading and names the reading when the week has two", async () => {
+  const min = JSON.parse(await readFile(new URL("./fixtures/week-min/sheet.json", import.meta.url), "utf8"));
+  const two = makeWeekTorah(min);
+  two.readings[0].glosses.push({ chapter: 6, verse: 99, lemma: "x", en: "", text: "A gloss on a verse the reading does not have, for the test." });
+  const r = lintSheet(two);
+  assert.ok(r.errors.some(e => e.where === "torah: gloss 6:99 x" && /no verse 6:99 in this reading/.test(e.msg)));
+  const haft = r.warnings.filter(w => w.where.startsWith("haftarah: ")).map(w => ({ ...w, where: w.where.slice("haftarah: ".length) }));
+  assert.deepEqual(haft, lint(min).warnings, "the haftarah lints as it did alone");
+  assert.deepEqual(lintSheet(two, { only: ["haftarah"] }).errors, [], "--reading haftarah does not stop on the Torah's problems");
+  assert.deepEqual(lintSheet(min).warnings, lint(min).warnings, "a one-reading week keeps its old messages");
+});
+
+test("the entry cap is a warning per reading with the count by register, never an error", async () => {
+  const d = JSON.parse(await readFile(new URL("./fixtures/week-notes/sheet.json", import.meta.url), "utf8"));
+  const r = lintSheet(d, { customs: { entryCap: 10 } });
+  const cap = r.warnings.filter(w => /over the cap/.test(w.msg));
+  assert.deepEqual(cap, [{ where: "haftarah", msg: "17 entries, over the cap of 10 (traditional 9, modern 4, critical 4, reference 0)" }]);
+  assert.equal(r.errors.length, lint(d).errors.length);
+  assert.deepEqual(r.counts, [{ reading: "haftarah", total: 17, cap: 10, traditional: 9, modern: 4, critical: 4, reference: 0 }]);
+  assert.ok(!lintSheet(d, { customs: { entryCap: 24 } }).warnings.some(w => /over the cap/.test(w.msg)));
+  const m = structuredClone(d); m.commentary[0].status = "rejected";
+  assert.equal(entryCounts({ commentary: m.commentary }).total, 16, "a rejected entry is not counted");
+  assert.equal(entryCounts({ commentary: [{ register: "something else" }] }).traditional, 1);
 });

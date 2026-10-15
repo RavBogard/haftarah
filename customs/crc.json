@@ -1,0 +1,18 @@
+{
+  "id": "crc",
+  "calendar": { "diaspora": true },
+  "haftarahRite": "ashkenazi",
+  "torah": { "mode": "selection", "rule": "weekly", "triennial": null },
+  "nusach": "eastern-ashkenazi",
+  "versions": { "he": "Miqra according to the Masorah", "en": "THE JPS TANAKH: Gender-Sensitive Edition" },
+  "translations": ["jps2023", "jps1985", "koren", "metsudah"],
+  "divineName": "yy",
+  "entryCap": 24,
+  "series": { "name": "Torah from Scratch" },
+  "credits": {
+    "issuedBy": "Central Reform Congregation",
+    "editor": "Rabbi Daniel Bogard",
+    "signoff": "I chose and approved every entry on this sheet; summaries marked as such were drafted with Claude and read before printing. Tell me what I got wrong."
+  },
+  "toConfirm": ["torah", "entryCap", "nusach"]
+}
