@@ -33,7 +33,7 @@ const MAX_AGE = { json: 60, pdf: 3600 };
 // The top-level fields that reach the web; anything else (candidates, drafts, a stray status) stays
 // home. README.md's "Data file" section documents exactly these, and tests/publish.test.mjs holds
 // the two lists together, so a new field can never vanish from the web unnoticed.
-export const PUBLISHED_FIELDS = ["schema", "slug", "shabbat", "series", "haftarah", "verses", "glosses", "commentary", "readings", "openingNote", "glossary", "nextWeek", "credits", "highlights"];
+export const PUBLISHED_FIELDS = ["schema", "slug", "shabbat", "series", "haftarah", "verses", "glosses", "commentary", "readings", "openingNote", "glossary", "nextWeek", "credits", "highlights", "prior"];
 
 async function exists(p) { try { await access(p); return true; } catch { return false; } }
 const rejected = item => item && typeof item === "object" && item.status === "rejected";

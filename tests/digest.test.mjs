@@ -123,3 +123,10 @@ test("weekDigest: the Torah calendar, then the Torah's digest, then the haftarah
   assert.match(md, /Selection: aliyah 1, its first verses, Genesis 6:9-11\./);
   assert.match(md, /## 6:10/);
 });
+
+test("weekDigest puts Last time after the Torah calendar and before the readings", async () => {
+  const two = JSON.parse(await readFile(new URL("./fixtures/week-notes/sheet.json", import.meta.url), "utf8"));
+  const md = weekDigest({ sheet: two, readings: { haftarah: { texts, candidates } }, prior: { slug: null, parashahKey: "bereshit", searched: "web library" } });
+  assert.ok(md.startsWith("# Last time\n\nNo earlier sheet for bereshit in the web library.\n"));
+  assert.ok(md.indexOf(`# ${texts.ref}: digest`) > 0);
+});

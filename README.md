@@ -134,9 +134,12 @@ Schema 3 moves the reading into `readings[]` and leaves the week's own fields wh
       "commentary": [ { "id": "e-3d5f2921", "verse": 18, "register": "traditional", "source": "Rashi" } ]   // and the rest as in schema 2
     }
   ],
-  "highlights": [ { "reading": "haftarah", "chapter": 20, "verse": 30, "words": [2, 4], "note": "<html>" } ]   // optional, in either schema; web only
+  "highlights": [ { "reading": "haftarah", "chapter": 20, "verse": 30, "words": [2, 4], "note": "<html>" } ],   // optional, in either schema; web only
+  "prior": { "slug": "2025-10-25-noach", "hebrewEn": "3 Cheshvan 5786", "cycle": "5786" }   // last year's sheet for this parashah, set by fetch; the web page links it
 }
 ```
+
+`prior` is only a pointer; the entries live in the week folder's `prior.json`, which never reaches the web. An entry carried from last year keeps its `id` and has `status: "carried"` and `carried: "<slug>"`; it prints like any other until Daniel sets it to `rejected`, and lint names each one. `leyning` (Hebcal's aliyot list, written by fetch) is working data and is not published.
 
 In schema 3 every verse names its `book`, and every commentary entry has an `id`: "e-" and eight hex digits, given once (by `migrate --to 3`, later by whoever adds the entry) and kept when the entry is edited. On the web a verse's address is `<reading>-<chapter>-<verse>`, as in `/2026-10-10-bereshit-machar-chodesh#haftarah-20-30`.
 

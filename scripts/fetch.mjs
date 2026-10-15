@@ -12,6 +12,8 @@
  *   node scripts/fetch.mjs --known 2026-10-17-noach,2026-10-24-lech-lecha   # weeks that exist only in Drive
  *   node scripts/fetch.mjs --no-texts             # skip the texts files
  *   node scripts/fetch.mjs --customs crc          # whose customs (default crc: customs/crc.json)
+ *   node scripts/fetch.mjs --no-carry             # do not copy last year's fitting entries in (by default they come in as status "carried", with "See also")
+ *   node scripts/fetch.mjs --prior <dir>          # last year's week folder restored from Drive, instead of the web library
  *
  * Writes weeks/<slug>/sheet.json (schema 3: the Torah selection, when there is one, then the
  * haftarah; Hebcal's aliyot list in `leyning`), and per reading candidates.json / candidates-torah.json
@@ -21,6 +23,8 @@
  * for the briefing; run it again with the pick and the kept sheet.json gains its Torah reading. It
  * never otherwise overwrites an existing sheet.json; use --force to replace it. The candidates and
  * texts files are refreshed every run. Sefaria calls are retried (three tries, with backoff).
+ * Every run writes prior.json: the latest earlier sheet for the same parashah (from the public
+ * library, read-only, or --prior), or why there is none.
  *
  * Dependency-free: Node 18+ with global fetch.
  */
@@ -33,7 +37,9 @@ import { createRequire } from "node:module";
 import { loadCustoms } from "./customs.mjs";
 import { leyningOf, parsePick, defaultPick, selectTorah, aliyotLines } from "./leyning.mjs";
 import { migrate3 } from "./migrate.mjs";
-import { READING_FILES } from "./week-files.mjs";
+import { READING_FILES, PRIOR_FILE } from "./week-files.mjs";
+import { lookupPrior, applyPrior } from "./prior.mjs";
+import { parashahKeysOf } from "../site/app/parashot.js";
 
 const L = createRequire(import.meta.url)("../template/lib.js");
 
@@ -525,6 +531,18 @@ export function mergeWeek(existing, { torah = null, leyning = null } = {}) {
   return { sheet, changed: true, notes };
 }
 
+/**
+ * A schema-3 sheet with an id on every entry of every reading (existing ids kept, missing ones
+ * filled); carry-forward depends on them. A schema-2 sheet, or one already complete, comes back as is.
+ */
+export function withEntryIds(sheet) {
+  if (!(Number(sheet.schema) >= 3)) return { sheet, changed: false };
+  if (L.readings(sheet).every(r => (r.commentary || []).every(e => e.id))) return { sheet, changed: false };
+  const out = structuredClone(sheet);
+  for (const r of L.readings(out)) L.assignEntryIds(r.commentary || [], r.id);
+  return { sheet: out, changed: true };
+}
+
 // ---- main -------------------------------------------------------------------
 
 // The following Shabbat's reading; Daniel confirms it when the calendar offers a choice.
@@ -562,6 +580,8 @@ async function main() {
   const refOverride = arg("ref", null);
   const known = String(arg("known", "") === true ? "" : arg("known", "")).split(",").map(s => s.trim()).filter(Boolean);
   const wantTexts = !process.argv.includes("--no-texts");
+  const carry = !process.argv.includes("--no-carry");
+  const priorArg = arg("prior", null);
   const noTorah = process.argv.includes("--no-torah");
   const torahArg = arg("torah", null), pickArg = arg("torah-pick", null);
   if (noTorah && (typeof torahArg === "string" || pickArg)) throw new Error("--no-torah cannot be combined with --torah <ref> or --torah-pick");
@@ -635,6 +655,20 @@ async function main() {
     sheet = m.sheet;
     if (m.changed) write = "Updated";
   }
+
+  // 4b. Last time: the latest earlier sheet for this parashah. prior.json every run. By default (Daniel cuts), the pointer on the
+  // sheet, the entries that fit this year's readings (status "carried") and the "See also" sentence,
+  // unless --no-carry (then a new sheet gets the pointer only).
+  const prior = await lookupPrior({ keys: parashahKeysOf(name), civil: date, priorDir: typeof priorArg === "string" ? priorArg : null });
+  await writeFile(join(dir, PRIOR_FILE), JSON.stringify(prior, null, 1), "utf8");
+  console.log(prior.slug ? `Last time: ${prior.slug} (${prior.hebrewEn}, from the ${prior.source})` : `Last time: none${prior.error ? ` (${prior.error})` : ""}`);
+  const ap = applyPrior(sheet, prior, { carry, fresh: !existing || force });
+  if (ap.changed) { sheet = ap.sheet; if (!write) write = "Updated"; }
+  if (ap.added.length) console.log(`  carried ${ap.added.length} entr${ap.added.length === 1 ? "y" : "ies"} from ${prior.slug}: ${ap.added.map(a => `${a.reading} ${a.chapter}:${a.verse} ${a.source}`).join("; ")}`);
+
+  // 4c. Every entry has an id (carry-forward depends on them); a kept sheet that lacked some is rewritten with them.
+  const ids = withEntryIds(sheet);
+  if (ids.changed) { sheet = ids.sheet; if (!write) write = "Updated"; }
 
   // 5. Write sheet.json.
   if (write) {

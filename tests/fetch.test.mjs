@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { withRetry, getJSON, fetchPassage, candidatesFrom, capToBudget, readingFrom, freshSheet, mergeWeek, leyningUrl, TORAH_CORE } from "../scripts/fetch.mjs";
+import { withEntryIds, withRetry, getJSON, fetchPassage, candidatesFrom, capToBudget, readingFrom, freshSheet, mergeWeek, leyningUrl, TORAH_CORE } from "../scripts/fetch.mjs";
+import { migrate3 } from "../scripts/migrate.mjs";
 import { makeWeekTorah } from "./helpers/makeWeekTorah.mjs";
 
 const min = JSON.parse(await readFile(new URL("./fixtures/week-min/sheet.json", import.meta.url), "utf8"));
@@ -129,4 +130,21 @@ test("nextWeekFor records next week's Torah reading from Hebcal's summary, en-da
   assert.deepEqual(nw, { shabbat: "Lech-Lecha", special: null, ref: "Isaiah 40:27-41:16", torahRef: "Genesis 12:1–17:27", civilDisplay: "October 24, 2026" });
   const none = await nextWeekFor("2026-10-17", CUSTOMS, async () => ({ items: [{ ...item, summary: undefined }] }));
   assert.equal("torahRef" in none, false);
+});
+
+test("withEntryIds fills the ids a schema-3 sheet's entries lack, keeps the ones they have, and leaves a complete sheet alone", () => {
+  const three = migrate3(min);
+  const same = withEntryIds(three);
+  assert.equal(same.changed, false);
+  assert.equal(same.sheet, three);
+  const stripped = structuredClone(three);
+  const keep = stripped.readings[0].commentary[1].id;
+  delete stripped.readings[0].commentary[0].id;
+  const out = withEntryIds(stripped);
+  assert.equal(out.changed, true);
+  assert.ok(out.sheet.readings.every(r => r.commentary.every(e => /^e-/.test(e.id))));
+  assert.equal(out.sheet.readings[0].commentary[1].id, keep);
+  assert.equal(new Set(out.sheet.readings[0].commentary.map(e => e.id)).size, out.sheet.readings[0].commentary.length);
+  const old = withEntryIds(min);
+  assert.equal(old.sheet, min, "a schema-2 sheet is not touched");
 });

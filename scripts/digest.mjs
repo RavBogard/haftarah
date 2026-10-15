@@ -19,8 +19,9 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
-import { READING_FILES } from "./week-files.mjs";
+import { READING_FILES, PRIOR_FILE } from "./week-files.mjs";
 import { aliyotMarkdown } from "./leyning.mjs";
+import { lastTimeMarkdown } from "./prior.mjs";
 
 const L = createRequire(import.meta.url)("../template/lib.js");
 
@@ -225,9 +226,10 @@ export function digestInput(sheet, readingId = null) {
 }
 
 /** The week's digest.md: the Torah calendar when the sheet has one, then a digest per reading, Torah first. */
-export function weekDigest({ sheet, readings }) {
+export function weekDigest({ sheet, readings, prior = null }) {
   const parts = [];
   if (sheet && sheet.leyning) parts.push(aliyotMarkdown(sheet.leyning, L.readings(sheet).find(r => r.kind === "torah") || null));
+  if (prior) parts.push(lastTimeMarkdown(prior, sheet));
   for (const kind of ["torah", "haftarah"]) {
     const x = readings[kind];
     if (!x || (!x.texts && !x.candidates)) continue;
@@ -246,7 +248,7 @@ async function main() {
     readings[kind] = { texts: await readJSON(join(dir, f.texts)), candidates: await readJSON(join(dir, f.candidates)) };
   }
   if (!Object.values(readings).some(x => x.texts || x.candidates)) { console.error(`No texts.json or candidates.json in ${dir}; run fetch.mjs first.`); process.exit(1); }
-  const md = weekDigest({ sheet, readings });
+  const md = weekDigest({ sheet, readings, prior: await readJSON(join(dir, PRIOR_FILE)) });
   await writeFile(join(dir, "digest.md"), md, "utf8");
   process.stdout.write(md);
 }

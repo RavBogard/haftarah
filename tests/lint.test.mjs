@@ -233,3 +233,20 @@ test("the entry cap is a warning per reading with the count by register, never a
   assert.equal(entryCounts({ commentary: m.commentary }).total, 16, "a rejected entry is not counted");
   assert.equal(entryCounts({ commentary: [{ register: "something else" }] }).traditional, 1);
 });
+
+test("lint names each carried entry so Daniel can keep or cut it", async () => {
+  const d = JSON.parse(await readFile(new URL("./fixtures/week-min/sheet.json", import.meta.url), "utf8"));
+  d.commentary[0].status = "carried"; d.commentary[0].carried = "2025-10-25-noach";
+  assert.ok(lint(d).warnings.some(w => w.where === "commentary 18 Rashi" && w.msg === 'carried from 2025-10-25-noach; it prints unless its status is set to "rejected"'));
+});
+
+test("lintSheet warns on a schema-3 entry with no id, and not on a schema-2 one", async () => {
+  const d = JSON.parse(await readFile(new URL("./fixtures/week-min/sheet.json", import.meta.url), "utf8"));
+  const three = migrate3(d);
+  assert.ok(three.readings[0].commentary.every(e => e.id));
+  assert.ok(!lintSheet(three, { voices }).warnings.some(w => /has no id/.test(w.msg)));
+  delete three.readings[0].commentary[0].id;
+  const w = lintSheet(three, { voices }).warnings.filter(x => /has no id/.test(x.msg));
+  assert.deepEqual(w, [{ where: "commentary 18 Rashi", msg: "has no id (run node scripts/migrate.mjs --to 3 or fetch again)" }]);
+  assert.ok(!lintSheet(d, { voices }).warnings.some(x => /has no id/.test(x.msg)));
+});

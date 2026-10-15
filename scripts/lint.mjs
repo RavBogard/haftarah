@@ -15,6 +15,8 @@
  *   - more entries in a reading than customs.entryCap (warning, with the count by register)
  *   - masculine God-language (He/His/Him/Himself/Lord/King/Father) in anything written for the sheet
  *   - word counts: commentary 25–120, historians 60–130, glosses 12–35
+ *   - an entry carried from last year's sheet (status "carried"), so it is kept or cut on purpose
+ *   - a schema-3 entry with no id (carry-forward and the web's links depend on ids)
  */
 import { readFile, writeFile } from "node:fs/promises";
 import { join, resolve, dirname } from "node:path";
@@ -104,6 +106,7 @@ export function lint(data, { voices = {} } = {}) {
     if (!crit && e.register !== "reference" && !L.voiceKey(e.source, voices))
       warn(where, `no identification in template/voices.json for “${e.source}” (the front page prints the name alone)`);
     for (const h of godLanguage(e.text)) warn(where, `God-language “${h.word}”: ${h.snippet}`);
+    if (e.status === "carried") warn(where, `carried from ${e.carried || "an earlier sheet"}; it prints unless its status is set to "rejected"`);
   }
 
   // ---- God-language in everything else written for the sheet ----
@@ -151,6 +154,10 @@ export function lintSheet(file, { voices = {}, fix = false, customs = null, only
     const view = L.readingView(file, r.id);
     const res = lint(view, { voices });
     const tag = x => (multi ? { ...x, where: `${r.id}: ${x.where}` } : x);
+    // readingView drops ids, so a missing one is seen here, on the reading's own entries.
+    if (Number(file.schema) >= 3)
+      for (const e of (r.commentary || []).filter(visible).filter(e => !e.id))
+        res.warnings.push({ where: `commentary ${vref(e)} ${e.source}`, msg: "has no id (run node scripts/migrate.mjs --to 3 or fetch again)" });
     out.errors.push(...res.errors.map(tag));
     out.warnings.push(...res.warnings.map(tag));
     if (fix && res.fixes.length) applyFixes(view, res.fixes);
