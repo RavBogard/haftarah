@@ -33,7 +33,7 @@ export async function serveSite({ dist, week, port = 0 }) {
   const name = basename(resolve(week));
   const slug = isSlug(name) ? name : `2026-01-01-${name}`;
   const sheet = cleanSheet(JSON.parse(await readFile(join(week, "sheet.json"), "utf8")));
-  const index = { schema: 1, updated: new Date().toISOString(), weeks: [indexEntry(sheet, slug, new Date().toISOString())] };
+  const index = { schema: 2, updated: new Date().toISOString(), weeks: [indexEntry(sheet, slug, new Date().toISOString())] };
   const csp = await sitePolicy();   // pages are served under the real policy
   const server = createServer(async (req, res) => {
     const p = new URL(req.url, "http://x").pathname;

@@ -4,7 +4,9 @@ import { mkdtemp, mkdir, writeFile, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
-import { cleanSheet, indexEntry, upsertIndex, loadWebConfig, storeIdFromToken, publish, STORE_ID } from "../scripts/publish.mjs";
+import { readFileSync } from "node:fs";
+import { migrate3 } from "../scripts/migrate.mjs";
+import { cleanSheet, indexEntry, upsertIndex, loadWebConfig, storeIdFromToken, publish, STORE_ID, PUBLISHED_FIELDS } from "../scripts/publish.mjs";
 
 const TOKEN = "vercel_blob_rw_wOGdAqvPmTFjKrmY_s3cr3tpart";
 const STORE = "https://wogdaqvpmtfjkrmy.public.blob.vercel-storage.com";
@@ -46,6 +48,8 @@ test("indexEntry and upsertIndex", () => {
     hebrew: "כ״ט בְּתִשְׁרֵי תשפ״ז", hebrewEn: "29 Tishrei 5787", shabbat: "Shabbat Bereshit, Machar Chodesh",
     ref: "I Samuel 20:18–42", book: "I Samuel", incipit: { he: "מָחָ֣ר חֹ֑דֶשׁ", en: "Tomorrow will be the new moon" },
     defaultHaftarah: "Isaiah 42:5–43:10", pdf: "weeks/2026-10-17-noach/sheet.pdf", published: "2026-10-15T20:11:03Z",
+    parashah: "Bereshit", parashahHe: "בְּרֵאשִׁית", parashahKey: "bereshit", cycle: "5787", special: "Shabbat Machar Chodesh",
+    readings: [{ id: "haftarah", kind: "haftarah", ref: "I Samuel 20:18–42", book: "I Samuel" }],
   });
   const older = { ...e, slug: "2026-10-03-haazinu", civil: "2026-10-03" };
   const newer = { ...e, slug: "2026-10-24-lech-lecha", civil: "2026-10-24" };
@@ -53,7 +57,7 @@ test("indexEntry and upsertIndex", () => {
   idx = upsertIndex(idx, older, "2026-10-15T20:12:00Z");
   idx = upsertIndex(idx, newer, "2026-10-15T20:13:00Z");
   idx = upsertIndex(idx, { ...e, published: "2026-10-16T00:00:00Z" }, "2026-10-16T00:00:00Z");  // replaces, does not duplicate
-  assert.equal(idx.schema, 1);
+  assert.equal(idx.schema, 2);
   assert.equal(idx.updated, "2026-10-16T00:00:00Z");
   assert.deepEqual(idx.weeks.map(w => w.slug), ["2026-10-24-lech-lecha", "2026-10-17-noach", "2026-10-03-haazinu"]);
   assert.equal(idx.weeks[1].published, "2026-10-16T00:00:00Z");
@@ -227,4 +231,42 @@ test("dry run copes with a sheet that has no commentary", async () => {
   const lines = [];
   await publish(dir, { dryRun: true, log: l => lines.push(l) });
   assert.match(lines[0], /0 entries, .* 0 rejected entries removed/);
+});
+
+test("an index row written before v2 stays exactly as it was", () => {
+  const old = { slug: "2026-10-03-haazinu", civil: "2026-10-03", shabbat: "Shabbat Ha'azinu", ref: "II Samuel 22:1–51", pdf: "weeks/2026-10-03-haazinu/sheet.pdf" };
+  const idx = upsertIndex({ schema: 1, weeks: [old] }, indexEntry(sheet, "2026-10-17-noach", "t"), "t");
+  assert.deepEqual(idx.weeks.find(w => w.slug === old.slug), old);
+});
+
+test("a schema-3 week gives the same index row as its schema-2 file", () => {
+  assert.deepEqual(indexEntry(migrate3(sheet), "2026-10-17-noach", "t"), indexEntry(sheet, "2026-10-17-noach", "t"));
+});
+
+test("cleanSheet cleans every reading of a schema-3 sheet and keeps highlights", () => {
+  const m = migrate3(structuredClone(sheet));
+  m.highlights = [
+    { reading: "haftarah", chapter: 20, verse: 30, words: [0, 2], note: "n", status: "proposed" },
+    { reading: "haftarah", chapter: 20, verse: 31, status: "rejected" },
+  ];
+  const out = cleanSheet(m);
+  assert.equal(out.schema, 3);
+  assert.equal(out.readings[0].commentary.length, sheet.commentary.length - 1);
+  assert.ok(!JSON.stringify(out).includes('"status"'));
+  assert.ok(!("candidates" in out));
+  assert.deepEqual(out.highlights, [{ reading: "haftarah", chapter: 20, verse: 30, words: [0, 2], note: "n" }]);
+  assert.equal(m.readings[0].commentary.length, sheet.commentary.length, "the input is not changed");
+});
+
+// The top-level keys of every jsonc block in README's "Data file" section (two-space indent = top level).
+function documentedFields(readme) {
+  const section = readme.split(/^## /m).find(s => s.startsWith("Data file")) || "";
+  const keys = new Set();
+  for (const block of section.match(/```jsonc[\s\S]*?```/g) || []) for (const m of block.matchAll(/^ {2}"([A-Za-z]+)":/gm)) keys.add(m[1]);
+  return [...keys].sort();
+}
+
+test("every field README documents is published, and every published field is documented", () => {
+  const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8");
+  assert.deepEqual(documentedFields(readme), [...PUBLISHED_FIELDS].sort());
 });

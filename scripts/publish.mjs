@@ -28,8 +28,10 @@ export const BLOB_API = "https://vercel.com/api/blob";
 export const STORE_ID = "wOGdAqvPmTFjKrmY";
 const API_VERSION = "13";
 const MAX_AGE = { json: 60, pdf: 3600 };
-// Schema 2's top-level fields; anything else (candidates, drafts) stays home.
-const SCHEMA2 = ["schema", "slug", "shabbat", "series", "haftarah", "verses", "glosses", "commentary", "openingNote", "glossary", "nextWeek", "credits"];
+// The top-level fields that reach the web; anything else (candidates, drafts, a stray status) stays
+// home. README.md's "Data file" section documents exactly these, and tests/publish.test.mjs holds
+// the two lists together, so a new field can never vanish from the web unnoticed.
+export const PUBLISHED_FIELDS = ["schema", "slug", "shabbat", "series", "haftarah", "verses", "glosses", "commentary", "readings", "openingNote", "glossary", "nextWeek", "credits", "highlights"];
 
 async function exists(p) { try { await access(p); return true; } catch { return false; } }
 const rejected = item => item && typeof item === "object" && item.status === "rejected";
@@ -45,33 +47,39 @@ function dropStatus(value) {
   return value;
 }
 
-/** The week's data as the site shows it: no rejected items, no statuses, schema-2 fields only. */
+/** The week's data as the site shows it: published fields only, no rejected items in any reading, no statuses. */
 export function cleanSheet(data) {
   const out = {};
-  for (const k of SCHEMA2) if (k in data) out[k] = data[k];
-  for (const k of ["commentary", "glosses", "glossary"]) if (Array.isArray(out[k])) out[k] = out[k].filter(i => !rejected(i));
+  for (const k of PUBLISHED_FIELDS) if (k in data) out[k] = data[k];
+  const keep = list => (Array.isArray(list) ? list.filter(i => !rejected(i)) : list);
+  for (const k of ["commentary", "glosses", "glossary", "highlights"]) if (k in out) out[k] = keep(out[k]);
+  if (Array.isArray(out.readings)) out.readings = out.readings.map(r => ({ ...r, commentary: keep(r.commentary), glosses: keep(r.glosses) }));
   if (rejected(out.nextWeek)) out.nextWeek = null;
   return dropStatus(out);
 }
 
-/** One row of index.json. */
+/** One row of index.json (v2: the v1 fields, plus what the library groups by). */
 export function indexEntry(sheet, slug, published) {
-  const s = sheet.shabbat || {}, h = sheet.haftarah || {};
+  const s = sheet.shabbat || {}, p = s.parashah || {}, h = L.primaryReading(sheet) || {};
   return {
     slug, civil: s.civil || "", civilDisplay: s.civilDisplay || "", hebrew: s.hebrew || "", hebrewEn: s.hebrewEn || "",
     shabbat: L.shabbatName(sheet), ref: L.enDash(h.ref || ""), book: h.book || "",
     incipit: { he: (h.incipit && h.incipit.he) || "", en: (h.incipit && h.incipit.en) || "" },
     defaultHaftarah: h.defaultHaftarah ? L.enDash(h.defaultHaftarah) : null,
     pdf: weekPath(slug, "sheet.pdf"), published,
+    parashah: p.en || "", parashahHe: p.he || "", parashahKey: L.parashahKey(p.en || ""),
+    cycle: String((sheet.series && sheet.series.year) || (s.hebrewEn || "").split(/\s+/).pop() || ""),
+    special: s.special || null,
+    readings: L.readings(sheet).map(r => ({ id: r.id, kind: r.kind, ref: L.enDash(r.ref || ""), book: r.book || "" })),
   };
 }
 
-/** Replace or insert the week by slug; newest civil date first. */
+/** Replace or insert the week by slug; newest civil date first. Rows written before v2 are kept as they are. */
 export function upsertIndex(index, entry, now) {
   const weeks = ((index && index.weeks) || []).filter(w => w.slug !== entry.slug);
   weeks.push(entry);
   weeks.sort((a, b) => String(b.civil).localeCompare(String(a.civil)) || String(b.slug).localeCompare(String(a.slug)));
-  return { schema: 1, updated: now, weeks };
+  return { schema: 2, updated: now, weeks };
 }
 
 /** "vercel_blob_rw_<storeId>_<secret>" → storeId; anything else → null. */
@@ -160,10 +168,12 @@ export async function publish(dir, { dryRun = false, config, log = console.log, 
   const pdf = await readFile(join(dir, "sheet.pdf"));
   const paths = { sheet: weekPath(slug, "sheet.json"), pdf: weekPath(slug, "sheet.pdf"), index: INDEX_PATH };
   const page = `${SITE}/${slug}`;
-  const removed = (raw.commentary || []).filter(rejected).length;
+  const removed = L.readings(raw).reduce((n, r) => n + (r.commentary || []).filter(rejected).length, 0);
+  const shown = L.readings(clean).reduce((n, r) => n + (r.commentary || []).length, 0);
+  const glossCount = L.readings(clean).reduce((n, r) => n + (r.glosses || []).length, 0);
 
   if (dryRun) {
-    log(`web      ${paths.sheet}  (${human(json.length)}; ${(clean.commentary || []).length} entries, ${(clean.glosses || []).length} glosses, ${(clean.glossary || []).length} glossary terms; ${removed} rejected entr${removed === 1 ? "y" : "ies"} removed)`);
+    log(`web      ${paths.sheet}  (${human(json.length)}; ${shown} entries, ${glossCount} glosses, ${(clean.glossary || []).length} glossary terms; ${removed} rejected entr${removed === 1 ? "y" : "ies"} removed)`);
     log(`web      ${paths.pdf}  (${human(pdf.length)})`);
     log(`web      ${paths.index}  (upsert ${slug})`);
     log(`Page:    ${page}`);

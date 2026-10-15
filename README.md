@@ -20,7 +20,7 @@ scripts/
   build.mjs                 sheet.json -> sheet.html -> sheet.pdf (headless Chrome/Edge), optional page PNGs; refuses a broken citation or failed lint; --trope adds the chanter's copy
   deliver.mjs               week files -> Google Drive through the drop box, byte-exact (sha256-checked)
   check.mjs                 renders twice and asserts the layout rules (no lone verse, no gap over the rule, keys in series, same output both times)
-  migrate.mjs               schema 1 -> schema 2
+  migrate.mjs               schema 1 -> 2; --to 3 for schema 3
   web-build.mjs             assembles site/dist for Vercel
   publish.mjs               puts a week on the web (Blob store + index)
   web-check.mjs             headless check of the built site at desktop and phone widths; --serve to look
@@ -76,11 +76,15 @@ If no shell is available, open `weeks/<slug>/sheet.html` in Chrome and print to 
 
 ## Data file
 
-`sheet.json` (schema 2) is self-contained. The parts the weekly run edits:
+`sheet.json` is self-contained, in one of two shapes that both stay valid for good. Schema 2 holds one reading, the haftarah. Schema 3 holds a list of readings, so a week can carry a Torah selection beside its haftarah (fetch writes schema 3 from 2.0's second wave). `template/lib.js` reads either: `readings(data)` lists the readings, `primaryReading(data)` is the haftarah (else the first reading), and `readingView(data, id)` gives one reading in the schema-2 shape that the printed sheet and every script read. A schema-2 file comes back from `readingView` untouched, which is why its print never changes. `node scripts/migrate.mjs weeks/<slug> --to 3` converts a file; without `--to 3` it converts schema 1 to 2 as before.
+
+Schema 2, the parts the weekly run edits:
 
 ```jsonc
 {
   "schema": 2,
+  "slug": "2026-10-10-bereshit-machar-chodesh",    // the week folder's name and the page address
+  "shabbat": { "civil": "2026-10-10", "civilDisplay": "October 10, 2026", "hebrewEn": "29 Tishrei 5787", "parashah": { "en": "Bereshit", "ref": "Genesis 1:1-6:8" }, "special": "Shabbat Machar Chodesh" },   // from Hebcal, with "hebrew" (the date in Hebrew) and parashah "he"
   "series": { "name": "Torah from Scratch", "year": "5787" },   // sheets are not numbered; the front page shows the Hebrew date
   "haftarah": {
     "ref": "I Samuel 20:18-42",
@@ -114,6 +118,31 @@ If no shell is available, open `weeks/<slug>/sheet.html` in Chrome and print to 
   "credits": { "issuedBy": "Central Reform Congregation", "editor": "Rabbi Daniel Bogard", "signoff": "one first-person sentence" }
 }
 ```
+
+Schema 3 moves the reading into `readings[]` and leaves the week's own fields where they were:
+
+```jsonc
+{
+  "schema": 3,
+  // slug, shabbat, series, openingNote, glossary, nextWeek and credits: exactly as in schema 2
+  "readings": [
+    {
+      "id": "haftarah", "kind": "haftarah",          // ids are unique in the sheet; kind is "haftarah", or "torah" from Wave 2
+      "ref": "I Samuel 20:18-42", "book": "I Samuel",  // with every other field schema 2 keeps in "haftarah"
+      "verses": [ { "book": "I Samuel", "chapter": 20, "verse": 18, "he": "<html>", "en": "<html>", "notes": [], "break": null } ],
+      "glosses": [],                                    // as in schema 2
+      "commentary": [ { "id": "e-3d5f2921", "verse": 18, "register": "traditional", "source": "Rashi" } ]   // and the rest as in schema 2
+    }
+  ],
+  "highlights": [ { "reading": "haftarah", "chapter": 20, "verse": 30, "words": [2, 4], "note": "<html>" } ]   // optional, in either schema; web only
+}
+```
+
+In schema 3 every verse names its `book`, and every commentary entry has an `id`: "e-" and eight hex digits, given once (by `migrate --to 3`, later by whoever adds the entry) and kept when the entry is edited. On the web a verse's address is `<reading>-<chapter>-<verse>`, as in `/2026-10-10-bereshit-machar-chodesh#haftarah-20-30`.
+
+`highlights` are Daniel's marks for discussion, shown on the web page and never on the printed sheet: the verse gets a rubric bar, the words from `words[0]` to `words[1]` (counting the verse's Hebrew words from 0, as the page counts them) a tint, and `note`, when given, sits in the verse's apparatus. A range past the verse's last word is cut short; a reversed range is ignored.
+
+`publish.mjs` sends to the web exactly the top-level fields shown in the two blocks above (`PUBLISHED_FIELDS`) and nothing else; a test fails when this section and that list disagree. It removes rejected entries and glosses from every reading, rejected glossary items and highlights, and every `status`.
 
 `node scripts/migrate.mjs weeks/<slug>` converts a schema-1 file. There are no discussion questions and no context box: the opening note replaced them.
 
