@@ -19,7 +19,7 @@ export function initSettings({ host, button, pdfHref = null, trope = true }) {
       <span class="seg" role="group" aria-label="Theme" id="themeSeg"><button type="button" data-theme="auto">Auto</button><button type="button" data-theme="light">Light</button><button type="button" data-theme="dark">Dark</button></span></div>
     ${trope ? `<div class="row"><span class="label">Trope colors<br><span class="hint">for chanters: phrases by family</span></span>
       <button type="button" class="switch" id="tropeSw" role="switch" aria-checked="false" aria-label="Trope colors"></button></div>` : ""}
-    ${pdfHref ? `<div class="row"><a class="dl" href="${pdfHref}" download><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" style="stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round"><path d="M12 4v11m0 0l-4-4m4 4l4-4M5 20h14"/></svg>Download the printed sheet (PDF)</a></div>` : ""}`;
+    ${pdfHref ? `<div class="row"><a class="dl" href="${pdfHref}" download><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 4v11m0 0l-4-4m4 4l4-4M5 20h14"/></svg>Download the printed sheet (PDF)</a></div>` : ""}`;
   const sync = () => {
     host.querySelectorAll("#themeSeg button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.theme === html.dataset.theme)));
     const sw = host.querySelector("#tropeSw"); if (sw) sw.setAttribute("aria-checked", String(!!html.dataset.trope));

@@ -23,6 +23,11 @@ export async function run() {
   const $ = id => document.getElementById(id);
   const check = new URLSearchParams(location.search).get("check") === "1";
   const html = document.documentElement;
+  const errors = [];   // check mode: script errors and CSP violations
+  if (check) {
+    addEventListener("error", e => errors.push(e.message));
+    document.addEventListener("securitypolicyviolation", e => errors.push(`CSP blocked ${e.blockedURI || "inline"} (${e.violatedDirective})`));
+  }
   applyStored();
   initSettings({ host: $("settings"), button: $("aaBtn"), trope: false });
   const status = (msg) => { $("status").innerHTML = msg; $("status").hidden = false; };
@@ -62,7 +67,7 @@ export async function run() {
     html.dataset.checkWeeks = String(index.weeks.length);
     html.dataset.checkHero = hero ? hero.entry.slug : "";
     html.dataset.checkHeading = hero ? hero.heading : "";
-    html.dataset.checkErrors = "0";
+    html.dataset.checkErrors = String(errors.length) + (errors.length ? ": " + errors[0] : "");
     html.dataset.checkDone = "1";
   }
 }

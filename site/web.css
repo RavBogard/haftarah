@@ -283,3 +283,6 @@ sup.fn button::after { content: ""; position: absolute; inset: -.7em -.35em; }
   .panel { top: auto; height: 86vh; width: 100vw; border-left: 0; border-top: .5px solid var(--rule); transform: translateY(104%); }
 }
 @media print { .mast, .panel, .settings, .notepop { display: none !important; } .rail { position: static; } }
+
+/* the download icon in the Aa card (no style attributes anywhere: the CSP forbids them) */
+.settings .dl svg { flex: none; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }

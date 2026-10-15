@@ -33,7 +33,11 @@ export async function run() {
   const $ = id => document.getElementById(id);
   const html = document.documentElement;
   const check = new URLSearchParams(location.search).get("check") === "1";
-  if (check) { addEventListener("error", e => errorsSeen.push(e.message)); addEventListener("unhandledrejection", e => errorsSeen.push(String(e.reason))); }
+  if (check) {
+    addEventListener("error", e => errorsSeen.push(e.message));
+    addEventListener("unhandledrejection", e => errorsSeen.push(String(e.reason)));
+    document.addEventListener("securitypolicyviolation", e => errorsSeen.push(`CSP blocked ${e.blockedURI || "inline"} (${e.violatedDirective})`));
+  }
   const fail = (msg) => { const s = $("status"); s.innerHTML = msg; s.hidden = false; if (check) { html.dataset.checkErrors = String(errorsSeen.length + 1) + ": " + s.textContent; html.dataset.checkDone = "1"; } };
 
   applyStored();
