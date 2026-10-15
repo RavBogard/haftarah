@@ -12,6 +12,7 @@ import { isolatedEnv } from "./helpers/isolatedEnv.mjs";
 import { findBrowser } from "../scripts/build.mjs";
 import { parseArgs } from "../scripts/web-check.mjs";
 import { migrate3 } from "../scripts/migrate.mjs";
+import { makeWeekTorah } from "./helpers/makeWeekTorah.mjs";
 
 const run = promisify(execFile);
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -68,5 +69,21 @@ test("check.mjs passes on week-torah: both sheets", { skip, timeout: 300_000 }, 
     assert.match(stdout, /Torah: sheet-torah\.html/);
     assert.match(stdout, /Haftarah: sheet\.html/);
     assert.match(stdout, /Check passed\./);
+  } finally { await iso.cleanup(); }
+});
+
+test("web-check passes on a two-reading week (Torah first), with a Last time link", { skip, timeout: 300_000 }, async () => {
+  const iso = await isolatedEnv();
+  try {
+    const dir = join(iso.home, "week-notes-torah");
+    await mkdir(dir);
+    const two = makeWeekTorah(JSON.parse(await readFile(join(ROOT, "tests", "fixtures", "week-notes", "sheet.json"), "utf8")));
+    two.prior = { slug: "2025-10-04-bereshit-machar-chodesh", hebrewEn: "10 Tishrei 5786", cycle: "5786" };
+    await writeFile(join(dir, "sheet.json"), JSON.stringify(two, null, 2));
+    const { stdout } = await run(process.execPath, [join(ROOT, "scripts", "web-check.mjs"), dir, "--out", join(iso.home, "dist")], { env: iso.env, cwd: ROOT, maxBuffer: 1 << 24 });
+    assert.match(stdout, /ok {2,}a heading per reading/);
+    assert.match(stdout, /ok {2,}the Last time link goes to last year's sheet/);
+    assert.match(stdout, /ok {2,}rows carry the reading in their id/);
+    assert.match(stdout, /All web checks passed\./);
   } finally { await iso.cleanup(); }
 });

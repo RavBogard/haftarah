@@ -59,5 +59,13 @@ export function initSettings({ host, button, pdfHref = null, trope = true, langs
   const pb = host.querySelector("#presentBtn");
   if (pb) pb.addEventListener("click", () => { close(); onPresent(); });
   sync();
-  return { close };
+  // A second printed sheet (the Torah's), added once the week's data says there is one.
+  const addDownload = (href, label) => {
+    const row = document.createElement("div");
+    row.className = "row";
+    row.innerHTML = `<a class="dl" href="${href}" download><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 4v11m0 0l-4-4m4 4l4-4M5 20h14"/></svg>${label}</a>`;
+    const first = host.querySelector("a.dl");
+    if (first) first.closest(".row").after(row); else host.append(row);
+  };
+  return { close, addDownload };
 }

@@ -373,3 +373,11 @@ html[data-present] { overflow: hidden; }
 .books .ch { color: var(--ink-2); font-feature-settings: "lnum"; flex: 1; }
 .books .n, .specials .n { color: var(--ink-2); font-size: .88rem; margin-left: auto; }
 @media (max-width: 640px) { .books { grid-template-columns: 1fr; } }
+
+/* ---- a week with two readings: a heading over each ---- */
+.reading-head { font-size: 1.05rem; font-weight: 600; color: var(--rubric); margin: 2.25rem 0 .75rem; padding-top: 1rem; border-top: .5px solid var(--rule); scroll-margin-top: calc(var(--mast-h) + .75rem); }
+.text > .reading-head:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+.reading-head .ref { color: var(--ink); font-weight: 500; font-feature-settings: "lnum"; margin-left: .5em; }
+.reading-head .sel { color: var(--ink-2); font-weight: 400; font-style: italic; font-size: .88em; margin-left: .5em; }
+.hero .reading .prior { color: var(--ink-2); text-decoration: none; }
+.hero .reading .prior:hover { color: var(--rubric); text-decoration: underline; }

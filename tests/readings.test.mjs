@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { isolatedEnv } from "./helpers/isolatedEnv.mjs";
 import { createRequire } from "node:module";
 import { migrate, migrate3 } from "../scripts/migrate.mjs";
+import { makeWeekTorah } from "./helpers/makeWeekTorah.mjs";
 const L = createRequire(import.meta.url)("../template/lib.js");
 const fixture = name => JSON.parse(readFileSync(new URL(`./fixtures/${name}/sheet.json`, import.meta.url), "utf8"));
 
@@ -130,4 +131,20 @@ test("readingView returns a file with no schema key as the same object, like rea
   assert.equal(L.readingView(d), d);
   assert.equal(L.readingView(d, "haftarah"), d);
   assert.equal(L.readingView({ schema: "garbage", verses: [] }).schema, "garbage");
+});
+
+test("readingModel: a haftarah's is sheetModel's; a Torah reading ends on sof pasuk and its legend says so", () => {
+  const min = JSON.parse(readFileSync(new URL("./fixtures/week-min/sheet.json", import.meta.url), "utf8"));
+  const wt = makeWeekTorah(min);
+  const h = L.readingModel(wt, "haftarah");
+  assert.deepEqual({ ...h, reading: undefined }, { ...L.sheetModel(L.readingView(wt, "haftarah")), reading: undefined });
+  assert.deepEqual(h.reading, { id: "haftarah", kind: "haftarah", selection: null });
+  assert.ok(h.verses.at(-1).heHtml.includes("tr-sof-haftarah"), "the haftarah still closes with its own cadence");
+  const t = L.readingModel(wt, "torah");
+  assert.equal(t.book, "Genesis");
+  assert.ok(!t.verses.at(-1).heHtml.includes("tr-sof-haftarah") && t.verses.at(-1).heHtml.includes("tr-sof-pasuk"));
+  assert.equal(t.verses.at(-1).final, false);
+  assert.ok(!t.front.families.some(x => x.key === "sof-haftarah") && t.front.families.some(x => x.key === "sof-pasuk"));
+  assert.deepEqual(t.reading, { id: "torah", kind: "torah", selection: "aliyah 1, its first verses" });
+  assert.deepEqual(L.readingModel(min, "haftarah").verses, L.sheetModel(min).verses, "a schema-2 week is unchanged");
 });

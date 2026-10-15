@@ -2,7 +2,7 @@
 // the model comes from lib.js's sheetModel, so the page prepares verses exactly as the print does.
 import { applyStored, initSettings } from "./settings.js";
 import { initPanel } from "./panel.js";
-import { slugFromPath, dataUrl, verseAnchor, parseVerseAnchor } from "./contract.js";
+import { slugFromPath, dataUrl, verseAnchor, parseVerseAnchor, PDF_FILES } from "./contract.js";
 
 export { slugFromPath, dataUrl };
 import { initRoving, focusables } from "./a11y.js";
@@ -117,15 +117,35 @@ export async function run() {
   } catch (err) {
     return fail(`This sheet could not be loaded. The printed sheets are on <a href="${DRIVE}">Google Drive</a>.`);
   }
-  // The week's primary reading (its haftarah) in the schema-2 shape sheetModel reads; a schema-2 week is itself.
+  // Every reading with verses, in the sheet's order (a Torah selection first, then the haftarah). The
+  // week is known by its primary reading, the haftarah: the title, the hero, the end matter. Each
+  // reading's model comes from readingModel (sheetModel on that reading; a Torah reading ends on sof
+  // pasuk). A schema-2 week is one reading and renders exactly as before, with no reading headings.
   const reading = L.primaryReading(data);
   if (!reading) return fail(`This sheet could not be loaded. The printed sheets are on <a href="${DRIVE}">Google Drive</a>.`);
-  const model = L.sheetModel(L.readingView(data, reading.id), { voices: voicesDict });
+  const parts = L.readings(data).filter(r => (r.verses || []).length).map(r => ({ reading: r, model: L.readingModel(data, r.id, { voices: voicesDict }) }));
+  const model = (parts.find(p => p.reading.id === reading.id) || { model: L.readingModel(data, reading.id, { voices: voicesDict }) }).model;
+  const multi = parts.length > 1;
+  const torahPart = parts.find(p => p.reading.kind === "torah") || null;
   const highlights = Array.isArray(data.highlights) ? data.highlights : [];
   document.title = model.title;
+  if (torahPart) settings.addDownload(dataUrl(slug, PDF_FILES.torah), "Download the Torah sheet (PDF)");
 
-  // ---- front page: the sheet introduces itself ----
+  // ---- front page: the sheet introduces itself (with two readings, the legend and the voices cover both) ----
   const f = model.front, prov = f.provenance;
+  const used = L.REGISTER_ORDER.filter(k => parts.some(p => p.model.front.legend.used.includes(k)));
+  const hasKeys = parts.some(p => p.model.front.legend.hasKeys);
+  const hasKetiv = parts.some(p => p.model.front.legend.hasKetiv);
+  const famKeys = new Set(parts.flatMap(p => p.model.front.families.map(x => x.key)));
+  const families = L.TROPE_FAMILIES.filter(([k]) => famKeys.has(k)).map(([key, name]) => ({ key, name }));
+  const voices = multi ? L.voicesFor(parts.flatMap(p => p.reading.commentary || []), voicesDict, x => !x || x.status !== "rejected") : f.voices;
+  const refs = multi
+    ? parts.map(p => `<span class="ref">${p.reading.kind === "torah" ? "Torah" : "Haftarah"} · ${esc(p.model.ref)}</span>`).join("<br>")
+    : `<span class="ref">${esc(model.ref)}</span>`;
+  const pdfs = torahPart
+    ? `The printed sheets (PDF): <a class="pdf" href="${dataUrl(slug, PDF_FILES.torah)}">Torah</a> · <a class="pdf" href="${dataUrl(slug, PDF_FILES.haftarah)}">Haftarah</a>`
+    : `<a class="pdf" href="${dataUrl(slug, "sheet.pdf")}">The printed sheet (PDF)</a>`;
+  const prior = data.prior && data.prior.slug ? `<br><a class="prior" href="/${esc(data.prior.slug)}">Last time: the ${esc(data.prior.cycle || "")} sheet</a>` : "";
   const front = $("front");
   front.innerHTML = `
     <div class="hero">
@@ -133,21 +153,21 @@ export async function run() {
       <div class="incipit-block">
         <h1 class="incipit" lang="he" dir="rtl">${f.incipit.heHtml}</h1>
         <p class="incipit-en">${esc(f.incipit.en)}</p>
-        <p class="reading"><span class="ref">${esc(model.ref)}</span><br>${esc(model.shabbatName)}<br>
+        <p class="reading">${refs}<br>${esc(model.shabbatName)}<br>
           <span class="dates"><span class="he-date" lang="he" dir="rtl">${esc(model.shabbat.hebrew)}</span> · ${esc(model.shabbat.civilDisplay)}</span><br>
-          <a class="pdf" href="${dataUrl(slug, "sheet.pdf")}">The printed sheet (PDF)</a></p>
+          ${pdfs}${prior}</p>
       </div>
     </div>
     <div class="opening">
       ${f.openingNote.calendar.map(p => `<p>${p}</p>`).join("")}
       ${f.openingNote.setting.length ? `<div class="setting">${f.openingNote.setting.map(p => `<p>${p}</p>`).join("")}</div>` : ""}
     </div>
-    <div class="legend">${L.REGISTER_ORDER.map(k => `<span class="reg reg-${k}${f.legend.used.includes(k) ? "" : " unused"}">${SIG[k]}${NAMES[k]}</span>`).join("")}
-      <span${f.legend.hasKeys ? "" : ' class="unused"'}><span class="k">a–z</span>translators’ notes (JPS) and word notes: tap a letter</span>
-      ${f.legend.hasKetiv ? `<span><span class="k">[ ] ( )</span>read / written: where tradition reads a word differently from its spelling</span>` : ""}
-      <span class="trope-legend"><span class="label">Chanter’s copy · trope phrases by family</span>${f.families.map(x => `<span class="tr tr-${x.key}">${esc(x.name)}</span>`).join(" ")}</span>
+    <div class="legend">${L.REGISTER_ORDER.map(k => `<span class="reg reg-${k}${used.includes(k) ? "" : " unused"}">${SIG[k]}${NAMES[k]}</span>`).join("")}
+      <span${hasKeys ? "" : ' class="unused"'}><span class="k">a–z</span>translators’ notes (JPS) and word notes: tap a letter</span>
+      ${hasKetiv ? `<span><span class="k">[ ] ( )</span>read / written: where tradition reads a word differently from its spelling</span>` : ""}
+      <span class="trope-legend"><span class="label">Chanter’s copy · trope phrases by family</span>${families.map(x => `<span class="tr tr-${x.key}">${esc(x.name)}</span>`).join(" ")}</span>
     </div>`;
-  if (f.voices.length) front.append(el("div", "voices", `<h2>Voices on this sheet</h2><p>${f.voices.map(v => `<span class="voice"><span class="name">${esc(v.name)}</span>${v.refs && v.refs.length ? ` (${esc(v.refs.join(", "))})` : ""}${v.line ? ` ${esc(v.line)}` : ""}</span>`).join('<span class="sep"> · </span>')}</p>`));
+  if (voices.length) front.append(el("div", "voices", `<h2>Voices on this sheet</h2><p>${voices.map(v => `<span class="voice"><span class="name">${esc(v.name)}</span>${v.refs && v.refs.length ? ` (${esc(v.refs.join(", "))})` : ""}${v.line ? ` ${esc(v.line)}` : ""}</span>`).join('<span class="sep"> · </span>')}</p>`));
   front.append(el("div", "provenance", `Hebrew: ${esc(prov.he)}. English: ${esc(prov.en)}. ${prov.signoffHtml}${prov.signed ? ` <span class="sign">— ${esc(prov.editor)}</span>` : ""}`));
   $("footAttr").textContent = `Hebrew: ${prov.he}. English: ${prov.en}. Sources from Sefaria.`;
   for (const id of ["reading", "end", "foot"]) $(id).hidden = false;
@@ -194,7 +214,14 @@ export async function run() {
       : `<span class="${cls}">${esc(e.source)}</span>`;
     return `<span class="sig" title="${NAMES[reg]}">${SIG[reg]}</span><span class="v">${e.verseLabel}</span>${lemma} ${src}<span class="body">${e.bodyHtml}</span>${e.tail.length ? ` <span class="tail">${e.tail.join("; ")}.</span>` : ""}`;
   }
-  for (const v of model.verses) {
+  for (const part of parts) {
+    const reading = part.reading;   // this block's reading; the week's primary one is the `reading` outside the loop
+    if (multi) {
+      const head = el("h2", "reading-head", `${reading.kind === "torah" ? "Torah" : "Haftarah"}<span class="ref">${esc(part.model.ref)}</span>${reading.selection ? `<span class="sel">${esc(reading.selection)}</span>` : ""}`);
+      head.id = `reading-${reading.id}`;
+      text.append(head);
+    }
+    for (const v of part.model.verses) {
     const row = el("div", "row" + (v.prevBreak ? ` break-${v.prevBreak}` : ""));
     row.id = verseAnchor(reading.id, v.chapter, v.verse); row.dataset.reading = reading.id; row.dataset.ref = v.ref; row.dataset.verse = `${v.chapter}:${v.verse}`;
     const en = el("div", "en" + (v.poetry ? " poetry" : ""), v.poetry ? v.enLines.map(t => `<span class="ln">${t}</span>`).join("") : v.enLines[0]);
@@ -225,10 +252,11 @@ export async function run() {
       v.entries.map(e => `<p class="entry reg-${e.register}">${entryHtml(e)}</p>`).join("");
     if (!count) app.classList.add("empty");
     rail.append(app); text.append(row);
-    const r = { v, row, app, keys: v.keys };
+    const r = { v, row, app, keys: v.keys, reading: reading.id, model: part.model };
     // Narrow, the verse number opens the fold below it; keep its state announced however the fold moves.
     if (count) app.addEventListener("toggle", () => { if (!wide.matches) gutButton(r).setAttribute("aria-expanded", String(app.open)); });
     rows.push(r);
+    }
   }
 
   // ---- end matter ----
@@ -272,16 +300,16 @@ export async function run() {
     let first = null, lastSeen = null;
     for (const r of rows) {
       const b = r.row.getBoundingClientRect();
-      if (b.bottom > top && b.top < bottom) { if (!first) first = r; lastSeen = r; }
+      if (b.bottom > top && b.top < bottom) { if (!first) first = r; if (r.reading === first.reading) lastSeen = r; }
     }
     if (!first) {
       const inFront = text.getBoundingClientRect().top > top;
-      mastLeft.textContent = inFront ? `Haftarah · ${model.seriesLabel}` : model.shabbatName;
+      mastLeft.textContent = inFront ? `${multi ? "Torah and haftarah" : "Haftarah"} · ${model.seriesLabel}` : model.shabbatName;
       mastRange.textContent = inFront ? model.seriesName : model.ref;
       return;
     }
     mastLeft.textContent = model.shabbatName;
-    mastRange.textContent = rangeLabel(model.book, first.v, lastSeen.v);
+    mastRange.textContent = rangeLabel(first.model.book, first.v, lastSeen.v);
     if (first !== current) {
       current = first;
       track("verse_view", { verse: first.row.id });
@@ -300,7 +328,8 @@ export async function run() {
   // An old link is rewritten to the new form; a link to a verse not on this page changes nothing.
   function goToHash(hash = location.hash) {
     const a = parseVerseAnchor(hash);
-    const r = a && rows.find(x => x.v.chapter === a.chapter && x.v.verse === a.verse && (a.reading == null || a.reading === reading.id));
+    // A first-release link (#v54-3) names no reading: it means the week's primary reading, the haftarah.
+    const r = a && rows.find(x => x.v.chapter === a.chapter && x.v.verse === a.verse && x.reading === (a.reading == null ? reading.id : a.reading));
     rows.forEach(x => x.row.classList.toggle("target", x === r));   // an unknown fragment clears the old mark
     if (!r) return null;
     r.row.scrollIntoView({ block: "start" });
@@ -326,7 +355,7 @@ export async function run() {
     const text = b.dataset.act === "link" ? url : citationText({
       he: L.plainText(r.v.heHtml).text.trim(),
       en: r.v.enLines.map(t => L.plainText(t).text.trim()).join("\n"),
-      ref: L.enDash(r.v.ref), translation: translationLabel(model.front.provenance.en), url,
+      ref: L.enDash(r.v.ref), translation: translationLabel(r.model.front.provenance.en), url,
       mode: html.dataset.lang || "both",
     });
     await copyWithStatus(b, text, { write: t => navigator.clipboard.writeText(t), status: copyStatus });
@@ -443,6 +472,11 @@ function runCheck(api, L) {
   const vb = document.querySelector("#text .row .gut button");
   if (vb) { const a = getComputedStyle(vb, "::after"); h.dataset.checkVerseHit = String(Math.floor(Math.min(parseFloat(a.width), parseFloat(a.height)))); }
   if (fold) fold.open = false;
+  // Two readings: a heading each; the hero's PDF links and its Last time link.
+  h.dataset.checkHeads = String(document.querySelectorAll("#text .reading-head").length);
+  h.dataset.checkPdfs = String(document.querySelectorAll("#front a.pdf").length);
+  const priorLink = document.querySelector("#front a.prior");
+  h.dataset.checkPrior = priorLink ? priorLink.getAttribute("href") : "";
   // Two thirds down: far enough that a rail which scrolls short of its target misses it.
   const target = rows[Math.floor(rows.length * 2 / 3)];
   target.row.scrollIntoView({ block: "start" });

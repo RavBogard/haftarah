@@ -75,7 +75,10 @@ async function main() {
   // The primary reading in the schema-2 shape, whatever the week's schema. For the check (not for
   // --serve) a week without highlights gets one, so the page's highlight path is exercised.
   const raw = JSON.parse(await readFile(join(week, "sheet.json"), "utf8"));
-  const sheet = L.readingView(raw);
+  const sheet = L.readingView(raw);   // the primary reading (the haftarah), in the schema-2 shape
+  // Every verse on the page in page order (a Torah selection first), each with its reading and book.
+  const order = L.readings(raw).filter(r => (r.verses || []).length);
+  const flat = order.flatMap(r => L.readingView(raw, r.id).verses.map(v => ({ ...v, reading: r.id, book: r.book })));
   const hv = sheet.verses[Math.min(3, sheet.verses.length - 1)];
   const extra = raw.highlights || args.serve ? {} : { highlights: [{ reading: L.primaryReading(raw).id, chapter: hv.chapter, verse: hv.verse, words: [0, 1], note: "A highlight for the check." }] };
   const { server, slug, base } = await serveSite({ dist, week, port, extra });
@@ -91,21 +94,21 @@ async function main() {
       console.log(`\n${label} (measured viewport ${a.width || "?"}px): /${slug}`);
       expect("page finished", a.done === "1", a.done);
       expect("no script errors", a.errors === "0", a.errors);
-      expect("verse count", Number(a.verses) === sheet.verses.length, a.verses);
+      expect("verse count", Number(a.verses) === flat.length, a.verses);
       expect("key series present", (a.keys || "").length > 0 && /^a,b/.test(a.keys), a.keys);
-      expect("Hebrew words are buttons", Number(a.words) > sheet.verses.length * 3, a.words);
+      expect("Hebrew words are buttons", Number(a.words) > flat.length * 3, a.words);
       expect("wide layout detected", a.wide === String(wide), a.wide);
-      if (wide) { expect("rail holds every verse", Number(a.rail) === sheet.verses.length, a.rail); expect("no inline details", Number(a.details) === 0, a.details); }
+      if (wide) { expect("rail holds every verse", Number(a.rail) === flat.length, a.rail); expect("no inline details", Number(a.details) === 0, a.details); }
       else { expect("rail empty", Number(a.rail) === 0, a.rail); expect("inline details for verses with commentary", Number(a.details) > 0, a.details); }
       expect("rail holds the current verse", a["rail-current"] === (wide ? "true" : "n/a"), a["rail-current"]);
       if (wide) expect("rail scrolled to the current verse", Math.abs(Number(a["rail-offset"])) < 3, a["rail-offset"]);
       expect("empty verses show no summary", a["empty-summaries"] === "0", a["empty-summaries"]);
-      const v = sheet.verses[Math.floor(sheet.verses.length * 2 / 3)];   // the row sheet.js runCheck scrolls to
-      expect("masthead range after scrolling", (a.range || "").startsWith(`${sheet.haftarah.book} ${v.chapter}:${v.verse}`), a.range);
+      const v = flat[Math.floor(flat.length * 2 / 3)];   // the row sheet.js runCheck scrolls to
+      expect("masthead range after scrolling", (a.range || "").startsWith(`${v.book} ${v.chapter}:${v.verse}`), a.range);
       expect("current verse marked", a.current === v.ref, a.current);
       expect("dark paper", a.paper === "rgb(18, 17, 16)", a.paper);
       expect("title", /·/.test(a.title || ""), a.title);
-      expect("rows carry the reading in their id", a.anchor === `haftarah-${sheet.verses[0].chapter}-${sheet.verses[0].verse}`, a.anchor);
+      expect("rows carry the reading in their id", a.anchor === `${flat[0].reading}-${flat[0].chapter}-${flat[0].verse}`, a.anchor);
       if (extra.highlights) {
         expect("a teacher highlight marks one verse", a.highlights === "1", a.highlights);
         expect("a teacher highlight tints two words", a["hl-words"] === "2", a["hl-words"]);
@@ -116,13 +119,16 @@ async function main() {
       expect("Copy link, Copy verse and on Sefaria are 44px targets", Number(a["act-height"]) >= 44, a["act-height"]);
       expect("Show Hebrew hides the English", a["lang-he"] === "none", a["lang-he"]);
       expect("Show English hides the Hebrew", a["lang-en"] === "none", a["lang-en"]);
-      expect("one tab stop per verse for the Hebrew words", Number(a["word-stops"]) === sheet.verses.length, a["word-stops"]);
+      expect("one tab stop per verse for the Hebrew words", Number(a["word-stops"]) === flat.length, a["word-stops"]);
       expect("the closed panel is inert", a["panel-inert"] === "true", a["panel-inert"]);
       expect("every source button names the panel", a["src-uncontrolled"] === "0", a["src-uncontrolled"]);
       expect("a note popover is named while open and gone after", a.pop === "ok", a.pop);
       expect("the settings card keeps Tab inside", a.trap === "ok", a.trap);
       expect("every control in the settings card is a 44px target", Number(a["settings-min"]) >= 44, a["settings-min"]);
       expect("the verse number has a 44px hit area", Number(a["verse-hit"]) >= 44, a["verse-hit"]);
+      expect(order.length > 1 ? "a heading per reading" : "no reading heading on a one-reading week", a.heads === String(order.length > 1 ? order.length : 0), a.heads);
+      expect("a PDF link per reading", Number(a.pdfs) === order.length, a.pdfs);
+      expect(raw.prior ? "the Last time link goes to last year's sheet" : "no Last time link without a prior", (a.prior || "") === (raw.prior ? `/${raw.prior.slug}` : ""), a.prior);
     }
     const lv = sheet.verses[Math.min(5, sheet.verses.length - 1)];
     const t = attrs(await dumpDom(browser, `${base}/${slug}?check=1#v${lv.chapter}-${lv.verse}`, { size: "1440,900" }));
@@ -132,19 +138,19 @@ async function main() {
     expect("old link becomes the new address", t.hash === `#haftarah-${lv.chapter}-${lv.verse}`, t.hash);
     expect("a link to a verse not in the reading is ignored and clears the old mark", t["bogus-hash"] === "true", t["bogus-hash"]);
     const p = attrs(await dumpDom(browser, `${base}/${slug}?present&check=1`, { size: "1280,720" }));
-    const [v1, v2] = sheet.verses;
+    const [v1, v2] = flat;
     console.log(`\npresenter 1280x720: /${slug}?present`);
     expect("presenter: page finished without errors", p.done === "1" && p.errors === "0", `${p.done} ${p.errors}`);
     expect("presenter on", p.present === "1", p.present);
     expect("presenter starts at the first verse", p["present-label"] === L.enDash(v1.ref), p["present-label"]);
-    expect("presenter counts the verses", p["present-count"] === `1 / ${sheet.verses.length}`, p["present-count"]);
+    expect("presenter counts the verses", p["present-count"] === `1 / ${flat.length}`, p["present-count"]);
     expect("the web fonts are in before the fit is measured", p["present-fonts"] === "loaded", p["present-fonts"]);
     expect("the verse fits the screen", p["present-fits"] === "true", p["present-fits"]);
     expect("PageDown steps to the next verse", p["present-next"] === L.enDash(v2.ref), p["present-next"]);
-    expect("the address follows the verse", p["present-hash"] === `#haftarah-${v2.chapter}-${v2.verse}`, p["present-hash"]);
+    expect("the address follows the verse", p["present-hash"] === `#${v2.reading}-${v2.chapter}-${v2.verse}`, p["present-hash"]);
     expect("B blanks the screen", p["present-blank"] === "true", p["present-blank"]);
     expect("Escape leaves the presenter", p["present-exit"] === "true", p["present-exit"]);
-    expect("focus lands on the verse's number after Escape", p["present-focus"] === `haftarah-${v2.chapter}-${v2.verse}`, p["present-focus"]);
+    expect("focus lands on the verse's number after Escape", p["present-focus"] === `${v2.reading}-${v2.chapter}-${v2.verse}`, p["present-focus"]);
     const l = attrs(await dumpDom(browser, `${base}/?check=1`, { size: "1440,900" }));
     console.log("\nlanding: /");
     expect("landing finished", l.done === "1", l.done);

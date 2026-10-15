@@ -437,6 +437,23 @@
     return list;
   }
 
+  // One reading's model for the web page: sheetModel on readingView(data, readingId). sheetModel gives
+  // every reading's last verse the haftarah's closing cadence; a Torah reading ends on a plain sof
+  // pasuk, so its last verse and its trope legend are set right here. A haftarah's model is sheetModel's.
+  function readingModel(data, readingId, opts) {
+    const r = readings(data).find(x => x.id === readingId) || primaryReading(data);
+    const m = sheetModel(readingView(data, r ? r.id : undefined), opts);
+    if (r && r.kind === "torah") {
+      const last = m.verses[m.verses.length - 1];
+      if (last) { last.heHtml = last.heHtml.replace(/\btr-sof-haftarah\b/g, "tr-sof-pasuk"); last.final = false; }
+      const keys = new Set(m.front.families.map(x => x.key).filter(k => k !== "sof-haftarah"));
+      if (m.verses.length) keys.add("sof-pasuk");
+      m.front.families = TROPE_FAMILIES.filter(([k]) => keys.has(k)).map(([key, name]) => ({ key, name }));
+    }
+    m.reading = r ? { id: r.id, kind: r.kind, selection: r.selection || null } : null;
+    return m;
+  }
+
   // The incipit fits a 3.5in box beside the 1.6in mural: 54pt at most, 40pt at least on one line; otherwise two lines at 44pt.
   function fitIncipitSize(widthAt60pt, boxWidth) {
     const size = Math.floor(60 * boxWidth / widthAt60pt);
@@ -547,5 +564,5 @@
     return map;
   }
 
-  return { TETRA, divineName, stripMarks, splitPoetry, nowrapKeys, letterFor, isDeadRef, normalizeRefs, assignKeys, SIGLA, REGISTER_ORDER, REGISTER_NAMES, voicesFor, voiceKey, hebrewKey, hebrewWords, findHebrew, plainText, findEnglish, fitIncipitSize, parseBibliography, tropePhrases, tropeHtml, tropeFamiliesUsed, TROPE_FAMILIES, escapeHtml, enDash, shabbatName, sheetModel, readings, primaryReading, readingView, parashahKey, entryId, assignEntryIds };
+  return { TETRA, divineName, stripMarks, splitPoetry, nowrapKeys, letterFor, isDeadRef, normalizeRefs, assignKeys, SIGLA, REGISTER_ORDER, REGISTER_NAMES, voicesFor, voiceKey, hebrewKey, hebrewWords, findHebrew, plainText, findEnglish, fitIncipitSize, parseBibliography, tropePhrases, tropeHtml, tropeFamiliesUsed, TROPE_FAMILIES, escapeHtml, enDash, shabbatName, sheetModel, readings, primaryReading, readingView, parashahKey, entryId, assignEntryIds, readingModel };
 });
