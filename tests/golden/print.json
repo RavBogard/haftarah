@@ -1,6 +1,52 @@
 {
   "browser": "HeadlessChrome/155.0.0.0",
   "platform": "win32",
+  "sources": {
+    "files": {
+      "template/fonts/EzraSIL-SR.ttf": "9794bf85dfe22ed7c87a3765b647987e1b87f11b6b082711d64567855ed61b35",
+      "template/fonts/EzraSIL.ttf": "53c98ab95d2b5bd615527cdd05da42d7dd77f2690b79c043e9f90753d4930dce",
+      "template/fonts/Literata-Italic[opsz,wght].ttf": "d483dfaeba9cbf4ce71d32a52ee65df82f7e35b15fff8d1011cdb242d1fcd465",
+      "template/fonts/Literata[opsz,wght].ttf": "b41138c9373112f32abb589cc22e8674b06ed4048b0c513be922bdd26f274440",
+      "template/fonts/NotoSerifHebrew[wdth,wght].ttf": "93caef921360788dc3b0e32136bb26f16bc57717ec482d48fc7fd43820617165",
+      "template/fonts/OFL-literata.txt": "8742963604cd89dc81437811a850018fc03b2bfad686d7422c8235967c87614e",
+      "template/fonts/OFL-notoserifhebrew.txt": "9b9fe028b5ba74d231659a1bbaf0ed09b11e759d1ca6a070999e16d151616b47",
+      "template/render.js": "3ece95867bc9063de7ad8e6b3165d8591d800c0ba1fdc529060573d9e7b3461b",
+      "template/sheet.css": "5979871157efc8d6f26974ca3dbf9a6d4bd8371e99f09998e7f915cc9b2c87ef",
+      "template/sheet.html": "481dee92ba07c1c0def70ee8d2e0b0a8850f4acab764b0eca22b1b07b5797217",
+      "template/trope.css": "a49ed10f4a9e392c23b473b1a7ed4766a824666409156c4fb7c836bac49632d1"
+    },
+    "lib": {
+      "REGISTER_NAMES": "17d18fe2b1e8184ab91020779866ae192f2e17ad799a71a2e1b4b48174272a30",
+      "REGISTER_ORDER": "9c004334e29604a655fe7468616f555906ac07d282eda0112d0f23b068140241",
+      "SIGLA": "3bec90ef72408037d0cf5222c2d17eb92e01c2863b8a09f94611116fba1af202",
+      "TETRA": "fbb13dc0a3f0f8044862189ac0c86e1d5231cc3f488ad8f29d68cbc78587e2db",
+      "TROPE_FAMILIES": "de8211ad45d1dc10f65df631c93d8fc0a1e01c0fdcfd50420d772276d230aead",
+      "assignKeys": "3b746f61966e41626c6cee2e7a5c6054e67eb85582e83e8235d4d388068fa0de",
+      "divineName": "57a469773997ade0d1d44a86adc259a8d97c90b2d9d6538be019c7592934c674",
+      "enDash": "f090452316052d8a4b7cd5368a3abbf212cdd2c8c52913f61384e93bdd108601",
+      "escapeHtml": "a09dfc19034057ec173c01150828a1afda77250547080a4c4c50a9c2e31af2f5",
+      "findEnglish": "6e8121c2ade91b9e2a1045af15bfb7eaf1c94d31a649b157a2aa3a397e0f7837",
+      "findHebrew": "c6d6dfd09f377edf82ab6c10389291e13299e70944223d4295392029b11ffa4b",
+      "fitIncipitSize": "720c822d81cb6309bd6c3462db1de50a245585d0c15b1e6e4406066e20248cbb",
+      "hebrewKey": "077fa6184f75b1b30abcd0feec7acc875f9fcd35e0198dbc9515ff0ab74ea35f",
+      "hebrewWords": "ff0da3de937e5d35edace59610a3578eedecb04c7a616fc7999e7e3c6e7669cf",
+      "isDeadRef": "d2cba2e0c5102edd679dd89c21fb383590709e93ab962c1a7ab7802debd33168",
+      "letterFor": "7bb4341134083bd4488275d5f28b8cded461f83c84694a1a6a538bca011b5658",
+      "normalizeRefs": "aacc9ae56fc257eabfa063c78461e60693f602dc14ab3a181867a6c38484e1a8",
+      "nowrapKeys": "00fa9d64a5d7945ea446ab05f4ba8a24e8370631874ed37c2242ebd4ba1edde9",
+      "parseBibliography": "bd6a8f947b4cdcce8bb7165fdbcfaecbca3f87e96b710790b2b220cb944b8670",
+      "plainText": "9656d6ec91e8a40b909949c87c2e18da3f03893e144c34a38d131947b6085384",
+      "shabbatName": "803d93c638d4608dbd02251f45d3ef5f8964a68549c45b7e5e3c4e327f07334d",
+      "sheetModel": "484235b47aef80ead2cb03bb9754fc0fa655c50e59b963d1a056fca0fde71185",
+      "splitPoetry": "4a635a08399b0feeaa2b4198500fe087627951fdcc902657a94deeb904417edf",
+      "stripMarks": "c5c9c69230edb00e4a68b0aa37a2ec89018e9fee9cf6440a6e2bf90c36ec2bce",
+      "tropeFamiliesUsed": "ea2136f7de5ad579ec20d1cd75aceba743458d86b8b2d041630bec00d3dcb89a",
+      "tropeHtml": "c5203fdc7037f78ccb12825e9232f8fbd235235e93c0db2d124d829d3b3b6bff",
+      "tropePhrases": "a3c7a300e566b3f89b5424551f5569141a5271a5b1dde275ce4fd8e24bf3fc99",
+      "voiceKey": "7f90c35a0eb8fb19920473eb9e4b808eae7f1c5f3b30b8a0e0d243d3ea05ffc1",
+      "voicesFor": "536e2cdd1b9dd9328684d01ba0854fc494711882c485dea05c18e1d0df6a645f"
+    }
+  },
   "fixtures": {
     "week-min": {
       "html": "eca008919e27f63a6b154cc1e53953363ffeb11a2b73a7bb79f0a36f46fe7a6b",

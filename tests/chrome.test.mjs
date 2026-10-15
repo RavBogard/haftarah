@@ -7,12 +7,12 @@ import { dumpDom, parseBrowserVersion, printSignature, sha256 } from "../scripts
 // A stand-in for a spawned Chrome: `script(child)` decides what it writes and when it exits.
 function fakeSpawn(script) {
   const calls = [];
-  const spawnImpl = (cmd, args) => {
+  const spawnImpl = (cmd, args, opts) => {
     const child = new EventEmitter();
     child.stdout = new PassThrough(); child.stderr = new PassThrough();
     child.killed = false;
     child.kill = () => { child.killed = true; setTimeout(() => child.emit("close", null), 5); return true; };
-    calls.push({ cmd, args, child });
+    calls.push({ cmd, args, opts, child });
     setImmediate(() => script(child));
     return child;
   };
@@ -43,6 +43,27 @@ test("dumpDom kills a Chrome that does not finish", async () => {
 test("dumpDom reports Chrome's exit code and the end of its stderr", async () => {
   const { spawnImpl } = fakeSpawn(child => { child.stderr.write("GPU process crashed"); child.stderr.end(); setTimeout(() => child.emit("close", 21), 10); });
   await assert.rejects(dumpDom("chrome", "file:///x.html", { spawnImpl }), /dump-dom exited 21[\s\S]*GPU process crashed/);
+});
+
+test("dumpDom settles right after the kill even if the child never closes (a helper holding stdout on Windows)", async () => {
+  const { spawnImpl, calls } = fakeSpawn(() => {});
+  // This child ignores the kill: no "exit", no "close", ever.
+  const stubborn = (...a) => { const c = spawnImpl(...a); c.kill = () => { c.killed = true; return true; }; return c; };
+  const started = Date.now();
+  await assert.rejects(dumpDom("chrome", "file:///stuck.html", { timeoutMs: 50, spawnImpl: stubborn }), /did not finish file:\/\/\/stuck\.html within 50ms; killed/);
+  assert.ok(Date.now() - started < 2000, "settled promptly after the kill");
+  assert.equal(calls[0].child.killed, true);
+  assert.equal(calls[0].child.stdout.destroyed, true);
+  assert.equal(calls[0].child.stderr.destroyed, true);
+});
+
+test("dumpDom starts Chrome with the environment it is given, and process.env by default", async () => {
+  const env = { PATH: "x", HOME: "/nowhere" };
+  const { spawnImpl, calls } = fakeSpawn(child => { child.stdout.end("<html></html>"); setTimeout(() => child.emit("close", 0), 5); });
+  await dumpDom("chrome", "file:///x.html", { env, spawnImpl });
+  await dumpDom("chrome", "file:///y.html", { spawnImpl });
+  assert.equal(calls[0].opts.env, env);
+  assert.equal(calls[1].opts.env, process.env);
 });
 
 test("parseBrowserVersion names Chrome, and Edge when it is Edge", () => {
