@@ -1,6 +1,7 @@
 // The landing page: the welcome, this week's sheet set like the sheet's own hero, the index.
 import { applyStored, initSettings } from "./settings.js";
 import { indexUrl } from "./contract.js";
+import { createAnalytics } from "./analytics.js";
 
 const DAY = 86400000;
 
@@ -30,6 +31,8 @@ export async function run() {
   }
   applyStored();
   initSettings({ host: $("settings"), button: $("aaBtn"), trope: false, langs: false });
+  const analytics = createAnalytics();
+  addEventListener("appinstalled", () => analytics.track("install", {}));
   const status = (msg) => { $("status").innerHTML = msg; $("status").hidden = false; };
   let index;
   try {

@@ -19,7 +19,7 @@ export function clean(html) {
   return t.innerHTML;
 }
 
-export function initPanel({ page, L, sefariaUrl }) {
+export function initPanel({ page, L, sefariaUrl, track = () => {} }) {
   const esc = L.escapeHtml, dash = L.enDash, SIG = L.SIGLA, NAMES = L.REGISTER_NAMES;
   const $ = id => document.getElementById(id);
   const panel = $("panel"), pKind = $("panelKind"), pBody = $("panelBody"), pClose = $("panelClose");
@@ -84,6 +84,7 @@ export function initPanel({ page, L, sefariaUrl }) {
     const ref = b.dataset.ref, reg = b.dataset.reg;
     const head = r => `<h2>${esc(b.dataset.src)}</h2><p class="sub"><span class="reg reg-${reg}">${SIG[reg] || ""}${NAMES[reg] || ""}</span> · ${esc(dash(r))}`;
     const token = openPanel("Source", `${head(ref)}</p><p class="loading">Fetching from Sefaria…</p>`, b);
+    track("source_open", { source: b.dataset.src });
     try {
       const t = await fetchText(ref);
       fill(token, `${head(t.ref || ref)}${t.heRef ? ` · <span lang="he" dir="rtl" class="hebrew">${esc(t.heRef)}</span>` : ""}</p>` +
@@ -104,6 +105,7 @@ export function initPanel({ page, L, sefariaUrl }) {
     const head = `<h2 class="he hebrew" lang="he" dir="rtl">${esc(word)}</h2><p class="sub">${esc(dash(ref))}</p>`;
     const token = openPanel("Word", `${head}<p class="loading">Looking it up…</p>`, w);
     activeWord = w; w.classList.add("active");
+    track("word_lookup", {});   // a count: the word itself is never sent
     try {
       const x = await lookupWord(word, ref, L);
       let body = head;

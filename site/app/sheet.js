@@ -6,6 +6,7 @@ import { slugFromPath, dataUrl, verseAnchor, parseVerseAnchor } from "./contract
 
 export { slugFromPath, dataUrl };
 import { initRoving, focusables } from "./a11y.js";
+import { createAnalytics } from "./analytics.js";
 
 const DRIVE = "https://drive.google.com/drive/folders/1TbSmoeBaCSLciL_-_HSCuKWkJMSZvGwd";
 const errorsSeen = [];   // filled in check mode (?check=1) by the error listeners in run()
@@ -99,6 +100,9 @@ export async function run() {
   const slug = slugFromPath(location.pathname);
   const settings = initSettings({ host: $("settings"), button: $("aaBtn"), pdfHref: slug ? dataUrl(slug, "sheet.pdf") : null });
   if (!slug) return fail(`No sheet at this address. <a href="/">All sheets</a>`);
+  const analytics = createAnalytics();
+  const track = (name, props = {}) => analytics.track(name, { week: slug, ...props });
+  addEventListener("appinstalled", () => analytics.track("install", {}));
 
   let data, voicesDict = {};
   try {
@@ -144,6 +148,8 @@ export async function run() {
   front.append(el("div", "provenance", `Hebrew: ${esc(prov.he)}. English: ${esc(prov.en)}. ${prov.signoffHtml}${prov.signed ? ` <span class="sign">— ${esc(prov.editor)}</span>` : ""}`));
   $("footAttr").textContent = `Hebrew: ${prov.he}. English: ${prov.en}. Sources from Sefaria.`;
   for (const id of ["reading", "end", "foot"]) $(id).hidden = false;
+  // Shown only while a provider is switched on, and only after Daniel approves the wording (spec 5.3).
+  if (analytics.provider !== "none") $("foot").insertAdjacentHTML("beforeend", `<span class="privacy">We count visits and which sources are opened; nothing identifies you. Opening a source or a word asks Sefaria for it.</span>`);
 
   // ---- verse rows and their apparatus ----
   const text = $("text"), rail = $("rail");
@@ -275,6 +281,7 @@ export async function run() {
     mastRange.textContent = rangeLabel(model.book, first.v, lastSeen.v);
     if (first !== current) {
       current = first;
+      track("verse_view", { verse: first.row.id });
       rows.forEach(r => { r.row.classList.toggle("current", r === first); r.app.classList.toggle("current", wide.matches && r === first); });
       if (wide.matches && Date.now() > railPause) {
         railTo(first.app, opts && opts.behavior);
@@ -328,7 +335,7 @@ export async function run() {
 
   const api = { rows, model, sync, goToHash, closeAll: () => { panel.close(); settings.close(); } };
   window.HaftarahPage = api;
-  const panel = initPanel({ page: api, L, sefariaUrl });
+  const panel = initPanel({ page: api, L, sefariaUrl, track });
   if (check) runCheck(api, L);
 }
 
