@@ -135,11 +135,13 @@ async function main() {
     expect("presenter on", p.present === "1", p.present);
     expect("presenter starts at the first verse", p["present-label"] === L.enDash(v1.ref), p["present-label"]);
     expect("presenter counts the verses", p["present-count"] === `1 / ${sheet.verses.length}`, p["present-count"]);
+    expect("the web fonts are in before the fit is measured", p["present-fonts"] === "loaded", p["present-fonts"]);
     expect("the verse fits the screen", p["present-fits"] === "true", p["present-fits"]);
     expect("PageDown steps to the next verse", p["present-next"] === L.enDash(v2.ref), p["present-next"]);
     expect("the address follows the verse", p["present-hash"] === `#haftarah-${v2.chapter}-${v2.verse}`, p["present-hash"]);
     expect("B blanks the screen", p["present-blank"] === "true", p["present-blank"]);
     expect("Escape leaves the presenter", p["present-exit"] === "true", p["present-exit"]);
+    expect("focus lands on the verse's number after Escape", p["present-focus"] === `haftarah-${v2.chapter}-${v2.verse}`, p["present-focus"]);
     const l = attrs(await dumpDom(browser, `${base}/?check=1`, { size: "1440,900" }));
     console.log("\nlanding: /");
     expect("landing finished", l.done === "1", l.done);

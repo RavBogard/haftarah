@@ -68,7 +68,7 @@ export function initPresent({ model, rows, L, track = () => {}, onExit = () => {
   document.body.append(host);
   const $ = id => host.querySelector(`#${id}`);
   let i = startIndex(rows.map(r => ({ reading: r.row.dataset.reading, chapter: r.v.chapter, verse: r.v.verse })), location.hash);
-  let user = 1, lock = null;
+  let user = 1, lock = null, closed = false;
 
   // A long verse shrinks (to half size at most) rather than scroll.
   function fit() {
@@ -113,8 +113,16 @@ export function initPresent({ model, rows, L, track = () => {}, onExit = () => {
     act(a);
   }
   // The screen stays awake while presenting, where the browser allows it.
-  const wake = async () => { try { if (navigator.wakeLock && document.visibilityState === "visible") lock = await navigator.wakeLock.request("screen"); } catch {} };
+  // A lock granted after exit is let go at once.
+  const wake = async () => {
+    try {
+      if (closed || !navigator.wakeLock || document.visibilityState !== "visible") return;
+      const l = await navigator.wakeLock.request("screen");
+      if (closed) l.release().catch(() => {}); else lock = l;
+    } catch {}
+  };
   function exit() {
+    closed = true;
     document.removeEventListener("keydown", onKey, true);
     document.removeEventListener("visibilitychange", wake);
     removeEventListener("resize", fit);
@@ -139,6 +147,8 @@ export function initPresent({ model, rows, L, track = () => {}, onExit = () => {
   wake();
   track("present_start", {});
   show();
+  // The web fonts swap in after the first fit (font-display: swap); fit again once they have.
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { if (host.isConnected) fit(); });
   $("pFwd").focus({ preventScroll: true });
   return { act, exit, index: () => i, host };
 }

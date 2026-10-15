@@ -100,7 +100,7 @@ export async function run() {
   applyStored();
   const slug = slugFromPath(location.pathname);
   let startPresent = null;   // set once the verses exist
-  const settings = initSettings({ host: $("settings"), button: $("aaBtn"), pdfHref: slug ? dataUrl(slug, "sheet.pdf") : null, onPresent: () => startPresent && startPresent() });
+  const settings = initSettings({ host: $("settings"), button: $("aaBtn"), pdfHref: slug ? dataUrl(slug, "sheet.pdf") : null, onPresent: () => startPresent && startPresent(true) });
   if (!slug) return fail(`No sheet at this address. <a href="/">All sheets</a>`);
   const analytics = createAnalytics();
   const track = (name, props = {}) => analytics.track(name, { week: slug, ...props });
@@ -341,23 +341,30 @@ export async function run() {
 
   // ---- presenter view: ?present on load, or the Aa card's button (which starts at the verse on screen) ----
   let presenter = null;
-  startPresent = () => {
+  startPresent = (fromCard = false) => {
     if (presenter) return presenter;
     if (!isPresent(location.search)) {
       const at = current ? `#${current.row.id}` : location.hash;
       history.replaceState(null, "", `${location.pathname}${location.search ? `${location.search}&present` : "?present"}${at}`);
     }
     settings.close(); panel.close();
-    presenter = initPresent({ model, rows, L, track, onExit: () => { presenter = null; current = null; sync(); } });
+    // On exit focus goes back where the presenter was opened: the Aa button, or (from ?present) the verse's number.
+    presenter = initPresent({ model, rows, L, track, onExit: r => {
+      presenter = null; current = null; sync();
+      (fromCard ? $("aaBtn") : gutButton(r)).focus({ preventScroll: true });
+    } });
     return presenter;
   };
   if (isPresent(location.search)) startPresent();
   if (check) { if (presenter) runPresentCheck(); else runCheck(api, L); }
 }
 
-// ?present&check=1: what the presenter shows, then PageDown, B twice, Escape, each as a key a remote would send.
-function runPresentCheck() {
+// ?present&check=1: what the presenter shows once the web fonts are in, then PageDown, B twice, Escape,
+// each as a key a remote would send.
+async function runPresentCheck() {
   const h = document.documentElement, $ = id => document.getElementById(id);
+  if (document.fonts && document.fonts.ready) await document.fonts.ready;   // the presenter's own re-fit ran first
+  h.dataset.checkPresentFonts = document.fonts ? document.fonts.status : "n/a";
   const key = k => document.dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true }));
   h.dataset.checkPresent = h.dataset.present || "";
   h.dataset.checkPresentLabel = $("pLabel").textContent;
@@ -372,6 +379,7 @@ function runPresentCheck() {
   key("b");
   key("Escape");
   h.dataset.checkPresentExit = String(!$("present") && !h.dataset.present);
+  h.dataset.checkPresentFocus = (document.activeElement.closest(".row .gut") && document.activeElement.closest(".row").id) || "";
   h.dataset.checkErrors = String(errorsSeen.length) + (errorsSeen.length ? ": " + errorsSeen[0] : "");
   h.dataset.checkDone = "1";
 }
