@@ -2,7 +2,7 @@
 // the model comes from lib.js's sheetModel, so the page prepares verses exactly as the print does.
 import { applyStored, initSettings } from "./settings.js";
 import { initPanel } from "./panel.js";
-import { slugFromPath, dataUrl } from "./contract.js";
+import { slugFromPath, dataUrl, verseAnchor, parseVerseAnchor } from "./contract.js";
 
 export { slugFromPath, dataUrl };
 import { initRoving, focusables } from "./a11y.js";
@@ -25,6 +25,38 @@ export function noteHtml(k, L) {
   const lemma = k.lemma ? `<span class="lemma">${esc(k.lemma)}</span><span class="brk">]</span>` : "";
   const heLemma = k.heHtml ? `<span class="he-lemma" lang="he" dir="rtl">${k.heHtml}</span> ` : "";
   return `<span class="k">${k.key}</span>${lemma}${heLemma}${k.textHtml}${k.tail ? ` <span class="tail">${k.tail}</span>` : ""}`;
+}
+
+// The translation's short name for a citation line.
+export function translationLabel(title) {
+  const t = String(title || "");
+  if (/gender-sensitive/i.test(t)) return "JPS 2023";
+  if (/Tanakh: The Holy Scriptures|JPS.*1985|1985.*JPS/i.test(t)) return "JPS 1985";
+  return t;
+}
+
+// What "Copy verse" puts on the clipboard: the verse in the reader's Show setting ("he", "en" or
+// "both"), then "— <ref> (<translation>)" (the translation only when English is copied), then the link.
+export function citationText({ he, en, ref, translation, url, mode = "both" }) {
+  const lines = [];
+  if (mode !== "en" && he) lines.push(he);
+  if (mode !== "he" && en) lines.push(en);
+  lines.push(`— ${ref}${mode !== "he" && translation ? ` (${translation})` : ""}`);
+  lines.push(url);
+  return lines.join("\n");
+}
+
+// The teacher highlights on one verse. A highlight without "reading" belongs to the haftarah.
+export function highlightsFor(list, readingId, chapter, verse) {
+  return (Array.isArray(list) ? list : []).filter(h => h && (h.reading || "haftarah") === readingId && Number(h.chapter) === chapter && Number(h.verse) === verse);
+}
+
+// A highlight's [first, last] word (0-based, inclusive) cut to a verse of `count` words; null when nothing of it is in the verse.
+export function wordRange(words, count) {
+  if (!Array.isArray(words) || words.length !== 2 || !count) return null;
+  const [a, b] = words;
+  if (!Number.isInteger(a) || !Number.isInteger(b) || a > b || b < 0 || a >= count) return null;
+  return [Math.max(0, a), Math.min(count - 1, b)];
 }
 
 export async function run() {
@@ -56,7 +88,11 @@ export async function run() {
   } catch (err) {
     return fail(`This sheet could not be loaded. The printed sheets are on <a href="${DRIVE}">Google Drive</a>.`);
   }
-  const model = L.sheetModel(data, { voices: voicesDict });
+  // The week's primary reading (its haftarah) in the schema-2 shape sheetModel reads; a schema-2 week is itself.
+  const reading = L.primaryReading(data);
+  if (!reading) return fail(`This sheet could not be loaded. The printed sheets are on <a href="${DRIVE}">Google Drive</a>.`);
+  const model = L.sheetModel(L.readingView(data, reading.id), { voices: voicesDict });
+  const highlights = Array.isArray(data.highlights) ? data.highlights : [];
   document.title = model.title;
 
   // ---- front page: the sheet introduces itself ----
@@ -129,7 +165,7 @@ export async function run() {
   }
   for (const v of model.verses) {
     const row = el("div", "row" + (v.prevBreak ? ` break-${v.prevBreak}` : ""));
-    row.id = `v${v.chapter}-${v.verse}`; row.dataset.ref = v.ref; row.dataset.verse = `${v.chapter}:${v.verse}`;
+    row.id = verseAnchor(reading.id, v.chapter, v.verse); row.dataset.reading = reading.id; row.dataset.ref = v.ref; row.dataset.verse = `${v.chapter}:${v.verse}`;
     const en = el("div", "en" + (v.poetry ? " poetry" : ""), v.poetry ? v.enLines.map(t => `<span class="ln">${t}</span>`).join("") : v.enLines[0]);
     keyButtons(en);
     const cv = `${v.chapter}:${v.verse}`;
@@ -139,11 +175,21 @@ export async function run() {
     wrapWords(he);
     initRoving(he, ".w");   // one tab stop per verse; arrows move between its words
     row.append(en, gut, he);
-    const count = countLabel(v.entries.length, v.keys.length);
+    // Teacher highlights (week data, web only): a bar on the verse, a tint on its words, the note in the apparatus.
+    const hls = highlightsFor(highlights, reading.id, v.chapter, v.verse);
+    const hlNotes = hls.filter(h => h.note);
+    if (hls.length) {
+      row.classList.add("hl");
+      gut.insertAdjacentHTML("beforeend", '<span class="sr">Highlighted.</span>');
+      const ws = [...he.querySelectorAll(".w")];
+      for (const h of hls) { const span = wordRange(h.words, ws.length); if (span) ws.slice(span[0], span[1] + 1).forEach(w => w.classList.add("hl-w")); }
+    }
+    const count = countLabel(v.entries.length, v.keys.length + hlNotes.length);
     // A verse with nothing gets a div: a <details> without a summary shows the browser's own "Details".
     const app = el(count ? "details" : "div", "vapp"); app.dataset.verse = cv;
     app.innerHTML = (count ? `<summary><span class="count">${count}</span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></summary>` : "") +
-      `<p class="vh"><span>${cv}</span><a href="${esc(sefariaUrl(v.ref))}" target="_blank" rel="noopener">on Sefaria</a></p>` +
+      `<p class="vh"><span>${cv}</span><span class="acts"><button type="button" class="act" data-act="link">Copy link</button><button type="button" class="act" data-act="copy">Copy verse</button><a href="${esc(sefariaUrl(v.ref))}" target="_blank" rel="noopener">on Sefaria</a></span></p>` +
+      hlNotes.map(h => `<p class="hl-note">${L.divineName(h.note).html}</p>`).join("") +
       v.keys.map(k => `<p class="note ${k.kind}">${noteHtml(k, L)}</p>`).join("") +
       v.entries.map(e => `<p class="entry reg-${e.register}">${entryHtml(e)}</p>`).join("");
     if (!count) app.classList.add("empty");
@@ -165,7 +211,7 @@ export async function run() {
     for (const r of rows) {
       const fold = r.app.tagName === "DETAILS", b = gutButton(r);
       if (wide.matches) { rail.append(r.app); if (fold) r.app.open = true; b.removeAttribute("aria-expanded"); }
-      else { r.row.append(r.app); if (fold) { r.app.open = false; b.setAttribute("aria-expanded", "false"); } }
+      else { r.row.append(r.app); b.setAttribute("aria-expanded", "false"); if (fold) r.app.open = false; else r.app.classList.remove("show"); }
     }
     if (!wide.matches) rows.forEach(r => r.app.classList.remove("current"));
   }
@@ -218,13 +264,46 @@ export async function run() {
   addEventListener("resize", sync);
   sync();
 
+  // A verse link (#haftarah-54-3, or the first release's #v54-3): scroll to the verse and mark it.
+  // An old link is rewritten to the new form; a link to a verse not on this page changes nothing.
+  function goToHash(hash = location.hash) {
+    const a = parseVerseAnchor(hash);
+    const r = a && rows.find(x => x.v.chapter === a.chapter && x.v.verse === a.verse && (a.reading == null || a.reading === reading.id));
+    if (!r) return null;
+    rows.forEach(x => x.row.classList.toggle("target", x === r));
+    r.row.scrollIntoView({ block: "start" });
+    if (a.reading == null) history.replaceState(null, "", `${location.pathname}${location.search}#${r.row.id}`);
+    return r;
+  }
+  goToHash();
+  addEventListener("hashchange", () => goToHash());
+
   // verse number: jump to its commentary (the rail when wide, the fold below the verse otherwise)
   for (const r of rows) gutButton(r).addEventListener("click", () => {
     if (wide.matches) { railPause = Date.now() + 1500; railTo(r.app); r.app.classList.add("current"); }
     else if (r.app.tagName === "DETAILS") { r.app.open = !r.app.open; }   // the toggle listener updates aria-expanded
+    else gutButton(r).setAttribute("aria-expanded", String(r.app.classList.toggle("show")));   // no commentary: just the header (links, copy)
   });
 
-  const api = { rows, model, sync, closeAll: () => { panel.close(); settings.close(); } };
+  // "Copy link" and "Copy verse" in each verse's header (in the rail when wide, in the fold otherwise).
+  async function onAct(e) {
+    const b = e.target.closest("button.act"); if (!b) return;
+    const r = rows.find(x => x.app === b.closest(".vapp")); if (!r) return;
+    const url = `${location.origin}${location.pathname}#${r.row.id}`;
+    const text = b.dataset.act === "link" ? url : citationText({
+      he: L.plainText(r.v.heHtml).text.trim(),
+      en: r.v.enLines.map(t => L.plainText(t).text.trim()).join("\n"),
+      ref: L.enDash(r.v.ref), translation: translationLabel(model.front.provenance.en), url,
+      mode: html.dataset.lang || "both",
+    });
+    const label = b.dataset.label || (b.dataset.label = b.textContent);
+    try { await navigator.clipboard.writeText(text); b.textContent = "Copied"; }
+    catch { b.textContent = "Not copied"; }
+    setTimeout(() => { b.textContent = label; }, 1500);
+  }
+  rail.addEventListener("click", onAct); text.addEventListener("click", onAct);
+
+  const api = { rows, model, sync, goToHash, closeAll: () => { panel.close(); settings.close(); } };
   window.HaftarahPage = api;
   const panel = initPanel({ page: api, L, sefariaUrl });
   if (check) runCheck(api, L);
@@ -264,6 +343,14 @@ function runCheck(api, L) {
   h.dataset.lang = "he"; h.dataset.checkLangHe = getComputedStyle(r0.querySelector(".en")).display;
   h.dataset.lang = "en"; h.dataset.checkLangEn = getComputedStyle(r0.querySelector(".he")).display;
   h.dataset.lang = "both";
+  // Verse identity: rows carry the reading; highlights; a link marks its verse; a link to no verse is ignored.
+  h.dataset.checkAnchor = rows[0].row.id;
+  h.dataset.checkHighlights = String(document.querySelectorAll("#text .row.hl").length);
+  h.dataset.checkHlWords = String(document.querySelectorAll("#text .he .w.hl-w").length);
+  h.dataset.checkHlNotes = String(document.querySelectorAll(".vapp .hl-note").length);
+  h.dataset.checkTarget = (document.querySelector("#text .row.target") || {}).id || "";
+  h.dataset.checkHash = location.hash;
+  h.dataset.checkBogusHash = String(api.goToHash("#haftarah-99-99") === null);
   // Two thirds down: far enough that a rail which scrolls short of its target misses it.
   const target = rows[Math.floor(rows.length * 2 / 3)];
   target.row.scrollIntoView({ block: "start" });

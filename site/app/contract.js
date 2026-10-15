@@ -20,3 +20,18 @@ export function slugFromPath(pathname) {
 
 /** The rewrite source vercel.json must carry for week pages. */
 export const VERCEL_WEEK_SOURCE = `/:slug(${SLUG_SOURCE})`;
+
+/** A verse's address on its week page: <reading>-<chapter>-<verse>, e.g. haftarah-54-3. */
+export const verseAnchor = (readingId, chapter, verse) => `${readingId}-${chapter}-${verse}`;
+
+/**
+ * "#haftarah-54-3" → { reading: "haftarah", chapter: 54, verse: 3 }. The first release's "#v54-3"
+ * → { reading: null, … } (the page maps it to its primary reading). Anything else → null.
+ */
+export function parseVerseAnchor(hash) {
+  const h = String(hash == null ? "" : hash).replace(/^#/, "");
+  let m = /^([a-z][a-z0-9]*)-(\d{1,3})-(\d{1,3})$/.exec(h);
+  if (m && m[1] !== "v") return { reading: m[1], chapter: Number(m[2]), verse: Number(m[3]) };
+  m = /^v(\d{1,3})-(\d{1,3})$/.exec(h);
+  return m ? { reading: null, chapter: Number(m[1]), verse: Number(m[2]) } : null;
+}

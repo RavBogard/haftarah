@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { SLUG, isSlug, weekPath, dataUrl, indexUrl, INDEX_PATH, slugFromPath, VERCEL_WEEK_SOURCE } from "../site/app/contract.js";
+import { SLUG, isSlug, weekPath, dataUrl, indexUrl, INDEX_PATH, slugFromPath, VERCEL_WEEK_SOURCE, verseAnchor, parseVerseAnchor } from "../site/app/contract.js";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 
@@ -38,4 +38,12 @@ test("no other script or page module keeps its own copy of the slug pattern", ()
   const files = [["scripts"], ["site", "app"]].flatMap(d => readdirSync(join(ROOT, ...d)).map(f => join(ROOT, ...d, f)))
     .filter(f => /\.(mjs|js)$/.test(f) && !f.endsWith("contract.js"));
   assert.deepEqual(files.filter(f => readFileSync(f, "utf8").includes("d{4}-")), []);
+});
+
+test("verse anchors: <reading>-<chapter>-<verse>, and the first release's v<chapter>-<verse>", () => {
+  assert.equal(verseAnchor("haftarah", 54, 3), "haftarah-54-3");
+  assert.deepEqual(parseVerseAnchor("#haftarah-54-3"), { reading: "haftarah", chapter: 54, verse: 3 });
+  assert.deepEqual(parseVerseAnchor("torah-6-9"), { reading: "torah", chapter: 6, verse: 9 });
+  assert.deepEqual(parseVerseAnchor("#v20-18"), { reading: null, chapter: 20, verse: 18 });
+  for (const h of ["", "#", "#top", "#haftarah-54", "#haftarah-x-3", "#m=54-3", "#Haftarah-54-3", "#v-1-2", null]) assert.equal(parseVerseAnchor(h), null, String(h));
 });

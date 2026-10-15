@@ -17,6 +17,8 @@ import { indexEntry, cleanSheet } from "./publish.mjs";
 import { findBrowser } from "./build.mjs";
 import { dumpDom } from "./chrome.mjs";
 import { isSlug, slugFromPath, dataUrl, indexUrl } from "../site/app/contract.js";
+import { createRequire } from "node:module";
+const L = createRequire(import.meta.url)("../template/lib.js");
 
 const ROOT = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const MIME = { ".html": "text/html; charset=utf-8", ".css": "text/css", ".js": "text/javascript", ".json": "application/json", ".png": "image/png", ".ttf": "font/ttf", ".pdf": "application/pdf", ".txt": "text/plain" };
@@ -28,11 +30,11 @@ export async function sitePolicy() {
   return h ? h.value : null;
 }
 
-export async function serveSite({ dist, week, port = 0 }) {
+export async function serveSite({ dist, week, port = 0, extra = {} }) {
   // The page only routes dated slugs; an undated folder (the fixture) is served under a made-up dated one.
   const name = basename(resolve(week));
   const slug = isSlug(name) ? name : `2026-01-01-${name}`;
-  const sheet = cleanSheet(JSON.parse(await readFile(join(week, "sheet.json"), "utf8")));
+  const sheet = { ...cleanSheet(JSON.parse(await readFile(join(week, "sheet.json"), "utf8"))), ...extra };
   const index = { schema: 2, updated: new Date().toISOString(), weeks: [indexEntry(sheet, slug, new Date().toISOString())] };
   const csp = await sitePolicy();   // pages are served under the real policy
   const server = createServer(async (req, res) => {
@@ -69,11 +71,16 @@ async function main() {
   const week = resolve(args.week || join(ROOT, "tests", "fixtures", "week-notes"));
   const port = args.port ?? (args.serve ? 8767 : 0);
   const { out: dist } = await buildSite(args.out ? { out: args.out } : {});
-  const { server, slug, base } = await serveSite({ dist, week, port });
+  // The primary reading in the schema-2 shape, whatever the week's schema. For the check (not for
+  // --serve) a week without highlights gets one, so the page's highlight path is exercised.
+  const raw = JSON.parse(await readFile(join(week, "sheet.json"), "utf8"));
+  const sheet = L.readingView(raw);
+  const hv = sheet.verses[Math.min(3, sheet.verses.length - 1)];
+  const extra = raw.highlights || args.serve ? {} : { highlights: [{ reading: L.primaryReading(raw).id, chapter: hv.chapter, verse: hv.verse, words: [0, 1], note: "A highlight for the check." }] };
+  const { server, slug, base } = await serveSite({ dist, week, port, extra });
   if (args.serve) { console.log(`Serving ${slug}:\n  ${base}/\n  ${base}/${slug}\n  ${base}/${slug}?trope=1\nCtrl-C to stop.`); return; }
   const browser = findBrowser();
   if (!browser) { server.close(); console.error("No Chrome or Edge found (set HAFTARAH_BROWSER)."); process.exit(1); }
-  const sheet = JSON.parse(await readFile(join(week, "sheet.json"), "utf8"));
   const failures = [];
   const expect = (name, ok, got) => { console.log(`${ok ? "ok  " : "FAIL"}  ${name}${ok ? "" : `  (got ${JSON.stringify(got)})`}`); if (!ok) failures.push(name); };
   try {
@@ -97,6 +104,12 @@ async function main() {
       expect("current verse marked", a.current === v.ref, a.current);
       expect("dark paper", a.paper === "rgb(18, 17, 16)", a.paper);
       expect("title", /·/.test(a.title || ""), a.title);
+      expect("rows carry the reading in their id", a.anchor === `haftarah-${sheet.verses[0].chapter}-${sheet.verses[0].verse}`, a.anchor);
+      if (extra.highlights) {
+        expect("a teacher highlight marks one verse", a.highlights === "1", a.highlights);
+        expect("a teacher highlight tints two words", a["hl-words"] === "2", a["hl-words"]);
+        expect("a teacher highlight's note is in the apparatus", a["hl-notes"] === "1", a["hl-notes"]);
+      }
       expect("Show Hebrew hides the English", a["lang-he"] === "none", a["lang-he"]);
       expect("Show English hides the Hebrew", a["lang-en"] === "none", a["lang-en"]);
       expect("one tab stop per verse for the Hebrew words", Number(a["word-stops"]) === sheet.verses.length, a["word-stops"]);
@@ -105,6 +118,13 @@ async function main() {
       expect("a note popover is named while open and gone after", a.pop === "ok", a.pop);
       expect("the settings card keeps Tab inside", a.trap === "ok", a.trap);
     }
+    const lv = sheet.verses[Math.min(5, sheet.verses.length - 1)];
+    const t = attrs(await dumpDom(browser, `${base}/${slug}?check=1#v${lv.chapter}-${lv.verse}`, { size: "1440,900" }));
+    console.log(`\nan old verse link: /${slug}#v${lv.chapter}-${lv.verse}`);
+    expect("old link: page finished without errors", t.done === "1" && t.errors === "0", `${t.done} ${t.errors}`);
+    expect("old link marks its verse", t.target === `haftarah-${lv.chapter}-${lv.verse}`, t.target);
+    expect("old link becomes the new address", t.hash === `#haftarah-${lv.chapter}-${lv.verse}`, t.hash);
+    expect("a link to a verse not in the reading is ignored", t["bogus-hash"] === "true", t["bogus-hash"]);
     const l = attrs(await dumpDom(browser, `${base}/?check=1`, { size: "1440,900" }));
     console.log("\nlanding: /");
     expect("landing finished", l.done === "1", l.done);

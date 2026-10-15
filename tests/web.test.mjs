@@ -131,3 +131,44 @@ test("load and store use the prefix and survive a storage that throws", () => {
   assert.doesNotThrow(() => store("size", "3", broken));
   assert.deepEqual(migrateKeys(broken), []);
 });
+
+import { citationText, translationLabel, highlightsFor, wordRange } from "../site/app/sheet.js";
+
+test("translationLabel names the JPS editions briefly and leaves any other title as it is", () => {
+  assert.equal(translationLabel("THE JPS TANAKH: Gender-Sensitive Edition"), "JPS 2023");
+  assert.equal(translationLabel("Tanakh: The Holy Scriptures, published by JPS"), "JPS 1985");
+  assert.equal(translationLabel("JPS 1917 (fixture)"), "JPS 1917 (fixture)");
+  assert.equal(translationLabel(""), "");
+});
+
+test("citationText: Hebrew, English or both, then the reference and the link", () => {
+  const v = { he: "עִבְרִית", en: "English line one\nEnglish line two", ref: "Isaiah 54:1", translation: "JPS 2023", url: "https://haftarah.centralreform.org/2026-10-17-noach#haftarah-54-1" };
+  assert.equal(citationText({ ...v, mode: "both" }), `עִבְרִית\nEnglish line one\nEnglish line two\n— Isaiah 54:1 (JPS 2023)\n${v.url}`);
+  assert.equal(citationText({ ...v, mode: "he" }), `עִבְרִית\n— Isaiah 54:1\n${v.url}`);
+  assert.equal(citationText({ ...v, mode: "en" }), `English line one\nEnglish line two\n— Isaiah 54:1 (JPS 2023)\n${v.url}`);
+  assert.equal(citationText({ ...v, translation: "", mode: "en" }), `English line one\nEnglish line two\n— Isaiah 54:1\n${v.url}`);
+  assert.equal(citationText({ ...v, mode: undefined }), citationText({ ...v, mode: "both" }));
+});
+
+test("wordRange clamps a range into the verse and refuses a reversed or empty one; highlightsFor matches reading, chapter and verse", () => {
+  assert.deepEqual(wordRange([2, 4], 10), [2, 4]);
+  assert.deepEqual(wordRange([8, 20], 10), [8, 9]);
+  assert.deepEqual(wordRange([-3, 1], 10), [0, 1]);
+  assert.equal(wordRange([5, 2], 10), null);
+  assert.equal(wordRange([12, 14], 10), null);
+  assert.equal(wordRange([0, 1], 0), null);
+  assert.equal(wordRange(null, 10), null);
+  assert.equal(wordRange([1], 10), null);
+  assert.equal(wordRange(["a", 2], 10), null);
+  const list = [
+    { reading: "haftarah", chapter: 20, verse: 30, words: [0, 1] },
+    { chapter: 20, verse: 30, note: "no reading means the haftarah" },
+    { reading: "torah", chapter: 20, verse: 30 },
+    { reading: "haftarah", chapter: 21, verse: 30 },
+    { reading: "haftarah", verse: 30 },
+    null,
+  ];
+  assert.equal(highlightsFor(list, "haftarah", 20, 30).length, 2);
+  assert.equal(highlightsFor(list, "torah", 20, 30).length, 1);
+  assert.deepEqual(highlightsFor(undefined, "haftarah", 20, 30), []);
+});

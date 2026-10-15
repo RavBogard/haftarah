@@ -294,3 +294,21 @@ html[data-lang="he"] .row .en, html[data-lang="en"] .row .he { display: none; }
   html[data-lang="en"] .row .gut { order: -1; }
   html[data-lang="en"] .row .en { max-width: 42em; }
 }
+
+/* verse header actions: copy link, copy verse, Sefaria */
+.vapp .vh .acts { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; gap: .1rem .9rem; }
+.vapp .vh .act { color: var(--ink-2); font-weight: 400; font-size: .85em; font-style: italic; padding: .3rem 0; }
+.vapp .vh .act:hover { color: var(--rubric); text-decoration: underline; }
+.vapp .vh .acts a { padding: .3rem 0; }
+/* a verse number on a phone opens the header of a verse with no commentary */
+.row .vapp.empty.show { display: block; }
+/* a verse reached by its link */
+.row.target { background: var(--wash); }
+/* teacher highlights (week data, web only) */
+:root { --hl: rgba(138, 10, 20, .10); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --hl: rgba(224, 97, 107, .18); } }
+:root[data-theme="dark"] { --hl: rgba(224, 97, 107, .18); }
+.row.hl { box-shadow: inset 3px 0 0 var(--rubric); padding-left: .6rem; }
+.he .w.hl-w { background: var(--hl); }
+.hl-note { margin: 0 0 .5rem; padding-left: .6rem; border-left: 2px solid var(--rubric); }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
