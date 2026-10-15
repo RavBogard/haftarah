@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { buildDigest, classify, opening, englishOpening, alsoLine, digestInput } from "../scripts/digest.mjs";
+import { buildDigest, classify, opening, englishOpening, alsoLine, digestInput, weekDigest } from "../scripts/digest.mjs";
+import { makeWeekTorah } from "./helpers/makeWeekTorah.mjs";
 import { migrate3 } from "../scripts/migrate.mjs";
 
 const load = async f => JSON.parse(await readFile(new URL(`./fixtures/digest/${f}`, import.meta.url), "utf8"));
@@ -95,4 +96,30 @@ test("digestInput never throws: a schema-3 sheet with no readings gives what no 
   assert.deepEqual(digestInput({ schema: 3 }), { book: undefined, verses: [] });
   const md = buildDigest({ texts, candidates, ...digestInput({ schema: 3, readings: [] }) });
   assert.equal(md, buildDigest({ texts, candidates, ...digestInput(null) }));
+});
+
+test("digestInput reads the reading asked for, and nothing for one the sheet does not hold", async () => {
+  const two = JSON.parse(await readFile(new URL("./fixtures/week-notes/sheet.json", import.meta.url), "utf8"));
+  assert.deepEqual(digestInput(two, "haftarah"), digestInput(two));
+  assert.deepEqual(digestInput(two, "torah"), { book: undefined, verses: [] });
+  const min = JSON.parse(await readFile(new URL("./fixtures/week-min/sheet.json", import.meta.url), "utf8"));
+  const wt = makeWeekTorah(min);
+  assert.deepEqual(digestInput(wt, "torah"), { book: "Genesis", verses: ["Genesis 6:9", "Genesis 6:10", "Genesis 6:11"] });
+  assert.equal(digestInput(wt, "haftarah").book, "I Samuel");
+});
+
+test("weekDigest: a haftarah-only week gives exactly the old digest", async () => {
+  const two = JSON.parse(await readFile(new URL("./fixtures/week-notes/sheet.json", import.meta.url), "utf8"));
+  assert.equal(weekDigest({ sheet: two, readings: { haftarah: { texts, candidates } } }), buildDigest({ texts, candidates, ...digestInput(two) }));
+});
+
+test("weekDigest: the Torah calendar, then the Torah's digest, then the haftarah's", async () => {
+  const min = JSON.parse(await readFile(new URL("./fixtures/week-min/sheet.json", import.meta.url), "utf8"));
+  const wt = makeWeekTorah(min);
+  wt.leyning = { parashah: "Noach", aliyot: [{ n: 1, ref: "Genesis 6:9-22", verses: 14 }, { n: "M", ref: "Genesis 11:29-32", verses: 4 }], triennial: null, source: "Hebcal" };
+  const md = weekDigest({ sheet: wt, readings: { torah: { texts: null, candidates: { ref: "Genesis 6:9-11", sources: [] } }, haftarah: { texts, candidates } } });
+  const cal = md.indexOf("# Torah calendar: Noach"), torah = md.indexOf("# Genesis 6:9-11: digest"), haft = md.indexOf(`# ${texts.ref}: digest`);
+  assert.ok(cal === 0 && torah > cal && haft > torah, `order: ${cal} ${torah} ${haft}`);
+  assert.match(md, /Selection: aliyah 1, its first verses, Genesis 6:9-11\./);
+  assert.match(md, /## 6:10/);
 });

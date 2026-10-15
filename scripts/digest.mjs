@@ -4,8 +4,9 @@
  *
  *   node scripts/digest.mjs weeks/<slug>
  *
- * Reads texts.json (from fetch.mjs) and candidates.json, prints the overview and writes
- * weeks/<slug>/digest.md. Per verse: which core commentators have text there (section-filed
+ * Reads texts.json and candidates.json (and texts-torah.json and candidates-torah.json when the week
+ * has a Torah selection), prints the overview and writes weeks/<slug>/digest.md: the Torah calendar
+ * (Hebcal's aliyot and the selection), then one digest per reading, Torah first. Per verse: which core commentators have text there (section-filed
  * comments named), and the Talmud, midrash, liturgy, Targum and Zohar refs anchored there with the
  * opening words of each. Reference works, quoting commentaries, "Sources and References" indexes and
  * Kabbalah other than the Zohar are dropped; Chasidut, Musar and the rest of the long tail are
@@ -18,6 +19,8 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
+import { READING_FILES } from "./week-files.mjs";
+import { aliyotMarkdown } from "./leyning.mjs";
 
 const L = createRequire(import.meta.url)("../template/lib.js");
 
@@ -209,23 +212,41 @@ async function readJSON(p) {
   try { return JSON.parse(await readFile(p, "utf8")); } catch { return null; }
 }
 
-// What the digest needs from sheet.json: the book and the verse refs, read through readingView so a
-// schema-3 week gives the same answer as its schema-2 original. It never throws: a sheet with no
-// readings says nothing, as no sheet does, and the digest falls back to texts.json's own verses.
-export function digestInput(sheet) {
+// What the digest needs from sheet.json for one reading: the book and the verse refs, read through
+// readingView so a schema-3 week gives the same answer as its schema-2 original. It never throws: a
+// reading the sheet does not hold, or a sheet with none, says nothing, as no sheet does, and the
+// digest falls back to texts.json's own verses.
+export function digestInput(sheet, readingId = null) {
   let view = null;
-  try { view = sheet ? L.readingView(sheet) : null; } catch { view = null; }
+  try {
+    if (sheet && (!readingId || L.readings(sheet).some(r => r.id === readingId))) view = L.readingView(sheet, readingId || undefined);
+  } catch { view = null; }
   return { book: view?.haftarah?.book, verses: (view?.verses || []).map(v => v.ref).filter(Boolean) };
+}
+
+/** The week's digest.md: the Torah calendar when the sheet has one, then a digest per reading, Torah first. */
+export function weekDigest({ sheet, readings }) {
+  const parts = [];
+  if (sheet && sheet.leyning) parts.push(aliyotMarkdown(sheet.leyning, L.readings(sheet).find(r => r.kind === "torah") || null));
+  for (const kind of ["torah", "haftarah"]) {
+    const x = readings[kind];
+    if (!x || (!x.texts && !x.candidates)) continue;
+    parts.push(buildDigest({ texts: x.texts, candidates: x.candidates, ...digestInput(sheet, kind) }));
+  }
+  return parts.join("\n");
 }
 
 async function main() {
   const dir = process.argv[2];
   if (!dir) { console.error("usage: node scripts/digest.mjs weeks/<slug>"); process.exit(1); }
-  const texts = await readJSON(join(dir, "texts.json"));
-  const candidates = await readJSON(join(dir, "candidates.json"));
   const sheet = await readJSON(join(dir, "sheet.json"));
-  if (!texts && !candidates) { console.error(`No texts.json or candidates.json in ${dir}; run fetch.mjs first.`); process.exit(1); }
-  const md = buildDigest({ texts, candidates, ...digestInput(sheet) });
+  const readings = {};
+  for (const kind of ["torah", "haftarah"]) {
+    const f = READING_FILES[kind];
+    readings[kind] = { texts: await readJSON(join(dir, f.texts)), candidates: await readJSON(join(dir, f.candidates)) };
+  }
+  if (!Object.values(readings).some(x => x.texts || x.candidates)) { console.error(`No texts.json or candidates.json in ${dir}; run fetch.mjs first.`); process.exit(1); }
+  const md = weekDigest({ sheet, readings });
   await writeFile(join(dir, "digest.md"), md, "utf8");
   process.stdout.write(md);
 }
