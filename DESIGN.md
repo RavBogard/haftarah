@@ -166,7 +166,7 @@ Confirmed rejections observed in the build: no shadows, no radii, no motion, no 
 - Four type sizes: incipit 60pt nominal (fitted 40–54pt), text 10.5pt, apparatus 9.2pt, gloss 9pt
 - Hairline rules (0.5pt black) as the only dividers
 - Fixed letter-page frame, mirrored around a staple in the upper right corner
-- A front page of context (mural, incipit, opening note, legend, voices) before the text begins on page 2
+- A front page of context (mural, incipit, opening note, keys line, voices) before the text begins on page 2
 - Scripture in two aligned columns with a shared verse gutter and a keyed gloss margin
 - Apparatus pinned to the foot of every text page in two balanced columns
 
@@ -176,14 +176,14 @@ One ink, two greys, one rubric and four register colors. The rubric is the ring 
 
 ### Primary
 - **Mural Rubric** (`rubric`, #8a0a14): sampled from the ring of the mural. Spent on the cover reading line (reference), chapter locators in the verse gutter, footnote and gloss keys in both languages, the names in the voices paragraph and the next-week line. It is also the classical register's color. It never enters the scripture column's words.
-- **Register colors** (`reg-traditional` #8a0a14 the ring red; `reg-modern` #1d4f9c the lapis of the outer band; `reg-critical` #0b6a62 the turquoise band, darkened; `reg-reference` #8a5a00 the ochre centre, darkened): one per register, on the siglum and the source name in the apparatus and on the legend's sigla (front page and footer). Each holds at least 5.9:1 against paper, so a 9pt source name stays legible on an inkjet. Shape still carries the register on a photocopy.
+- **Register colors** (`reg-traditional` #8a0a14 the ring red; `reg-modern` #1d4f9c the lapis of the outer band; `reg-critical` #0b6a62 the turquoise band, darkened; `reg-reference` #8a5a00 the ochre centre, darkened): one per register, on the siglum and the source name in the apparatus and on the footer legend's sigla. Each holds at least 5.9:1 against paper, so a 9pt source name stays legible on an inkjet. Shape still carries the register on a photocopy.
 
 ### Neutral
 - **Paper** (`paper`): the page.
 - **Ink** (`ink`): scripture in both languages, verse numbers, headings, apparatus bodies, margin notes, the folio, the wordmark. Also the rule color.
 - **Secondary Ink** (`ink-2`, #595959): apparatus tails, the "]" bracket after a lemma, the verse number inside a margin note, the "JPS" tail, the legend, the voices paragraph, provenance, colophon, the ketiv in Hebrew, the dates in the reading line, the tagline. 65% black; it survives an office laser.
 - **Frame Grey** (`frame`, #4d4d4d): running heads and footers only, so the frame recedes behind the text and the red is left for meaning.
-- **Legend Grey** (`legend-unused`, #a6a6a6): the sigla in the front-page legend that are not used this week.
+- **Legend Grey** (`legend-unused`, #a6a6a6): the front page's keys line in a week with no margin keys.
 - **Map tints** (`map-land` #f1efe9, `map-sea` #e3eaf4, `map-water-line` #1d4f9c the lapis, `map-coast` #8c8c8c): the figures' base only, kept pale so the places and bars read over them. They appear nowhere else.
 
 ### Named Rules
@@ -223,7 +223,7 @@ Letter portrait (8.5 x 11in), `@page` margin 0 with the frame drawn by the templ
 
 **Binding.** Stapled upper right, duplex. On a recto the staple corner is top right and the inner margin (0.6in) is on the right; on a verso the mirror. The verse range in the running head and the folio sit in the corner away from the staple. The gloss column stays on the right of every page.
 
-**Front page.** Page 1 is context, not text. The hero sits with its top 1.35in from the trim whatever the incipit does: the mural (1.6in square) on the left, and on the right the fitted incipit, its italic English rendering 10pt below, and the reading line 14pt below that (reference in rubric at weight 600, the Shabbat name in ink, the civil and Hebrew dates in secondary grey). The opening note follows 16pt down at text size in a 5.4in measure: the calendar reason first, then the historical setting opened by a hairline rule. Then the legend (every siglum in its register color with its plain name, unused ones in legend grey, and a line explaining the letter keys), the voices (one running paragraph: each source named this week in rubric with a one-line identification), and the provenance pushed to the foot with `margin-top: auto` and a 0.12in margin below. The footer carries the folio and the wordmark block (lowercase "central reform congregation" at text size with the tagline beneath at gloss size). When the opening note is long enough that the voices would push the provenance off the page, the voices move to the end matter and the front page keeps the rest.
+**Front page.** Page 1 is context, not text. The hero sits with its top 1.35in from the trim whatever the incipit does: the mural (1.6in square) on the left, and on the right the fitted incipit, its italic English rendering 10pt below, and the reading line 14pt below that (reference in rubric at weight 600, the Shabbat name in ink, the civil and Hebrew dates in secondary grey). The opening note follows 16pt down at text size in a 5.4in measure: the calendar reason first, then the historical setting opened by a hairline rule. Then the keys line (the letter keys explained, in legend grey when the week has none; the register sigla are not named on the front page since 2026-10-16, the text-page footers naming the ones used), the voices (one running paragraph: each source named this week in rubric with a one-line identification), and the provenance pushed to the foot with `margin-top: auto` and a 0.12in margin below. The footer carries the folio and the wordmark block (lowercase "central reform congregation" at text size with the tagline beneath at gloss size). When the opening note is long enough that the voices would push the provenance off the page, the voices move to the end matter and the front page keeps the rest.
 
 **Text pages.** A four-track grid: English column `1fr`, verse gutter 0.34in, Hebrew column `1fr`, gloss margin 1.35in (of which 0.13in is clearance), with a 0.12in column gap. Each verse is a subgrid row; rows are separated by 5.5pt. Masoretic paragraph breaks become vertical space (setumah 15pt, petuchah 24pt); a mid-verse pisqa is a 1.6em inline gap in the Hebrew. A chapter locator ("42:7") in rubric at gloss size sits above the verse number on the first row of every page and wherever the chapter changes. Margin notes are absolutely positioned to their verse's top and pushed down on collision; notes that will not fit beside their verse carry to the next page's margin, keyed by letter and verse number. The footer carries the folio away from the staple and a micro-legend of the sigla used that week toward it.
 
@@ -244,7 +244,7 @@ None. The sheet is a flat printed page; depth is conveyed by rules, weight, and 
 
 ## Shapes
 
-No radii anywhere. The only drawn geometry is the 0.5pt black hairline (head rule, apparatus rule, end-matter section rules, the rule inside the opening note) and the four register sigla, drawn as inline SVG in a 10-unit viewbox: a filled square, a filled circle, a filled triangle and a filled diamond, all at one weight and one size (6.5pt in the apparatus, 7pt in the legend, 6pt in the footer micro-legend). The mural is the only image.
+No radii anywhere. The only drawn geometry is the 0.5pt black hairline (head rule, apparatus rule, end-matter section rules, the rule inside the opening note) and the four register sigla, drawn as inline SVG in a 10-unit viewbox: a filled square, a filled circle, a filled triangle and a filled diamond, all at one weight and one size (6.5pt in the apparatus, 6pt in the footer micro-legend). The mural is the only image.
 
 ## Components
 
@@ -267,10 +267,10 @@ No radii anywhere. The only drawn geometry is the 0.5pt black hairline (head rul
 - **Pointer:** when the entry's verse sits on an earlier page the verse number is followed by " · p. N" in italic grey at gloss size. Nothing says "(cont.)".
 
 ### Register Sigla
-Inline SVG in `currentColor` (the register's color), all filled, one weight, 3pt before the verse number. Square: classical commentators. Circle: modern commentators. Triangle: what historians say. Diamond: reference. The front-page legend names all four in those plain words and greys the ones unused that week; the text-page footer repeats only the ones used.
+Inline SVG in `currentColor` (the register's color), all filled, one weight, 3pt before the verse number. Square: classical commentators. Circle: modern commentators. Triangle: what historians say. Diamond: reference. The text-page footer names, in those plain words, the ones used that week; the front page does not name them (cut 2026-10-16), and on the web each siglum names its register on hover.
 
 ### Front Page
-In order from the top: the hero with its top at 1.35in (mural 1.6in square, 0.4in gap, then the right-aligned RTL incipit block: fitted Hebrew incipit, italic English rendering 10pt below, reading line 14pt below with the reference in rubric at weight 600, the Shabbat name, and the civil and Hebrew dates in secondary grey); the opening note (text size, 5.4in measure, calendar paragraph then the setting under a hairline rule); the legend (gloss size, secondary grey, sigla in their register colors or legend grey, then the keys line); the voices (heading at gloss size weight 600, then one running paragraph with each name in rubric at weight 500 separated by rubric middots); the provenance at the foot (gloss size, secondary grey, the signature in italic ink). The footer carries the wordmark and tagline.
+In order from the top: the hero with its top at 1.35in (mural 1.6in square, 0.4in gap, then the right-aligned RTL incipit block: fitted Hebrew incipit, italic English rendering 10pt below, reading line 14pt below with the reference in rubric at weight 600, the Shabbat name, and the civil and Hebrew dates in secondary grey); the opening note (text size, 5.4in measure, calendar paragraph then the setting under a hairline rule); the keys line (gloss size, secondary grey); the voices (heading at gloss size weight 600, then one running paragraph with each name in rubric at weight 500 separated by rubric middots); the provenance at the foot (gloss size, secondary grey, the signature in italic ink). The footer carries the wordmark and tagline.
 
 ### Glossary
 Two columns at apparatus size, 0.28in gap; each entry a hanging-indent paragraph (10pt) opening with the term at weight 600 and its Hebrew in Ezra SIL at 1.1em.
@@ -287,7 +287,7 @@ The one addition to the printed page since 2.0 began, and only on a week that ha
 The colophon credits the map and the chronology on a sheet that carries them. On the web the same SVG sits beside the setting at 52rem and wider, stacks below it on a narrow screen, and the timeline scrolls sideways in a labelled region under 52rem; the tints take dark-mode values there.
 
 ### Colophon and Provenance
-Gloss size in secondary grey, 1.45 and 1.4 leading respectively, max width 5.6in; the provenance names the Hebrew and English editions once, on the front page, and ends in the rabbi's signoff.
+Gloss size in secondary grey, 1.45 and 1.4 leading respectively, max width 5.6in; the provenance is the rabbi's signoff; the editions are named once, in the colophon (off the front page since 2026-10-16).
 
 ## Do's and Don'ts
 

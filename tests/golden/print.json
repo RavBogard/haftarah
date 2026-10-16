@@ -10,7 +10,7 @@
       "template/fonts/NotoSerifHebrew[wdth,wght].ttf": "93caef921360788dc3b0e32136bb26f16bc57717ec482d48fc7fd43820617165",
       "template/fonts/OFL-literata.txt": "8742963604cd89dc81437811a850018fc03b2bfad686d7422c8235967c87614e",
       "template/fonts/OFL-notoserifhebrew.txt": "9b9fe028b5ba74d231659a1bbaf0ed09b11e759d1ca6a070999e16d151616b47",
-      "template/render.js": "4aae54b16e0db63aabe8068d4aac0d078cda6876aed4a22d2dd452e9d12b83d8",
+      "template/render.js": "48a2229af03568acfce2e5125ea41f121c03d6cd35ea8e039e61f7ac4d90ace0",
       "template/sheet.css": "e22f9c5e3e8bfc9c26e3e85a4f1743565c0cbb6044de07cca36a55b90e404686",
       "template/sheet.html": "481dee92ba07c1c0def70ee8d2e0b0a8850f4acab764b0eca22b1b07b5797217",
       "template/trope.css": "a49ed10f4a9e392c23b473b1a7ed4766a824666409156c4fb7c836bac49632d1"
@@ -101,28 +101,28 @@
     "week-min": {
       "html": "eca008919e27f63a6b154cc1e53953363ffeb11a2b73a7bb79f0a36f46fe7a6b",
       "trope": "71f2c9ebbdec2c94224e68f5d513b26c758b75f50b0ca7e3b69a2f797d33a35d",
-      "dom": "de28270a0290d2d77004a9b145b96d628c4a79860096538f6c15423463f0e427",
-      "tropeDom": "27ceca2a39fedfacc067abcb6f24d88a044ac3a1f17a5a7612c11d75567044fd"
+      "dom": "849b1cbb3585773029487b0964aba7b8a90e092281bec6c5f1dbe7b4ae15f6de",
+      "tropeDom": "f4733f6b28c91d71711035c13d6bbfb87abd4fb2ff1af5f7f1e6eba44685420b"
     },
     "week-notes": {
       "html": "50488d64a7cd5b30587f741979205b4fe2822ff26ef3a98d14bbbf7a1536f0d4",
       "trope": "f067535e4142e014b4f5b22988773b6b74048c277a9b353c0a3dde778ecd0297",
-      "dom": "1ec1b9173cf614bcaa2768ff0df0eefd4ed89fb3dfc99372c2604e0e1e9d5579",
-      "tropeDom": "bf75204cd92a29af4898779a8020467a83075a77bc852c45d31398e55b4c521f"
+      "dom": "36909027662119ec7837d04592e26d27735f7096f6dcee8b5c67b195d5897e7f",
+      "tropeDom": "818407c3c6f161cf465a324ac345f81f4807b8d64d868a18bc120bc499134598"
     },
     "week-torah": {
       "html": "da34c955d40faa604b50df34c6f0a0568db5222d8d7457c711484114efeb9d3d",
       "trope": "fa0cf63830063f0d76217f227cb8519586750549620c0d0e34af9741dd5cb971",
       "torah": "fc9b0e2df81cac3d33680dd105835d3b56e7ae4ab79153ccf67f5dcfab88641a",
-      "dom": "de28270a0290d2d77004a9b145b96d628c4a79860096538f6c15423463f0e427",
-      "tropeDom": "27ceca2a39fedfacc067abcb6f24d88a044ac3a1f17a5a7612c11d75567044fd",
-      "torahDom": "f6e5f2cea431f212bfb64a84595533cd970960ffc4324c973b317e849963293d"
+      "dom": "849b1cbb3585773029487b0964aba7b8a90e092281bec6c5f1dbe7b4ae15f6de",
+      "tropeDom": "f4733f6b28c91d71711035c13d6bbfb87abd4fb2ff1af5f7f1e6eba44685420b",
+      "torahDom": "81abdfee8af741a9538ec3ff285f633e6f12eef7d6849acecceed35fbf92b548"
     },
     "week-figures": {
       "html": "93ec2a9c94b2ab1a42e28b75963ebd146d1884125c48e3b91116b193bb8ec03b",
       "trope": "4c7c1a278e685ec0e884687ee027123348f6829038268b715e760f7e9d9ca649",
-      "dom": "d8dae3aee4299e139fb728a3626b6f72572d61d84a8bd839b1cce1ca3660f5d3",
-      "tropeDom": "9b2a3607fbc35f85ec552bb2a148ac196c559021cb0e4e7c9ebebaec03b3698c"
+      "dom": "7b249bb5d9f69e692bee43303525e8c402c2e8c88211d4be5f6ed2d8dea3ed38",
+      "tropeDom": "95dd073574b63353ddf64b2d6826b0447948fd607b2fcfa609687f41c91e8390"
     }
   }
 }

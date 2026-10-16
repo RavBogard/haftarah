@@ -172,10 +172,9 @@
       if (figs.timeline) note.after(figs.timeline);
     }
 
-    // Legend: always the same four, in the same order; unused ones greyed; then the keys.
-    const used = new Set(usedRegisters());
+    // Legend: the keys line, and the ketiv marks when the week has them. The four register sigla are not
+    // named here (cut 2026-10-16); each text page's footer names the ones it uses.
     const legend = el("div", "legend");
-    L.REGISTER_ORDER.forEach(k => legend.append(el("span", `reg-${k}` + (used.has(k) ? "" : " unused"), `${SIGLA[k]}${REGISTER_NAMES[k]}`)));
     const hasKeys = (document.documentElement.dataset.keys || "").length > 0;
     legend.append(el("span", hasKeys ? "" : "unused", `<span class="k">a–z</span>translators’ notes (JPS) and word notes, in the margin`));
     if (data.verses.some(v => /\[[^\]]*\]\s*\([^)]*\)|\([^)]*\)\s*\[[^\]]*\]/.test(v.he))) {
@@ -208,8 +207,8 @@
     }
 
     const prov = el("div", "provenance");
+    // The editions are credited in the colophon ("About this sheet"), not here (cut from the front page 2026-10-16).
     prov.innerHTML =
-      `<span class="editions">Hebrew: ${esc(data.haftarah.versions.he)}. English: ${esc(data.haftarah.versions.en)}.</span> ` +
       `<span class="signoff">${signoff}</span>` +
       (data.credits?.editor && data.credits?.signoff ? ` <span class="signature">— ${esc(data.credits.editor)}</span>` : "");
     p.body.append(prov);

@@ -78,7 +78,7 @@ Requirements: Node 18+ and Chrome or Edge. Nothing to install; do not run `npm i
 ```
 node scripts/fetch.mjs --date 2026-10-17 --known <slug,slug>   # 1. the calendar, the haftarah, Hebcal's aliyot, last year's sheet (prior.json); --no-texts skips texts
 node scripts/digest.mjs weeks/<slug>            # 2. the map: the Torah calendar, Last time, then each reading verse by verse
-node scripts/fetch.mjs --date 2026-10-17 --torah-pick aliyah:1-2   #    after the briefing: Daniel's Torah selection (or --torah "<ref>"); last year's fitting entries come in for it too (--no-carry skips)
+node scripts/fetch.mjs --date 2026-10-17 --torah-pick aliyah:1-2   #    only when Daniel asks for a Torah sheet: his selection (or --torah "<ref>"); last year's fitting entries come in for it too (--no-carry skips)
 # 3. fill weeks/<slug>/sheet.json: incipits, opening note, commentary, glosses, glossary, next week
 node scripts/lint.mjs weeks/<slug> [--fix]      # 4. optional; build runs it; prints each reading's entries against the cap
 node scripts/build.mjs weeks/<slug> --png       # 5. sheet.pdf (haftarah) and sheet-torah.pdf (Torah) with page images; --reading torah|haftarah for one
@@ -102,7 +102,7 @@ If no shell is available, open `weeks/<slug>/sheet.html` in Chrome and print to 
 
 ## Customs
 
-Every choice a congregation might make differently is data in `customs/<id>.json`; CRC's is `customs/crc.json`, and the scripts take `--customs <id>` (default `crc`). Fields: `calendar.diaspora` (Hebcal's `i=off`), `haftarahRite` (the table in `scripts/rites.mjs` that names the usual haftarah when a special Shabbat replaces it), `torah` (`mode`: `selection` means Daniel picks each week, `triennial` and `full` pick for themselves; `rule`; `triennial`, the triennial year, null until set), `nusach`, `versions` (the Sefaria Hebrew and English version titles), `translations`, `divineName`, `entryCap` (entries per reading above which lint warns), `series`, `credits`, and `toConfirm`, the fields Daniel has not confirmed yet (fetch prints them every run). CRC's Torah custom (spec open item 11.4) is still open: the file says a weekly selection and a cap of 24 until he confirms.
+Every choice a congregation might make differently is data in `customs/<id>.json`; CRC's is `customs/crc.json`, and the scripts take `--customs <id>` (default `crc`). Fields: `calendar.diaspora` (Hebcal's `i=off`), `haftarahRite` (the table in `scripts/rites.mjs` that names the usual haftarah when a special Shabbat replaces it), `torah` (`mode`: `selection` means Daniel picks each week, `triennial` and `full` pick for themselves; `rule`; `triennial`, the triennial year, null until set), `nusach`, `versions` (the Sefaria Hebrew and English version titles), `translations`, `divineName`, `entryCap` (entries per reading above which lint warns), `series`, `credits`, and `toConfirm`, the fields Daniel has not confirmed yet (fetch prints them every run). CRC's Torah custom was settled on 2026-10-16: a Torah sheet is made only when Daniel asks for one, as a selection he picks (`rule: "on request"`); the cap of 24 still waits on him.
 
 ## Data file
 

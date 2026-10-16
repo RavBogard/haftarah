@@ -724,7 +724,7 @@ export async function fetchWeek({
     torah = readingFrom("torah", tp, { titleEn: name, versions: customs.versions, fetched, extra: { selection: sel.selection, aliyot: leyning.aliyot, maftir: sel.maftir } });
     log(`Torah selection: ${sel.selection}, ${sel.ref} (${tp.verses.length} verses)${sel.maftir ? `; maftir ${sel.maftir.ref}${sel.maftir.reason ? ` (${sel.maftir.reason})` : ""}` : ""}`);
   } else if (leyning) {
-    log(`Torah: no selection yet. Put the aliyot to Daniel in the briefing, then run again with --torah-pick aliyah:N[-M] (or aliyah:M, triennial, full) or --torah "<ref>".`);
+    log(`Torah: none. A Torah sheet is made only when Daniel asks for one: run again with --torah-pick aliyah:N[-M] (or aliyah:M, triennial, full) or --torah "<ref>".`);
   }
 
   // 4. sheet.json: a new week, or the kept one, with a Torah reading added when there is a new pick.

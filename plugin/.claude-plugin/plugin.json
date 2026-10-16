@@ -1,7 +1,7 @@
 {
   "name": "haftarah",
   "version": "2.0.0",
-  "description": "Make the weekly Torah and haftarah study sheets for Torah from Scratch from any Claude surface",
+  "description": "Make the weekly haftarah study sheet for Torah from Scratch, and a Torah sheet on request, from any Claude surface",
   "author": { "name": "Central Reform Congregation", "url": "https://haftarah.centralreform.org" },
   "homepage": "https://github.com/RavBogard/haftarah",
   "repository": "https://github.com/RavBogard/haftarah",

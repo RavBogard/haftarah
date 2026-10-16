@@ -9,12 +9,13 @@ test("customs/crc.json is valid and says what spec 3.2 says, with Daniel's open 
   assert.equal(c.id, "crc");
   assert.equal(c.calendar.diaspora, true);
   assert.equal(c.haftarahRite, "ashkenazi");
-  assert.deepEqual(c.torah, { mode: "selection", rule: "weekly", triennial: null });
+  assert.deepEqual(c.torah, { mode: "selection", rule: "on request", triennial: null });   // a Torah sheet only when Daniel asks (2026-10-16)
   assert.equal(c.entryCap, 24);
   assert.equal(c.versions.he, "Miqra according to the Masorah");
   assert.equal(c.versions.en, "THE JPS TANAKH: Gender-Sensitive Edition");
   assert.equal(c.series.name, "Torah from Scratch");
-  for (const k of ["torah", "entryCap", "nusach"]) assert.ok(c.toConfirm.includes(k), k);
+  for (const k of ["entryCap", "nusach"]) assert.ok(c.toConfirm.includes(k), k);
+  assert.ok(!c.toConfirm.includes("torah"), "the Torah custom was confirmed on 2026-10-16");
 });
 
 test("validateCustoms names every unusable field", () => {

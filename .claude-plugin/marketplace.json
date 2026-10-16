@@ -1,8 +1,8 @@
 {
   "name": "haftarah",
   "owner": { "name": "RavBogard", "url": "https://github.com/RavBogard" },
-  "metadata": { "description": "The weekly haftarah and Torah study sheet of Central Reform Congregation: the connector that makes a week and the skill that runs the conversation." },
+  "metadata": { "description": "The weekly haftarah study sheet of Central Reform Congregation, and Torah sheets on request: the connector that makes a week and the skill that runs the conversation." },
   "plugins": [
-    { "name": "haftarah", "source": "./plugin", "description": "Make the weekly Torah and haftarah study sheets for Torah from Scratch from any Claude surface", "version": "2.0.0", "category": "productivity" }
+    { "name": "haftarah", "source": "./plugin", "description": "Make the weekly haftarah study sheet for Torah from Scratch, and a Torah sheet on request, from any Claude surface", "version": "2.0.0", "category": "productivity" }
   ]
 }

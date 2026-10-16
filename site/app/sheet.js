@@ -151,7 +151,6 @@ export async function run() {
 
   // ---- front page: the sheet introduces itself (with two readings, the legend and the voices cover both) ----
   const f = model.front, prov = f.provenance;
-  const used = L.REGISTER_ORDER.filter(k => parts.some(p => p.model.front.legend.used.includes(k)));
   const hasKeys = parts.some(p => p.model.front.legend.hasKeys);
   const hasKetiv = parts.some(p => p.model.front.legend.hasKetiv);
   const famKeys = new Set(parts.flatMap(p => p.model.front.families.map(x => x.key)));
@@ -180,13 +179,14 @@ export async function run() {
       ${f.openingNote.calendar.map(p => `<p>${p}</p>`).join("")}
       ${f.openingNote.setting.length ? `<div class="setting">${f.openingNote.setting.map(p => `<p>${p}</p>`).join("")}</div>` : ""}
     </div>
-    <div class="legend">${L.REGISTER_ORDER.map(k => `<span class="reg reg-${k}${used.includes(k) ? "" : " unused"}">${SIG[k]}${NAMES[k]}</span>`).join("")}
+    <div class="legend">
       <span${hasKeys ? "" : ' class="unused"'}><span class="k">a–z</span>translators’ notes (JPS) and word notes: tap a letter</span>
       ${hasKetiv ? `<span><span class="k">[ ] ( )</span>read / written: where tradition reads a word differently from its spelling</span>` : ""}
       <span class="trope-legend"><span class="label">Chanter’s copy · trope phrases by family</span>${families.map(x => `<span class="tr tr-${x.key}">${esc(x.name)}</span>`).join(" ")}</span>
     </div>`;
   if (voices.length) front.append(el("div", "voices", `<h2>Voices on this sheet</h2><p>${voices.map(v => `<span class="voice"><span class="name">${esc(v.name)}</span>${v.refs && v.refs.length ? ` (${esc(v.refs.join(", "))})` : ""}${v.line ? ` ${esc(v.line)}` : ""}</span>`).join('<span class="sep"> · </span>')}</p>`));
-  front.append(el("div", "provenance", `Hebrew: ${esc(prov.he)}. English: ${esc(prov.en)}. ${prov.signoffHtml}${prov.signed ? ` <span class="sign">— ${esc(prov.editor)}</span>` : ""}`));
+  // The register sigla and the editions left the front (2026-10-16): each siglum names its register on hover, and the footer credits the editions.
+  front.append(el("div", "provenance", `${prov.signoffHtml}${prov.signed ? ` <span class="sign">— ${esc(prov.editor)}</span>` : ""}`));
   { const state = installCard({ host: $("install") }); if (check) html.dataset.checkInstall = state; }
   $("footAttr").textContent = `Hebrew: ${prov.he}. English: ${prov.en}. Sources from Sefaria. Calendar and readings: Hebcal (CC BY 4.0).`;
   // While a week carries word analysis, the footer credits its source (spec 8); the file itself names the credit.
