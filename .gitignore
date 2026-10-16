@@ -17,3 +17,4 @@ site/dist/
 tests/fixtures/*/sheet-trope.html
 tests/fixtures/*/sheet-torah.html
 tests/fixtures/_*/
+dist/
