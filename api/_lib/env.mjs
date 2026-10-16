@@ -16,7 +16,7 @@ export function configFrom(env = {}) {
     workingToken: env.HAFTARAH_WORKING_READ_WRITE_TOKEN || null,
     publicToken: env.BLOB_READ_WRITE_TOKEN || env.HAFTARAH_BLOB_TOKEN || null,
     dropbox: env.HAFTARAH_DROPBOX_URL && env.HAFTARAH_DROPBOX_TOKEN ? { url: env.HAFTARAH_DROPBOX_URL, token: env.HAFTARAH_DROPBOX_TOKEN } : null,
-    authSecret: env.HAFTARAH_AUTH_SECRET || null,
+    authSecret: env.HAFTARAH_AUTH_SECRET && env.HAFTARAH_AUTH_SECRET.length >= 32 ? env.HAFTARAH_AUTH_SECRET : null,   // a weak key counts as unset
     cronSecret: env.CRON_SECRET || null,
     google: env.GOOGLE_OAUTH_CLIENT_ID && env.GOOGLE_OAUTH_CLIENT_SECRET ? { clientId: env.GOOGLE_OAUTH_CLIENT_ID, clientSecret: env.GOOGLE_OAUTH_CLIENT_SECRET } : null,
     owners: list(env.HAFTARAH_OWNER_EMAILS).map(s => s.toLowerCase()),
@@ -30,8 +30,13 @@ export function configFrom(env = {}) {
 export function secretValues(c) {
   return [c.workingToken, c.publicToken, c.dropbox?.url, c.dropbox?.token, c.authSecret, c.cronSecret, c.google?.clientSecret].filter(Boolean);
 }
-/** Throws when `text` contains any credential; the message never does. */
+/** Throws when `text` contains any credential; the message never does. It checks plain substrings, and the
+ * URL-encoded form when that differs: any other encoding of a credential (base64, JSON escapes) would pass. */
 export function assertNoSecrets(text, c) {
   const s = String(text);
-  for (const v of secretValues(c)) if (v.length >= 8 && s.includes(v)) throw new Error("a credential would have left the server in a result; refused");
+  for (const v of secretValues(c)) {
+    if (v.length < 8) continue;
+    const enc = encodeURIComponent(v);
+    if (s.includes(v) || (enc !== v && s.includes(enc))) throw new Error("a credential would have left the server in a result; refused");
+  }
 }

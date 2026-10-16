@@ -21,10 +21,13 @@ const hmac = (secret, s) => createHmac("sha256", secret).update(s).digest("base6
 export const hashOpaque = s => createHash("sha256").update(s).digest("hex");
 export const pkceChallenge = v => createHash("sha256").update(v).digest("base64url");
 const defaultRandom = () => randomBytes(24).toString("base64url");
+/** now() may return milliseconds or a Date. */
+const ms = now => { const v = now(); return v instanceof Date ? v.getTime() : Number(v); };
 
 /** `<kind>.<payload>.<mac>`: payload is JSON with `exp` (ms) and `iat` added. */
 export function sign(secret, kind, payload, ttlMs, now = Date.now) {
-  const body = b64(JSON.stringify({ ...payload, iat: now(), exp: now() + ttlMs }));
+  const t = ms(now);
+  const body = b64(JSON.stringify({ ...payload, iat: t, exp: t + ttlMs }));
   return `${kind}.${body}.${hmac(secret, `${kind}.${body}`)}`;
 }
 /** The payload when the kind, the mac and the expiry hold; null otherwise. Never throws. */
@@ -35,7 +38,7 @@ export function verify(secret, kind, token, now = Date.now) {
   const expected = Buffer.from(hmac(secret, `${parts[0]}.${parts[1]}`)), given = Buffer.from(parts[2]);
   if (expected.length !== given.length || !timingSafeEqual(expected, given)) return null;
   let p; try { p = JSON.parse(unb64(parts[1])); } catch { return null; }
-  if (!p || typeof p.exp !== "number" || p.exp < now()) return null;
+  if (!p || typeof p.exp !== "number" || p.exp < ms(now)) return null;
   return p;
 }
 
@@ -84,7 +87,7 @@ export async function register(body, { config, now }) {
     if (!redirect_uris.every(redirectPermitted)) throw new Error("invalid_redirect_uri");
     const client_name = typeof body.client_name === "string" ? body.client_name.slice(0, 120) : "MCP client";
     const client_id = sign(config.authSecret, "hc", { redirect_uris, client_name }, TTL.client, now);
-    return { status: 201, body: { client_id, client_id_issued_at: Math.floor(now() / 1000), client_name, redirect_uris, grant_types: ["authorization_code", "refresh_token"], response_types: ["code"], token_endpoint_auth_method: "none" } };
+    return { status: 201, body: { client_id, client_id_issued_at: Math.floor(ms(now) / 1000), client_name, redirect_uris, grant_types: ["authorization_code", "refresh_token"], response_types: ["code"], token_endpoint_auth_method: "none" } };
   } catch (e) { return err(e.message === "invalid_redirect_uri" ? "invalid_redirect_uri" : "invalid_client_metadata"); }
 }
 
@@ -121,7 +124,7 @@ export async function authorize(url, { config, now, random = defaultRandom }) {
 export async function googleCallback(url, { config, now, fetchImpl = globalThis.fetch }) {
   const q = url.searchParams;
   const rec = verify(config.authSecret, "hr", q.get("state") || "", now);
-  if (!rec) return err("invalid_request");
+  if (!rec || !redirectPermitted(rec.redirect_uri)) return err("invalid_request");
   const back = values => ({ status: 303, redirect: withQuery(rec.redirect_uri, { ...values, state: rec.state ?? undefined }) });
   if (q.get("error") || !q.get("code")) return back({ error: "access_denied" });
   let claims;
@@ -134,7 +137,7 @@ export async function googleCallback(url, { config, now, fetchImpl = globalThis.
   // Received straight from Google's token endpoint over TLS with the client secret, so the signature is
   // not checked again (OIDC Core 3.1.3.7); the claims that bind it to this request and this client are.
   const email = String(claims?.email || "").trim().toLowerCase();
-  const ok = claims && GOOGLE_ISSUERS.has(claims.iss) && claims.aud === config.google.clientId && Number(claims.exp) * 1000 > now() && claims.nonce === rec.nonce && (claims.email_verified === true || claims.email_verified === "true") && config.owners.includes(email);
+  const ok = claims && GOOGLE_ISSUERS.has(claims.iss) && claims.aud === config.google.clientId && Number(claims.exp) * 1000 > ms(now) && claims.nonce === rec.nonce && (claims.email_verified === true || claims.email_verified === "true") && config.owners.includes(email);
   if (!ok) return back({ error: "access_denied" });
   const code = sign(config.authSecret, "hcode", { client: rec.client, redirect_uri: rec.redirect_uri, code_challenge: rec.code_challenge, scope: rec.scope, resource: rec.resource, actor: email }, TTL.code, now);
   return back({ code });
@@ -157,7 +160,7 @@ export async function token(form, { config, now, random = defaultRandom }) {
     const c = verify(config.authSecret, "hcode", form.get("code") || "", now);
     const verifier = form.get("code_verifier") || "";
     let redirect = null; try { redirect = normalizeRedirect(form.get("redirect_uri")); } catch {}
-    if (!c || c.client !== clientHash || c.redirect_uri !== redirect || !/^[A-Za-z0-9._~-]{43,128}$/.test(verifier) || pkceChallenge(verifier) !== c.code_challenge || (form.get("resource") && form.get("resource") !== c.resource)) return err("invalid_grant");
+    if (!c || c.client !== clientHash || !config.owners.includes(c.actor) || c.redirect_uri !== redirect || !/^[A-Za-z0-9._~-]{43,128}$/.test(verifier) || pkceChallenge(verifier) !== c.code_challenge || (form.get("resource") && form.get("resource") !== c.resource)) return err("invalid_grant");
     return issue(config, now, random, c);
   }
   if (grant === "refresh_token") {

@@ -1,6 +1,7 @@
 // tests/server-http.test.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { createHmac } from "node:crypto";
 import { json, text, readLimitedBody, canonicalOrigin, draftUrl, verifyDraft, NO_STORE } from "../api/_lib/http.mjs";
 
 test("json and text answer with no-store and the right content type", async () => {
@@ -38,4 +39,17 @@ test("draft URLs are signed for 24 hours and verify only unchanged and in time",
   assert.equal(verifyDraft("k".repeat(32), "2026-10-17-noach", "sheet.pdf", exp, sig, () => exp + 1), false);
   assert.equal(verifyDraft("other", "2026-10-17-noach", "sheet.pdf", exp, sig, now), false);
   assert.equal(verifyDraft("k".repeat(32), "2026-10-17-noach", "sheet.pdf", "NaN", sig, now), false);
+});
+
+test("draft links: a Date-returning now works, a missing secret refuses, and the key is derived rather than the secret itself", () => {
+  const at = new Date("2026-10-15T12:00:00Z");
+  const u = new URL(draftUrl("https://haftarah.vercel.app", "k".repeat(32), "2026-10-17-noach", "sheet.pdf", () => at));
+  const exp = Number(u.searchParams.get("exp")), sig = u.searchParams.get("sig");
+  assert.equal(exp, at.getTime() + 24 * 3600_000);
+  assert.equal(verifyDraft("k".repeat(32), "2026-10-17-noach", "sheet.pdf", exp, sig, () => at), true);
+  assert.notEqual(sig, createHmac("sha256", "k".repeat(32)).update(`2026-10-17-noach/sheet.pdf/${exp}`).digest("base64url"), "not signed with the raw secret");
+  assert.throws(() => draftUrl("https://haftarah.vercel.app", "", "2026-10-17-noach", "sheet.pdf"), /no signing secret/);
+  assert.throws(() => draftUrl("https://haftarah.vercel.app", null, "2026-10-17-noach", "sheet.pdf"), /no signing secret/);
+  assert.equal(verifyDraft("", "2026-10-17-noach", "sheet.pdf", exp, sig, () => at), false);
+  assert.equal(verifyDraft(null, "2026-10-17-noach", "sheet.pdf", exp, sig, () => at), false);
 });

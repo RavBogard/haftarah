@@ -16,12 +16,17 @@ export async function readLimitedBody(request, limit) {
 /** The origin this deployment speaks as for the request: its own when it is one of ours, else the primary. */
 export function canonicalOrigin(request, origins) { const o = new URL(request.url).origin; return origins.includes(o) ? o : origins[0]; }
 
-const sig = (secret, slug, file, exp) => createHmac("sha256", secret).update(`${slug}/${file}/${exp}`).digest("base64url");
+/** now() may return milliseconds or a Date. */
+const ms = now => { const v = now(); return v instanceof Date ? v.getTime() : Number(v); };
+/** The draft-link key is derived from the auth secret, never the secret itself. */
+const draftKey = secret => createHmac("sha256", secret).update("draft").digest();
+const sig = (secret, slug, file, exp) => createHmac("sha256", draftKey(secret)).update(`${slug}/${file}/${exp}`).digest("base64url");
 /** A 24-hour link to one private file, served by api/draft.mjs. */
-export function draftUrl(origin, secret, slug, file, now = Date.now, ttlMs = 24 * 3600_000) { const exp = now() + ttlMs; return `${origin}/api/draft/${slug}/${file}?exp=${exp}&sig=${sig(secret, slug, file, exp)}`; }
+export function draftUrl(origin, secret, slug, file, now = Date.now, ttlMs = 24 * 3600_000) { if (!secret) throw new Error("no signing secret"); const exp = ms(now) + ttlMs; return `${origin}/api/draft/${slug}/${file}?exp=${exp}&sig=${sig(secret, slug, file, exp)}`; }
 export function verifyDraft(secret, slug, file, exp, given, now = Date.now) {
+  if (!secret) return false;
   const e = Number(exp);
-  if (!Number.isFinite(e) || e < now() || typeof given !== "string") return false;
+  if (!Number.isFinite(e) || e < ms(now) || typeof given !== "string") return false;
   const a = Buffer.from(sig(secret, slug, file, e)), b = Buffer.from(given);
   return a.length === b.length && timingSafeEqual(a, b);
 }

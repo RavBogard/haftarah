@@ -44,3 +44,13 @@ test("secretValues lists every secret and assertNoSecrets throws on any of them,
   assert.doesNotThrow(() => assertNoSecrets("anything", configFrom({})));
   assert.doesNotThrow(() => assertNoSecrets("csecret", c), "a secret shorter than 8 characters is not guarded (it would match ordinary text)");
 });
+
+test("an auth secret under 32 characters counts as unset", () => {
+  assert.equal(configFrom({ HAFTARAH_AUTH_SECRET: "x".repeat(31) }).authSecret, null);
+  assert.equal(configFrom({ HAFTARAH_AUTH_SECRET: "x".repeat(32) }).authSecret, "x".repeat(32));
+});
+
+test("assertNoSecrets also catches a URL-encoded copy of a credential", () => {
+  const c = configFrom(ENV);
+  assert.throws(() => assertNoSecrets(`see ${encodeURIComponent(ENV.HAFTARAH_DROPBOX_URL)}`, c), err => /a credential/.test(err.message) && !err.message.includes("script.google"));
+});

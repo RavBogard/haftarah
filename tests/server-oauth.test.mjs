@@ -182,6 +182,34 @@ test("an owner removed from HAFTARAH_OWNER_EMAILS loses access at once: bearer i
   assert.equal((await token(new URLSearchParams({ grant_type: "refresh_token", refresh_token: tk.body.refresh_token, client_id: id }), removed)).body.error, "invalid_grant");
 });
 
+test("the Google callback refuses a signed request record whose redirect is not permitted: 400, no redirect, no call to Google", async () => {
+  const rec = sign(config.authSecret, "hr", { client: "x", redirect_uri: "https://evil.example/cb", code_challenge: pkceChallenge(VERIFIER), scope: "haftarah.pipeline", resource: `${ORIGIN}/api/mcp`, state: "xyz", nonce: "r".repeat(32) }, 600_000, now);
+  const r = await googleCallback(new URL(`${ORIGIN}/api/auth/google/callback?code=g&state=${encodeURIComponent(rec)}`), { ...ctx(), fetchImpl: async () => { throw new Error("must not be called"); } });
+  assert.equal(r.status, 400); assert.equal(r.body.error, "invalid_request"); assert.equal(r.redirect, undefined);
+});
+
+test("the code exchange refuses a code once its owner is no longer in the owners list", async () => {
+  const id = await registerClaude();
+  const g = new URL((await authorize(authorizeUrl(id), ctx())).redirect);
+  const code = new URL((await googleCallback(new URL(`${ORIGIN}/api/auth/google/callback?code=g&state=${encodeURIComponent(g.searchParams.get("state"))}`), { ...ctx(), fetchImpl: googleOk() })).redirect).searchParams.get("code");
+  const removed = { ...ctx(), config: configFrom({ ...ENV, HAFTARAH_OWNER_EMAILS: "someone-else@centralreform.org" }) };
+  assert.equal((await token(new URLSearchParams({ grant_type: "authorization_code", code, client_id: id, redirect_uri: CLAUDE_CB, code_verifier: VERIFIER }), removed)).body.error, "invalid_grant");
+});
+
+test("sign, verify and the endpoints take a now that returns a Date as well as milliseconds", async () => {
+  const dateNow = () => new Date(t);
+  const s = sign("k", "hc", { a: 1 }, 1000, dateNow);
+  assert.equal(verify("k", "hc", s, now).a, 1);
+  assert.equal(verify("k", "hc", s, () => new Date(t + 1001)), null);
+  const dctx = () => ({ config, now: dateNow, random });
+  const id = (await register({ redirect_uris: [CLAUDE_CB] }, dctx())).body.client_id;
+  const g = new URL((await authorize(authorizeUrl(id), dctx())).redirect);
+  const code = new URL((await googleCallback(new URL(`${ORIGIN}/api/auth/google/callback?code=g&state=${encodeURIComponent(g.searchParams.get("state"))}`), { ...dctx(), fetchImpl: googleOk() })).redirect).searchParams.get("code");
+  const tk = await token(new URLSearchParams({ grant_type: "authorization_code", code, client_id: id, redirect_uri: CLAUDE_CB, code_verifier: VERIFIER }), dctx());
+  assert.equal(tk.status, 200);
+  assert.ok(bearer(new Request(`${ORIGIN}/api/mcp`, { headers: { authorization: `Bearer ${tk.body.access_token}` } }), dctx()));
+});
+
 test("pkceChallenge is S256 base64url", () => {
   assert.equal(pkceChallenge(VERIFIER), createHash("sha256").update(VERIFIER).digest("base64url"));
 });

@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm, writeFile, readFile, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { MemoryStore, BlobStore, WEEK_FILES, contentTypeOf, pullWeek, pushWeek, readJson, writeJson, readStatus, writeStatus, listWeeks } from "../api/_lib/store.mjs";
+import { MemoryStore, BlobStore, WEEK_FILES, contentTypeOf, pullWeek, pushWeek, readJson, writeJson, readStatus, writeStatus, listWeeks, weekPrefix } from "../api/_lib/store.mjs";
 
 const WORKING = "vercel_blob_rw_URJlaSwtVImD5fOT_s3cret";
 
@@ -83,4 +83,36 @@ test("status: none at first, version 1 on the first write, +1 on every write, fi
   assert.deepEqual(await readJson(s, "weeks/2026-10-24-lech-lecha/sheet.json"), { slug: "2026-10-24-lech-lecha" });
   assert.equal(await readJson(s, "weeks/none/sheet.json"), null);
   assert.deepEqual(await listWeeks(s), [{ slug: "2026-10-24-lech-lecha", status: null }, { slug: "2026-10-17-noach", status: b }]);
+  await s.put("weeks/Stray/status.json", "{}");
+  assert.equal((await listWeeks(s)).length, 2, "a folder that is not a week slug is left out, not an error");
+});
+
+test("a week's file names cannot leave its folder, and the slug must be a week slug", async () => {
+  const base = await mkdtemp(join(tmpdir(), "haftarah-store-"));
+  try {
+    const s = new MemoryStore();
+    await s.put("weeks/2026-10-17-noach/sheet.json", "{}");
+    await s.put("weeks/2026-10-17-noach/../escaped.txt", "x");
+    const out = join(base, "week");
+    await assert.rejects(pullWeek(s, "2026-10-17-noach", out), /unsafe file name: \.\.\/escaped\.txt/);
+    assert.deepEqual((await readdir(base)).sort(), ["week"], "nothing written beside the folder");
+    assert.deepEqual(await readdir(out), [], "nothing written at all: every name is checked first");
+    await writeFile(join(base, "outside.txt"), "o");
+    await assert.rejects(pushWeek(s, "2026-10-17-noach", out, ["../outside.txt"]), /unsafe file name/);
+    assert.equal(await s.get("weeks/2026-10-17-noach/../outside.txt"), null);
+    for (const bad of ["", "/etc/passwd", "\\x", "a\\b", "a/../../b"]) await assert.rejects(pullWeek(s, "2026-10-17-noach", out, [bad]), /unsafe file name/, JSON.stringify(bad));
+    assert.throws(() => weekPrefix("Noach"), /not a week slug/);
+    assert.throws(() => weekPrefix("2026-10-17-noach/../x"), /not a week slug/);
+    assert.equal(weekPrefix("2026-10-17-noach"), "weeks/2026-10-17-noach/");
+    await assert.rejects(pushWeek(s, "../x", out, ["sheet.json"]), /not a week slug/);
+  } finally { await rm(base, { recursive: true, force: true }); }
+});
+
+test("writeStatus keeps every field of the current record and takes a now in milliseconds as well as a Date", async () => {
+  const s = new MemoryStore();
+  await writeStatus(s, "2026-10-17-noach", { status: "delivered", published: "https://haftarah.vercel.app/2026-10-17-noach" }, () => Date.parse("2026-10-15T12:00:00Z"));
+  const b = await writeStatus(s, "2026-10-17-noach", { status: "built" }, () => new Date("2026-10-15T13:00:00Z"));
+  assert.equal(b.published, "https://haftarah.vercel.app/2026-10-17-noach");
+  assert.equal(b.version, 2); assert.equal(b.status, "built"); assert.equal(b.built, null); assert.equal(b.updatedAt, "2026-10-15T13:00:00Z");
+  assert.equal((await readStatus(s, "2026-10-17-noach")).published, b.published);
 });
