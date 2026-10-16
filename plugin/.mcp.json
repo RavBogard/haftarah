@@ -1,0 +1,5 @@
+{
+  "mcpServers": {
+    "haftarah": { "type": "http", "url": "https://haftarah.vercel.app/api/mcp" }
+  }
+}
