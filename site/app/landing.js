@@ -5,7 +5,7 @@ import { createAnalytics } from "./analytics.js";
 import { load, store } from "./storage.js";
 import { parashahGrid, byBook, specials } from "./library.js";
 import { gridHtml, bookHtml, specialHtml } from "./library-view.js";
-import { registerOffline, showUpdate, warmWeek, waitForControl } from "./offline-client.js";
+import { registerOffline, showUpdate, warmWeek, settleOffline } from "./offline-client.js";
 
 const DAY = 86400000;
 
@@ -101,8 +101,9 @@ export async function run() {
   // worker to take control first, as the week page's check does, so the warm-up is exercised.
   const offlineReady = registerOffline({ onUpdate: () => showUpdate($("update")) });
   const slug = hero ? hero.entry.slug : null;
+  // In check mode the warm-up runs only once control is confirmed; the state goes in data-check-warm-sw.
   const warmed = !check ? offlineReady.then(() => warmWeek(slug))
-    : Promise.race([offlineReady, new Promise(r => setTimeout(() => r(null), 10000))]).then(async reg => { if (reg) await waitForControl({ reg }); return warmWeek(slug); });
+    : settleOffline(offlineReady).then(({ state }) => { html.dataset.checkWarmSw = state; return state === "active" ? warmWeek(slug) : "skipped"; });
   if (check) {
     html.dataset.checkWarm = await warmed;
     html.dataset.checkWeeks = String(index.weeks.length);

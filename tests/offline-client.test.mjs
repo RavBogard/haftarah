@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { registerOffline, loadFailure, warmWeek, holdUntil, held, waitForControl, UPDATE_TEXT, OFFLINE_LOAD_TEXT } from "../site/app/offline-client.js";
+import { registerOffline, loadFailure, warmWeek, holdUntil, held, waitForControl, settleOffline, UPDATE_TEXT, OFFLINE_LOAD_TEXT } from "../site/app/offline-client.js";
 import { SW_URL, dataUrl } from "../site/app/contract.js";
 
 // A navigator whose register resolves to `reg`; the listeners the page adds are kept so a test can fire them.
@@ -150,6 +150,44 @@ test("check mode: waitForControl stops at a failed install (the registration lef
   const fetchImpl = async () => { if (++rounds === 2) reg.installing = null; };   // the installing worker went redundant
   assert.equal(await waitForControl({ nav: { serviceWorker: { ready: new Promise(() => {}), controller: null } }, reg, fetchImpl }), "failed");
   assert.equal(rounds, 2);
+});
+
+test("check mode: a failed install is reported the moment the installing worker turns redundant", async () => {
+  const w = fakeWorker("installing");
+  const reg = { ...fakeReg({ installing: w }), active: null };
+  let rounds = 0;
+  // The slot still holds the worker (as a browser may, briefly): the statechange alone must decide it.
+  const fetchImpl = async () => { if (++rounds === 2) { w.state = "redundant"; w.listeners.statechange.forEach(f => f()); } };
+  assert.equal(await waitForControl({ nav: { serviceWorker: { ready: new Promise(() => {}), controller: null } }, reg, fetchImpl }), "failed");
+  assert.equal(rounds, 2);
+  // A worker found later by updatefound is watched too.
+  const reg2 = { ...fakeReg({ installing: fakeWorker("installing") }), active: null }, w2 = fakeWorker("installing");
+  let r2 = 0;
+  const fetch2 = async () => {
+    r2++;
+    if (r2 === 1) { reg2.installing = w2; reg2.listeners.updatefound.forEach(f => f()); }
+    if (r2 === 3) { w2.state = "redundant"; w2.listeners.statechange.forEach(f => f()); }
+  };
+  assert.equal(await waitForControl({ nav: { serviceWorker: { ready: new Promise(() => {}), controller: null } }, reg: reg2, fetchImpl: fetch2 }), "failed");
+  assert.equal(r2, 3);
+});
+
+test("check mode: held gives the fallback after its rounds; no timer is involved", async () => {
+  let rounds = 0;
+  assert.equal(await held(new Promise(() => {}), { fallback: "timeout", tries: 7, fetchImpl: async () => { rounds++; } }), "timeout");
+  assert.equal(rounds, 7);
+});
+
+test("check mode: settleOffline holds the registration, then waits for control", async () => {
+  const sw = { ready: Promise.resolve({}), controller: null };
+  const reg = { installing: {}, waiting: null, active: null };
+  let release, rounds = 0;
+  const offlineReady = new Promise(r => { release = r; });
+  // register() lands on round 4 and control on round 6: no timer could have raced either.
+  const fetchImpl = async () => { rounds++; if (rounds === 4) release(reg); if (rounds === 6) { reg.installing = null; reg.active = {}; sw.controller = {}; } };
+  assert.deepEqual(await settleOffline(offlineReady, { nav: { serviceWorker: sw }, fetchImpl }), { state: "active", reg });
+  assert.deepEqual(await settleOffline(Promise.resolve(null), { nav: { serviceWorker: sw }, fetchImpl }), { state: "none", reg: null });
+  assert.deepEqual(await settleOffline(new Promise(() => {}), { nav: { serviceWorker: sw }, fetchImpl: async () => {}, tries: 3 }), { state: "timeout", reg: null });
 });
 
 test("no code calls skipWaiting: a new build waits for the next launch", async () => {

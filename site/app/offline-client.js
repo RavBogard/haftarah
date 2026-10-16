@@ -43,37 +43,62 @@ export function loadFailure({ online, drive }) {
 // page is dumped before they finish. A request in flight holds the clock, so these waits are runs of
 // small real requests to the page's own server (the worker script, which the worker never serves).
 
+// No wait in check mode may be a timer: an idle page's timer fires at once in virtual time, before
+// any real work lands (a 10 s setTimeout race once beat register() itself). Every cap is in rounds.
+// 500 rounds is about 5 s of virtual time; the worker takes control in under 100.
+export const HOLD_TRIES = 500;
+
 /** Resolves true once `done()` holds, false after `tries` rounds. */
-export async function holdUntil(done, { fetchImpl = fetch, tries = 3000 } = {}) {
+export async function holdUntil(done, { fetchImpl = fetch, tries = HOLD_TRIES } = {}) {
   for (let i = 0; i < tries && !done(); i++) await Promise.resolve(fetchImpl(`${SW_URL}?wait=${i}`, { cache: "no-store" })).catch(() => {});
   return !!done();
 }
 
-/** `p`'s value, awaited with the clock held. */
-export async function held(p, opts = {}) {
+/** `p`'s value, awaited with the clock held; `fallback` if it has not settled after `tries` rounds. */
+export async function held(p, { fallback, ...opts } = {}) {
   let settled = false;
   const q = Promise.resolve(p);
   q.then(() => { settled = true; }, () => { settled = true; });
   await Promise.resolve();   // a promise already settled says so before the first round
-  await holdUntil(() => settled, opts);
-  return q;
+  return (await holdUntil(() => settled, opts)) ? q : fallback;
 }
 
 /**
  * "active" once a worker is ready and controls the page (it claims clients after activating);
- * "failed" when `reg` is left with no worker at all (the install failed: a precache file was missing);
- * "uncontrolled" after `tries` rounds of neither. 500 rounds stay inside web-check's 12 s virtual budget.
+ * "failed" as soon as the installing worker turns redundant with none active (the install failed: a
+ * precache file was missing), or the registration is left with no worker at all;
+ * "uncontrolled" after `tries` rounds of neither.
  */
-export async function waitForControl({ nav = navigator, reg = null, tries = 500, ...opts } = {}) {
+export async function waitForControl({ nav = navigator, reg = null, ...opts } = {}) {
   const sw = nav && nav.serviceWorker;
   if (!sw) return "none";
-  let ready = false;
+  let ready = false, redundant = false;
   Promise.resolve(sw.ready).then(() => { ready = true; });
+  const watch = w => {
+    if (!w) return;
+    if (w.state === "redundant") redundant = true;
+    if (w.addEventListener) w.addEventListener("statechange", () => { if (w.state === "redundant") redundant = true; });
+  };
+  if (reg) {
+    watch(reg.installing); watch(reg.waiting);
+    if (reg.addEventListener) reg.addEventListener("updatefound", () => watch(reg.installing));
+  }
   await Promise.resolve();
   const active = () => ready && !!sw.controller;
-  const failed = () => !!reg && !reg.installing && !reg.waiting && !reg.active;
-  await holdUntil(() => active() || failed(), { ...opts, tries });
+  const failed = () => !!reg && !reg.active && (redundant || (!reg.installing && !reg.waiting));
+  await holdUntil(() => active() || failed(), opts);
   return active() ? "active" : failed() ? "failed" : "uncontrolled";
+}
+
+/**
+ * The check's whole wait: the registration (held, never raced against a timer), then control.
+ * "timeout" | "none" | "active" | "failed" | "uncontrolled", with the registration.
+ */
+export async function settleOffline(offlineReady, { nav = navigator, ...opts } = {}) {
+  const reg = await held(offlineReady, { ...opts, fallback: "timeout" });
+  if (reg === "timeout") return { state: "timeout", reg: null };
+  if (!reg) return { state: "none", reg: null };
+  return { state: await waitForControl({ nav, reg, ...opts }), reg };
 }
 
 /** The landing asks for this week's sheet once a worker controls the page, so it is cached before it is wanted. */

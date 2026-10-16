@@ -11,7 +11,7 @@ import { initRoving, focusables } from "./a11y.js";
 import { createAnalytics } from "./analytics.js";
 import { initPresent, isPresent } from "./present.js";
 import { hasFigures, renderFigures } from "./figures.js";
-import { registerOffline, showUpdate, loadFailure, waitForControl, held } from "./offline-client.js";
+import { registerOffline, showUpdate, loadFailure, settleOffline, held } from "./offline-client.js";
 
 const DRIVE = "https://drive.google.com/drive/folders/1TbSmoeBaCSLciL_-_HSCuKWkJMSZvGwd";
 const errorsSeen = [];   // filled in check mode (?check=1) by the error listeners in run()
@@ -657,21 +657,21 @@ async function runCheck(api, L) {
   await api.figuresReady;   // the figures land above the verses: measure the settled page
   // The offline app: the worker registers from this page, precaches the shell and, once it controls the
   // page, caches the week file it serves. The page waits for it only here, never for a reader.
-  const reg = await Promise.race([api.offlineReady, new Promise(r => setTimeout(() => r("timeout"), 10000))]);
-  if (reg === "timeout") h.dataset.checkSw = "timeout";
-  else if (!reg) h.dataset.checkSw = "none";
-  else {
-    // Every wait here holds headless Chrome's virtual clock (offline-client.js says why).
-    let rounds = 0;
-    const fetchImpl = (...a) => { rounds++; return fetch(...a); };
-    h.dataset.checkSw = await waitForControl({ reg, fetchImpl });   // ready, then clients.claim() after activate
-    const open = name => held(caches.open(name), { fetchImpl });
-    const names = (await held(caches.keys(), { fetchImpl })).filter(n => n.startsWith(CACHE_PREFIX + "shell-"));
-    h.dataset.checkSwShell = names.length === 1 ? String((await held((await open(names[0])).keys(), { fetchImpl })).length) : `caches:${names.length}`;
+  // Every wait here holds headless Chrome's virtual clock and is capped in rounds, never by a timer
+  // (offline-client.js says why).
+  let rounds = 0;
+  const fetchImpl = (...a) => { rounds++; return fetch(...a); };
+  const { state, reg } = await settleOffline(api.offlineReady, { fetchImpl });   // registered, ready, then clients.claim() after activate
+  h.dataset.checkSw = state;
+  if (reg) {
+    const keysOf = async name => { const c = await held(caches.open(name), { fetchImpl, fallback: null }); return c ? held(c.keys(), { fetchImpl, fallback: [] }) : []; };
+    const names = (await held(caches.keys(), { fetchImpl, fallback: [] })).filter(n => n.startsWith(CACHE_PREFIX + "shell-"));
+    h.dataset.checkSwShell = names.length === 1 ? String((await keysOf(names[0])).length) : `caches:${names.length}`;
     await fetch(dataUrl(api.slug, "sheet.json")).catch(() => {});   // through the worker now
-    h.dataset.checkSwWeek = String(!!(await held((await open(DATA_CACHE)).match(location.origin + dataUrl(api.slug, "sheet.json")), { fetchImpl })));
-    h.dataset.checkSwRounds = String(rounds);   // how long the worker took, in requests (web-check prints it)
+    const week = location.origin + dataUrl(api.slug, "sheet.json");
+    h.dataset.checkSwWeek = String((await keysOf(DATA_CACHE)).some(r => r.url === week));
   }
+  h.dataset.checkSwRounds = String(rounds);   // how long the worker took, in requests (web-check prints it)
   h.dataset.checkUpdate = document.getElementById("update").hidden ? "hidden" : "shown";
   // Then the note as a waiting build shows it: Dismiss is a 44px target and puts it away.
   const note = document.getElementById("update");
