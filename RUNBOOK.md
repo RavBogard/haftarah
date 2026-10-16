@@ -87,6 +87,7 @@ Draft each and show it with the rest.
 - each reading's `incipit`: check what fetch proposed (step 2). Keep the opening note's "See also" sentence unless Daniel cuts it; it prints on both front pages.
 - `glossary[]`: names and places in the passage, one or two sentences each, with the Hebrew.
 - `nextWeek`: fetch fills it from Hebcal. When the coming Shabbat has a choice, show both and let Daniel pick, or set it to null.
+- `places[]` and `timeline[]` (optional): list the places the reading names and the periods it belongs to. `node scripts/geo.mjs lookup <name>` shows the records and sites. Set `source: "openbible:<slug>"` on each place and its `role`: scene for where the reading happens, context for nearby places the note mentions, empire for a people or kingdom (a text label). `node scripts/geo.mjs resolve weeks/<slug>` fills the coordinates and refuses a place with no site or several; then enter `lat`/`lon` with `approved: true` only if the note can defend the spot, else leave the place out. Timeline kings, empires and prophets cite `data/chronology.json` (`"chronology": "<key>"`); an event or composition carries `start`/`end`, `approx` and `works` from the bibliography. In the delivery line list each place with its source and each timeline item with its source. Under the standing-authority rule the figures are a logged decision, not a stop, unless a place had candidates.
 
 ## 6. Build
 
@@ -94,7 +95,7 @@ Draft each and show it with the rest.
 node scripts/lint.mjs weeks/<slug> --fix    # optional: lint runs inside build; --fix rewrites near-miss Hebrew lemmas
 node scripts/build.mjs weeks/<slug> --png   # lint, then sheet.pdf (haftarah) and sheet-torah.pdf (Torah, when the week has one) with page images (preview/, preview-torah/)
 node scripts/build.mjs weeks/<slug> --trope # optional; also sheet-trope.pdf, the chanter's copy: trope phrases highlighted by family
-node scripts/check.mjs weeks/<slug>         # layout invariants for every built reading
+node scripts/check.mjs weeks/<slug>         # layout invariants for every built reading; a week with figures also prints figures: front or figures: page2
 ```
 
 Clear lint warnings that matter (God-language, voices, stacked note letters, word counts). If check fails on a gap, it names the entry to trim and by how many words. Look at both PDFs' page images before calling anything done. The chanter's copy is the haftarah's only. Then show Daniel the Claude-written texts in full (standing rules) together with the PDF. If he asks for changes, edit `sheet.json` and build again; the sheet he prints is the last one built. Build the chanter's copy only when Daniel asks for it that week (to look first, open `sheet.html` in a browser and use the review bar's "Trope colors" button, or add `?trope=1`), check it with `check.mjs weeks/<slug> --trope`, and hand him the PDF; step 7 does not deliver it.

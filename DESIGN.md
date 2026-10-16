@@ -12,6 +12,10 @@ colors:
   reg-critical: "#0b6a62"
   reg-reference: "#8a5a00"
   legend-unused: "#a6a6a6"
+  map-land: "#f1efe9"
+  map-sea: "#e3eaf4"
+  map-water-line: "#1d4f9c"
+  map-coast: "#8c8c8c"
 typography:
   incipit:
     fontFamily: "Ezra SIL, Noto Serif Hebrew, SBL Hebrew, serif"
@@ -132,6 +136,17 @@ components:
   colophon:
     textColor: "{colors.ink-2}"
     typography: "{typography.gloss}"
+  figure-map:
+    textColor: "{colors.ink}"
+    width: "2.6in"
+    typography: "{typography.gloss}"
+  figure-timeline:
+    textColor: "{colors.ink}"
+    width: "full measure"
+    typography: "{typography.gloss}"
+  figure-caption:
+    textColor: "{colors.ink-2}"
+    typography: "{typography.gloss}"
 ---
 
 # Design System: Haftarah Sheet
@@ -169,6 +184,7 @@ One ink, two greys, one rubric and four register colors. The rubric is the ring 
 - **Secondary Ink** (`ink-2`, #595959): apparatus tails, the "]" bracket after a lemma, the verse number inside a margin note, the "JPS" tail, the legend, the voices paragraph, provenance, colophon, the ketiv in Hebrew, the dates in the reading line, the tagline. 65% black; it survives an office laser.
 - **Frame Grey** (`frame`, #4d4d4d): running heads and footers only, so the frame recedes behind the text and the red is left for meaning.
 - **Legend Grey** (`legend-unused`, #a6a6a6): the sigla in the front-page legend that are not used this week.
+- **Map tints** (`map-land` #f1efe9, `map-sea` #e3eaf4, `map-water-line` #1d4f9c the lapis, `map-coast` #8c8c8c): the figures' base only, kept pale so the places and bars read over them. They appear nowhere else.
 
 ### Named Rules
 **The Mural Palette Rule.** Every color comes from the mural: the rubric for keys and accents, four register colors for the commentary voices. None is spent on the text itself. If a surface needs a color the mural does not have, it has left the world.
@@ -261,6 +277,14 @@ Two columns at apparatus size, 0.28in gap; each entry a hanging-indent paragraph
 
 ### Next Week
 One line at text size in rubric at weight 500, 14pt below the last end-matter block: "Next week: Noach · Isaiah 54:1–55:5 · October 17, 2026". Omitted when `nextWeek` is null or rejected; Claude confirms the reading with Daniel when the calendar offers a choice.
+
+### Figures: Map and Timeline
+The one addition to the printed page since 2.0 began, and only on a week that has places or dates. They sit on page 1 when it holds them (the map beside the setting, the timeline under the opening note), else at the top of the first text page above the verses; a sheet with neither is unchanged. Both are inline SVG from `lib.js`, set in the sheet's fonts, with labels no smaller than the 9pt floor; shape and weight carry meaning as well as color.
+- **Map (`figure-map`):** 2.6in wide on page 1 and on page 2, in Literata at about 9.4pt, over the map tints with a hairline frame and a scale bar in whole kilometres. A scene place is a filled rubric dot with a bold rubric label; a context place an open dot with an ink-2 outline and an ink-2 label; an empire an italic ochre label (`reg-reference`) with no dot.
+- **Timeline (`figure-timeline`):** the full measure, labels and ticks about 9.3pt, one lane each for event, king, prophet, empire and composition. Bars take a register color (king ink, prophet lapis, empire ochre, composition turquoise), an event is a rubric mark, and an approximate date is a dashed, paler bar or an open mark. A label that does not fit goes inside the bar, beside it, plain or cut with an ellipsis.
+- **Caption (`figure-caption`):** gloss size, ink-2, directly under the figure: "Places in this reading · coastlines modern, borders not drawn" and "Dates BCE · c. marks a rounded date".
+
+The colophon credits the map and the chronology on a sheet that carries them. On the web the same SVG sits beside the setting at 52rem and wider, stacks below it on a narrow screen, and the timeline scrolls sideways in a labelled region under 52rem; the tints take dark-mode values there.
 
 ### Colophon and Provenance
 Gloss size in secondary grey, 1.45 and 1.4 leading respectively, max width 5.6in; the provenance names the Hebrew and English editions once, on the front page, and ends in the rabbi's signoff.
