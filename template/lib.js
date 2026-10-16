@@ -468,6 +468,324 @@
     return m;
   }
 
+  // ---- the figures: the map of the places and the timeline (DOM-free SVG strings, classes only) ----
+  // Boxes are [lonMin, latMin, lonMax, latMax]. A named box is returned as given; the drawing fits
+  // every box to the 5:4 frame around its centre (fitBox), so the two scales of the projection agree.
+  const MAP_REGIONS = { land: [34.0, 29.6, 36.4, 33.6], "near-east": [29.0, 27.0, 49.0, 38.5] };
+  const MAP_VIEW = [1000, 800];
+  const FIG_KINDS = ["king", "empire", "prophet", "composition", "event"];
+
+  function fig1(n) { const v = Math.round(n * 10) / 10; return String(v === 0 ? 0 : v); }
+  function hasCoord(p) { return p && Number.isFinite(p.lat) && Number.isFinite(p.lon); }
+  function inBoxLL(p, b) { return p.lon >= b[0] && p.lon <= b[2] && p.lat >= b[1] && p.lat <= b[3]; }
+
+  // The box widened or heightened around its centre to 5:4 in projected units (width × cos(lat0) : height).
+  function fitBox(box) {
+    let [x0, y0, x1, y1] = box;
+    const lat0 = (y0 + y1) / 2, c = Math.cos(lat0 * Math.PI / 180), want = MAP_VIEW[0] / MAP_VIEW[1];
+    const w = (x1 - x0) * c, h = y1 - y0;
+    if (w / h < want) { const half = want * h / c / 2, m = (x0 + x1) / 2; x0 = m - half; x1 = m + half; }
+    else if (w / h > want) { const half = w / want / 2; y0 = lat0 - half; y1 = lat0 + half; }
+    return [x0, y0, x1, y1];
+  }
+
+  function mapRegion(places, region) {
+    if (typeof region === "string" && MAP_REGIONS[region]) return { name: region, box: MAP_REGIONS[region].slice() };
+    if (Array.isArray(region) && region.length === 4) return { name: "custom", box: region.slice() };
+    const pts = (places || []).filter(hasCoord);
+    if (!pts.length || pts.every(p => inBoxLL(p, MAP_REGIONS.land))) return { name: "land", box: MAP_REGIONS.land.slice() };
+    if (pts.every(p => inBoxLL(p, MAP_REGIONS["near-east"]))) return { name: "near-east", box: MAP_REGIONS["near-east"].slice() };
+    const lons = pts.map(p => p.lon), lats = pts.map(p => p.lat);
+    let x0 = Math.min(...lons), x1 = Math.max(...lons), y0 = Math.min(...lats), y1 = Math.max(...lats);
+    const px = (x1 - x0) * 0.2, py = (y1 - y0) * 0.2;
+    x0 -= px; x1 += px; y0 -= py; y1 += py;
+    if (x1 - x0 < 0.6) { const m = (x0 + x1) / 2; x0 = m - 0.3; x1 = m + 0.3; }
+    if (y1 - y0 < 0.5) { const m = (y0 + y1) / 2; y0 = m - 0.25; y1 = m + 0.25; }
+    return { name: "custom", box: fitBox([x0, y0, x1, y1]) };
+  }
+
+  // Sutherland–Hodgman against the box's four edges (scripts/geo.mjs clipPolygon, copied: lib.js cannot import).
+  const CLIP_EDGES = [
+    { axis: 0, side: 0, inside: (p, b) => p[0] >= b[0] },
+    { axis: 1, side: 1, inside: (p, b) => p[1] >= b[1] },
+    { axis: 0, side: 2, inside: (p, b) => p[0] <= b[2] },
+    { axis: 1, side: 3, inside: (p, b) => p[1] <= b[3] },
+  ];
+  function clipCut(a, b, edge, box) {
+    const v = box[edge.side], o = 1 - edge.axis, p = [];
+    p[edge.axis] = v;
+    p[o] = a[o] + (b[o] - a[o]) * (v - a[edge.axis]) / (b[edge.axis] - a[edge.axis]);
+    return p;
+  }
+  function samePt(a, b) { return a[0] === b[0] && a[1] === b[1]; }
+  function clipRing(ring, box) {
+    let pts = ring.length > 2 && samePt(ring[0], ring[ring.length - 1]) ? ring.slice(0, -1) : ring.slice();
+    for (const edge of CLIP_EDGES) {
+      const out = [];
+      for (let i = 0; i < pts.length; i++) {
+        const cur = pts[i], prev = pts[(i + pts.length - 1) % pts.length];
+        const ic = edge.inside(cur, box), ip = edge.inside(prev, box);
+        if (ic) { if (!ip) out.push(clipCut(prev, cur, edge, box)); out.push(cur); }
+        else if (ip) out.push(clipCut(prev, cur, edge, box));
+      }
+      pts = out;
+      if (!pts.length) return null;
+    }
+    pts = pts.filter((p, k) => k === 0 || !samePt(p, pts[k - 1]));
+    if (pts.length > 1 && samePt(pts[0], pts[pts.length - 1])) pts.pop();
+    return pts.length < 3 ? null : pts;
+  }
+  // The runs of `line` inside `box` (scripts/geo.mjs clipLine, copied).
+  function clipLine(line, box) {
+    const runs = [];
+    let run = null;
+    for (let i = 1; i < line.length; i++) {
+      let a = line[i - 1], b = line[i], gone = false;
+      for (const edge of CLIP_EDGES) {
+        const ia = edge.inside(a, box), ib = edge.inside(b, box);
+        if (!ia && !ib) { gone = true; break; }
+        if (!ia) a = clipCut(a, b, edge, box);
+        else if (!ib) b = clipCut(a, b, edge, box);
+      }
+      if (gone) { run = null; continue; }
+      if (run && samePt(run[run.length - 1], a)) run.push(b);
+      else { run = [a, b]; runs.push(run); }
+    }
+    return runs.map(r => r.filter((p, k) => k === 0 || !samePt(p, r[k - 1]))).filter(r => r.length >= 2);
+  }
+
+  // The equirectangular projection of a fitted box onto the 1000 × 800 frame.
+  function projector(box) {
+    const [x0, y0, x1, y1] = box, c = Math.cos((y0 + y1) / 2 * Math.PI / 180);
+    const kx = MAP_VIEW[0] / ((x1 - x0) * c), ky = MAP_VIEW[1] / (y1 - y0);
+    return ([lon, lat]) => [(lon - x0) * c * kx, (y1 - lat) * ky];
+  }
+  function pathOf(lines, proj, close) {
+    return lines.map(l => l.map((p, k) => { const [x, y] = proj(p); return (k ? "L" : "M") + fig1(x) + " " + fig1(y); }).join("") + (close ? "Z" : "")).join("");
+  }
+  function boxesMeet(a, b) { return a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3]; }
+
+  // One label beside its point: the side, the text position, the anchor and its approximate box.
+  function labelAt(side, x, y, size, chars) {
+    const w = 0.56 * size * chars;
+    if (side === "l") return { side, x: x - 14, y: y + size * 0.35, anchor: "end", box: [x - 14 - w, y - size / 2, x - 14, y + size / 2] };
+    if (side === "t") return { side, x, y: y - 14, anchor: "middle", box: [x - w / 2, y - 14 - size, x + w / 2, y - 14] };
+    if (side === "b") return { side, x, y: y + 14 + size, anchor: "middle", box: [x - w / 2, y + 14, x + w / 2, y + 14 + size] };
+    return { side: "r", x: x + 14, y: y + size * 0.35, anchor: "start", box: [x + 14, y - size / 2, x + 14 + w, y + size / 2] };
+  }
+
+  function mapSvg(places, region, basemap, { id = "map", title, desc } = {}) {
+    const esc = escapeHtml;
+    const frame = fitBox(mapRegion(places, region).box), proj = projector(frame);
+    if (title == null || desc == null) {
+      const t = figureText(places, [], null, region).map || { title: "", desc: "" };
+      if (title == null) title = t.title;
+      if (desc == null) desc = t.desc;
+    }
+    const out = [`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${MAP_VIEW[0]} ${MAP_VIEW[1]}" role="img" aria-labelledby="${esc(id)}-title ${esc(id)}-desc" class="fig-svg map-svg">`,
+      `<title id="${esc(id)}-title">${esc(title)}</title><desc id="${esc(id)}-desc">${esc(desc)}</desc>`,
+      `<rect class="map-sea" width="${MAP_VIEW[0]}" height="${MAP_VIEW[1]}"/>`];
+    const bm = basemap || {};
+    const land = pathOf((bm.land || []).map(r => clipRing(r, frame)).filter(Boolean), proj, true);
+    if (land) out.push(`<path class="map-land" fill-rule="evenodd" d="${land}"/>`);
+    const lakes = pathOf((bm.lakes || []).map(l => clipRing(l.ring, frame)).filter(Boolean), proj, true);
+    if (lakes) out.push(`<path class="map-lake" d="${lakes}"/>`);
+    const rivers = pathOf([].concat(...(bm.rivers || []).map(r => clipLine(r.line, frame))), proj, false);
+    if (rivers) out.push(`<path class="map-river" d="${rivers}"/>`);
+    const shown = ["scene", "context", "empire"].map(role => (places || []).filter(p => p.role === role && hasCoord(p) && inBoxLL(p, frame))).reduce((a, b) => a.concat(b), [])
+      .map(p => { const [x, y] = proj([p.lon, p.lat]); return { p, x, y }; });
+    const taken = shown.filter(s => s.p.role !== "empire").map(s => [s.x - 10, s.y - 10, s.x + 10, s.y + 10]);
+    for (const { p, x, y } of shown) {
+      const name = String(p.name == null ? "" : p.name), chars = [...name].length;
+      if (p.role === "empire") {
+        const w = 0.56 * 34 * chars + 3 * chars;
+        taken.push([x - w / 2, y - 17, x + w / 2, y + 17]);
+        out.push(`<text class="place-label empire" x="${fig1(x)}" y="${fig1(y + 34 * 0.35)}" text-anchor="middle" font-size="34" letter-spacing="3">${esc(name)}</text>`);
+        continue;
+      }
+      const r = p.role === "scene" ? 9 : 7;
+      out.push(`<circle class="place ${p.role}" cx="${fig1(x)}" cy="${fig1(y)}" r="${r}"/>`);
+      const sides = ["r", "l", "t", "b"].includes(p.label) ? [p.label] : ["r", "l", "t", "b"];
+      let at = null;
+      for (const s of sides) {
+        const c = labelAt(s, x, y, 37, chars), b = c.box;
+        if (sides.length === 1) { at = c; break; }
+        if (b[0] >= 0 && b[1] >= 0 && b[2] <= MAP_VIEW[0] && b[3] <= MAP_VIEW[1] && !taken.some(t => boxesMeet(t, b))) { at = c; break; }
+      }
+      if (!at) at = labelAt("r", x, y, 37, chars);
+      taken.push(at.box);
+      out.push(`<text class="place-label ${p.role} side-${at.side}" x="${fig1(at.x)}" y="${fig1(at.y)}" text-anchor="${at.anchor}" font-size="37">${esc(name)}</text>`);
+    }
+    const unit = MAP_VIEW[0] / ((frame[2] - frame[0]) * 111.32 * Math.cos((frame[1] + frame[3]) / 2 * Math.PI / 180));
+    const steps = [5, 10, 20, 50, 100, 200, 500];
+    const km = steps.find(n => n * unit >= 120 && n * unit <= 320) || steps[steps.length - 1];
+    out.push(`<g class="map-scale"><line x1="40" y1="760" x2="${fig1(40 + km * unit)}" y2="760"/><text font-size="30" x="40" y="745">${km} km</text></g>`,
+      `<rect class="map-frame" width="${MAP_VIEW[0]}" height="${MAP_VIEW[1]}"/></svg>`);
+    return out.join("");
+  }
+
+  // Dates filled from the table; an item that cites the table takes its kind and (unless given) its label.
+  // The same function as scripts/geo.mjs resolveTimeline (lib.js cannot import); keep the two identical.
+  function timelineItems(items, chronology) {
+    return (items || []).map(it => {
+      const t = it.chronology && chronology && chronology.entries ? chronology.entries[it.chronology] : null;
+      const r = t ? { id: it.id, label: it.label || t.label, kind: t.kind, start: t.start, end: t.end, approx: !!t.approx }
+        : { id: it.id, label: it.label || "", kind: it.kind, start: it.start, end: it.end == null ? it.start : it.end, approx: !!it.approx };
+      if (it.works) r.works = it.works;
+      return r;
+    });
+  }
+
+  // -1013 approx → "c. 1015"; -853 → "853"; 70 → "70 CE".
+  function yearLabel(y, approx) {
+    const n = Math.abs(approx ? Math.round(y / 5) * 5 : y);
+    return (approx ? "c. " : "") + n + (y > 0 ? " CE" : "");
+  }
+  function datesOf(it) {
+    return yearLabel(it.start, it.approx) + (it.end !== it.start ? "–" + yearLabel(it.end, it.approx).replace(/^c\. /, "") : "");
+  }
+  function drawnItems(items, chronology) {
+    return timelineItems(items, chronology).filter(it => Number.isFinite(it.start) && Number.isFinite(it.end));
+  }
+
+  // A label cut to `room` units with an ellipsis, or null when not even one letter fits.
+  function fitLabel(text, room, size) {
+    const chars = [...text], per = 0.56 * size;
+    if (chars.length * per <= room) return text;
+    const n = Math.floor(room / per) - 1;
+    return n >= 1 ? chars.slice(0, n).join("").replace(/[\s,]+$/, "") + "…" : null;
+  }
+
+  function timelineSvg(items, chronology, { id = "timeline", title, desc } = {}) {
+    const esc = escapeHtml;
+    const list = drawnItems(items, chronology);
+    if (!list.length) return "";
+    if (title == null || desc == null) {
+      const t = figureText([], items, chronology, null).timeline;
+      if (title == null) title = t.title;
+      if (desc == null) desc = t.desc;
+    }
+    const W = 1000, PAD = 20, ROW = 28, BAR = 18, FONT = 15, TOP = 10, AXIS = 34, PER = 0.56 * FONT;
+    const lo0 = Math.min(...list.map(i => i.start)), hi0 = Math.max(...list.map(i => i.end)), pad = (hi0 - lo0) * 0.04;
+    const step = hi0 - lo0 + 2 * pad >= 400 ? 100 : 50;
+    const lo = Math.floor((lo0 - pad) / step) * step;
+    let hi = Math.ceil((hi0 + pad) / step) * step;
+    if (hi <= lo) hi = lo + step;
+    const X = y => PAD + (y - lo) / (hi - lo) * (W - 2 * PAD);
+    const wide = (text, room) => PER * [...text].length + 12 <= room;
+    // Each item's shape and, for an event, its label (which occupies its row).
+    const shaped = list.map(it => {
+      const x0 = X(it.start), x1 = X(it.end), dated = it.label + ", " + datesOf(it);
+      if (it.kind === "event") {
+        const left = x0 > W - 150, room = left ? x0 - 13 : W - (x0 + 13);
+        const text = fitLabel(dated, room, FONT) || "";
+        const lw = PER * [...text].length;
+        return { it, x0, x1, event: true, label: { text, x: left ? x0 - 13 : x0 + 13, anchor: left ? "end" : "start", inside: false },
+          span: left ? [x0 - 13 - lw, x0 + 7] : [x0 - 7, x0 + 13 + lw] };
+      }
+      return { it, x0, x1, event: false, dated, span: [x0, x1] };
+    });
+    // Lanes by kind, rows packed greedily: the first row where the item overlaps nothing already there.
+    const LANES = ["event", "king", "prophet", "empire", "composition"];
+    const rows = [];
+    for (const kind of LANES.concat([...new Set(shaped.map(s => s.it.kind))].filter(k => !LANES.includes(k)))) {
+      const mine = [];
+      for (const s of shaped.filter(s => s.it.kind === kind)) {
+        let row = mine.find(r => r.every(o => !(s.span[0] < o.span[1] && o.span[0] < s.span[1])));
+        if (!row) { row = []; mine.push(row); }
+        row.push(s);
+      }
+      rows.push(...mine);
+    }
+    // A bar's label: inside with its dates, beside it with its dates, inside alone, beside alone, then cut to fit.
+    for (const row of rows) {
+      const placed = [];
+      const free = b => b[0] >= 0 && b[1] <= W && placed.every(o => !(b[0] < o[1] && o[0] < b[1]));
+      for (const s of row) placed.push(s.span);
+      for (const s of row) {
+        if (s.event) continue;
+        const width = s.x1 - s.x0, left = s.x1 > W - 150;
+        const beside = text => { const w = PER * [...text].length; return left ? { text, x: s.x0 - 6, anchor: "end", inside: false, b: [s.x0 - 6 - w, s.x0 - 6] } : { text, x: s.x1 + 6, anchor: "start", inside: false, b: [s.x1 + 6, s.x1 + 6 + w] }; };
+        const inside = text => ({ text, x: s.x0 + 6, anchor: "start", inside: true, b: null });
+        let lab = null;
+        for (const text of [s.dated, s.it.label]) {
+          if (wide(text, width)) { lab = inside(text); break; }
+          const c = beside(text);
+          if (free(c.b)) { lab = c; break; }
+        }
+        if (!lab) {
+          // The room beside the bar up to the next thing in the row (or the frame), against the room inside.
+          const others = placed.filter(o => o !== s.span);
+          const out = left ? s.x0 - 6 - Math.max(0, ...others.filter(o => o[1] <= s.x0).map(o => o[1]))
+            : Math.min(W, ...others.filter(o => o[0] >= s.x1).map(o => o[0])) - s.x1 - 6;
+          const inRoom = width - 12;
+          const text = inRoom >= out ? fitLabel(s.it.label, inRoom, FONT) : fitLabel(s.it.label, out, FONT);
+          lab = text == null ? null : inRoom >= out ? inside(text) : beside(text);
+        }
+        if (lab && lab.b) placed.push(lab.b);
+        s.label = lab;
+      }
+    }
+    const H = TOP + rows.length * ROW + AXIS;
+    const out = [`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" role="img" aria-labelledby="${esc(id)}-title ${esc(id)}-desc" class="fig-svg timeline-svg">`,
+      `<title id="${esc(id)}-title">${esc(title)}</title><desc id="${esc(id)}-desc">${esc(desc)}</desc>`];
+    rows.forEach((row, i) => {
+      const top = TOP + i * ROW, mid = top + ROW / 2;
+      for (const s of row) {
+        const ap = s.it.approx ? " approx" : "";
+        if (s.event) out.push(`<polygon class="tl-event${ap}" points="${fig1(s.x0)},${fig1(mid - 7)} ${fig1(s.x0 + 7)},${fig1(mid)} ${fig1(s.x0)},${fig1(mid + 7)} ${fig1(s.x0 - 7)},${fig1(mid)}"/>`);
+        else out.push(`<rect class="tl-bar ${esc(s.it.kind)}${ap}" x="${fig1(s.x0)}" y="${fig1(top + (ROW - BAR) / 2)}" width="${fig1(Math.max(s.x1 - s.x0, 1))}" height="${BAR}" rx="2"/>`);
+        if (s.label && s.label.text) out.push(`<text class="tl-label${s.label.inside ? " inside" : ""}" x="${fig1(s.label.x)}" y="${fig1(mid + FONT * 0.35)}" font-size="${FONT}" text-anchor="${s.label.anchor}">${esc(s.label.text)}</text>`);
+      }
+    });
+    const ay = TOP + rows.length * ROW + 4;
+    out.push(`<line class="tl-axis" x1="${PAD}" y1="${ay}" x2="${W - PAD}" y2="${ay}"/>`);
+    for (let y = lo; y <= hi; y += step) {
+      if (y === 0) continue;
+      out.push(`<text class="tl-tick" x="${fig1(X(y))}" y="${ay + 22}" font-size="14" text-anchor="middle">${Math.abs(y)}${y > 0 ? " CE" : ""}</text>`);
+    }
+    out.push("</svg>");
+    return out.join("");
+  }
+
+  function joinAnd(names) {
+    return names.length < 2 ? names.join("") : names.slice(0, -1).join(", ") + " and " + names[names.length - 1];
+  }
+
+  // The figures' titles, descriptions (the SVG's <desc>, read aloud) and captions; null for a figure with nothing in it.
+  function figureText(places, items, chronology, region) {
+    let map = null, timeline = null;
+    const located = (places || []).filter(hasCoord);
+    if (located.length) {
+      const reg = mapRegion(places, region), frame = fitBox(reg.box);
+      const inside = located.filter(p => inBoxLL(p, frame)), outside = located.filter(p => !inBoxLL(p, frame));
+      const first = located.find(p => p.role === "scene") || located[0];
+      const where = reg.name === "land" ? "the land of Israel" : reg.name === "near-east" ? "the Near East" : "the area of " + first.name;
+      const groups = [["scene", "scene of the reading", "scenes of the reading"], ["context", "nearby", "nearby"], ["empire", "a people or kingdom", "peoples or kingdoms"]]
+        .map(([role, one, many]) => { const n = inside.filter(p => p.role === role).map(p => p.name); return n.length ? `${joinAnd(n)} (${n.length === 1 ? one : many})` : ""; })
+        .filter(Boolean);
+      map = {
+        title: "Places in this reading",
+        desc: `Map of ${where}${groups.length ? ": " + groups.join("; ") : ""}.${outside.length ? ` Outside this map: ${joinAnd(outside.map(p => p.name))}.` : ""} Coastlines are modern; borders are not drawn.`,
+        caption: "Places in this reading · coastlines modern, borders not drawn",
+      };
+    }
+    const list = drawnItems(items, chronology);
+    if (list.length) {
+      const lo = Math.min(...list.map(i => i.start)), hi = Math.max(...list.map(i => i.end)), ap = list.some(i => i.approx);
+      const span = hi < 0 ? `${yearLabel(lo, ap)} to ${yearLabel(hi, ap)} BCE` : lo < 0 ? `${yearLabel(lo, ap)} BCE to ${yearLabel(hi, ap)}` : `${yearLabel(lo, ap)} to ${yearLabel(hi, ap)}`;
+      const order = k => { const i = FIG_KINDS.indexOf(k); return i < 0 ? FIG_KINDS.length : i; };
+      const sorted = list.map((it, i) => ({ it, i })).sort((a, b) => a.it.start - b.it.start || order(a.it.kind) - order(b.it.kind) || a.i - b.i).map(x => x.it);
+      const words = { king: "king", prophet: "prophet", empire: "empire" };
+      timeline = {
+        title: "When this happened",
+        desc: `Timeline, ${span}: ${sorted.map(it => [it.label, words[it.kind], datesOf(it)].filter(Boolean).join(", ")).join("; ")}.`,
+        caption: (hi < 0 ? "Dates BCE" : lo < 0 ? "Dates BCE and CE" : "Dates CE") + (ap ? " · c. marks a rounded date" : ""),
+      };
+    }
+    return { map, timeline };
+  }
+
   // The incipit fits a 3.5in box beside the 1.6in mural: 54pt at most, 40pt at least on one line; otherwise two lines at 44pt.
   function fitIncipitSize(widthAt60pt, boxWidth) {
     const size = Math.floor(60 * boxWidth / widthAt60pt);
@@ -578,5 +896,5 @@
     return map;
   }
 
-  return { TETRA, divineName, stripMarks, splitPoetry, nowrapKeys, letterFor, isDeadRef, normalizeRefs, assignKeys, SIGLA, REGISTER_ORDER, REGISTER_NAMES, voicesFor, voiceKey, hebrewKey, hebrewWords, verseWords, findHebrew, plainText, findEnglish, fitIncipitSize, parseBibliography, tropePhrases, tropeHtml, tropeFamiliesUsed, TROPE_FAMILIES, escapeHtml, enDash, shabbatName, sheetModel, readings, primaryReading, readingView, parashahKey, entryId, assignEntryIds, readingModel };
+  return { TETRA, divineName, stripMarks, splitPoetry, nowrapKeys, letterFor, isDeadRef, normalizeRefs, assignKeys, SIGLA, REGISTER_ORDER, REGISTER_NAMES, voicesFor, voiceKey, hebrewKey, hebrewWords, verseWords, findHebrew, plainText, findEnglish, fitIncipitSize, parseBibliography, tropePhrases, tropeHtml, tropeFamiliesUsed, TROPE_FAMILIES, escapeHtml, enDash, shabbatName, sheetModel, readings, primaryReading, readingView, parashahKey, entryId, assignEntryIds, readingModel, MAP_REGIONS, MAP_VIEW, mapRegion, mapSvg, timelineItems, timelineSvg, figureText, yearLabel };
 });
