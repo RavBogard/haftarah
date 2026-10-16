@@ -6,6 +6,7 @@ import { applyStored, initSettings } from "./settings.js";
 import { indexUrl, isSlug } from "./contract.js";
 import { parseAlias, resolveWeekAlias, weeksFor } from "./library.js";
 import { rowHtml } from "./landing.js";
+import { registerOffline, showUpdate } from "./offline-client.js";
 
 export async function run() {
   const esc = window.HaftarahLib.escapeHtml;
@@ -39,6 +40,8 @@ export async function run() {
     say(`The sheets could not be loaded; try again in a minute. <a href="/">All sheets</a>`);
     return done({ checkMissing: "index" });
   }
+  // The offline app: register the worker (fire and forget; the week page and the landing check it).
+  registerOffline({ onUpdate: () => showUpdate($("update")) });
 
   if (alias.kind === "week") {
     const r = resolveWeekAlias(alias, weeks);

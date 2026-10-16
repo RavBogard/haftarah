@@ -2,7 +2,7 @@
 // the model comes from lib.js's sheetModel, so the page prepares verses exactly as the print does.
 import { applyStored, initSettings } from "./settings.js";
 import { initPanel, clean, retryMemo } from "./panel.js";
-import { slugFromPath, dataUrl, verseAnchor, parseVerseAnchor, PDF_FILES, isSlug, SIDE_FILES } from "./contract.js";
+import { slugFromPath, dataUrl, verseAnchor, parseVerseAnchor, PDF_FILES, isSlug, SIDE_FILES, CACHE_PREFIX, DATA_CACHE } from "./contract.js";
 import { load } from "./storage.js";
 
 export { slugFromPath, dataUrl };
@@ -10,6 +10,7 @@ import { initRoving, focusables } from "./a11y.js";
 import { createAnalytics } from "./analytics.js";
 import { initPresent, isPresent } from "./present.js";
 import { hasFigures, renderFigures } from "./figures.js";
+import { registerOffline, showUpdate, loadFailure, waitForControl, held } from "./offline-client.js";
 
 const DRIVE = "https://drive.google.com/drive/folders/1TbSmoeBaCSLciL_-_HSCuKWkJMSZvGwd";
 const errorsSeen = [];   // filled in check mode (?check=1) by the error listeners in run()
@@ -130,7 +131,7 @@ export async function run() {
     data = await res.json();
     voicesDict = await fetch("/voices.json").then(r => r.ok ? r.json() : {}).catch(() => ({}));
   } catch (err) {
-    return fail(`This sheet could not be loaded. The printed sheets are on <a href="${DRIVE}">Google Drive</a>.`);
+    return fail(loadFailure({ online: navigator.onLine, drive: DRIVE }));   // offline says so, rather than blaming the server
   }
   // Every reading with verses, in the sheet's order (a Torah selection first, then the haftarah). The
   // week is known by its primary reading, the haftarah: the title, the hero, the end matter. Each
@@ -420,6 +421,9 @@ export async function run() {
   const panel = initPanel({ page: api, L, sefariaUrl, track });
   api.openWord = w => panel.openWord(w);
   api.openRelated = (r, from) => panel.openRelated(r, from);
+  // The offline app: register the worker; a new build waiting says so under the masthead (never reloads).
+  const offlineReady = registerOffline({ onUpdate: () => showUpdate($("update")) });
+  api.offlineReady = offlineReady;
 
   // ---- the translation picker (spec 5.6): the English column shows another edition; the notes stay JPS's ----
   const trOptions = translationOptions(api.side);
@@ -488,6 +492,9 @@ export async function run() {
 // each as a key a remote would send.
 async function runPresentCheck() {
   const h = document.documentElement, $ = id => document.getElementById(id);
+  // The update note, shown as a waiting build would show it, must stay off the shared screen.
+  showUpdate($("update"));
+  h.dataset.checkUpdateDisplay = `${$("update").hidden ? "hidden" : "shown"} ${getComputedStyle($("update")).display}`;   // shown, yet not displayed
   if (document.fonts && document.fonts.ready) await document.fonts.ready;   // the presenter's own re-fit ran first
   h.dataset.checkPresentFonts = document.fonts ? document.fonts.status : "n/a";
   const key = k => document.dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true }));
@@ -512,6 +519,31 @@ async function runPresentCheck() {
 async function runCheck(api, L) {
   const h = document.documentElement, rows = api.rows;
   await api.figuresReady;   // the figures land above the verses: measure the settled page
+  // The offline app: the worker registers from this page, precaches the shell and, once it controls the
+  // page, caches the week file it serves. The page waits for it only here, never for a reader.
+  const reg = await Promise.race([api.offlineReady, new Promise(r => setTimeout(() => r("timeout"), 10000))]);
+  if (reg === "timeout") h.dataset.checkSw = "timeout";
+  else if (!reg) h.dataset.checkSw = "none";
+  else {
+    // Every wait here holds headless Chrome's virtual clock (offline-client.js says why).
+    let rounds = 0;
+    const fetchImpl = (...a) => { rounds++; return fetch(...a); };
+    h.dataset.checkSw = await waitForControl({ reg, fetchImpl });   // ready, then clients.claim() after activate
+    const open = name => held(caches.open(name), { fetchImpl });
+    const names = (await held(caches.keys(), { fetchImpl })).filter(n => n.startsWith(CACHE_PREFIX + "shell-"));
+    h.dataset.checkSwShell = names.length === 1 ? String((await held((await open(names[0])).keys(), { fetchImpl })).length) : `caches:${names.length}`;
+    await fetch(dataUrl(api.slug, "sheet.json")).catch(() => {});   // through the worker now
+    h.dataset.checkSwWeek = String(!!(await held((await open(DATA_CACHE)).match(location.origin + dataUrl(api.slug, "sheet.json")), { fetchImpl })));
+    h.dataset.checkSwRounds = String(rounds);   // how long the worker took, in requests (web-check prints it)
+  }
+  h.dataset.checkUpdate = document.getElementById("update").hidden ? "hidden" : "shown";
+  // Then the note as a waiting build shows it: Dismiss is a 44px target and puts it away.
+  const note = document.getElementById("update");
+  showUpdate(note);
+  const dismiss = note.querySelector("button");
+  h.dataset.checkUpdateMin = String(Math.floor(dismiss.getBoundingClientRect().height));
+  dismiss.click();
+  h.dataset.checkUpdateDismiss = String(note.hidden);
   const wide = matchMedia("(min-width: 1100px)").matches;
   h.dataset.checkVerses = String(rows.length);
   h.dataset.checkKeys = api.model.sequence.join(",");

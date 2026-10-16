@@ -103,7 +103,7 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   const week = resolve(args.week || join(ROOT, "tests", "fixtures", "week-notes"));
   const port = args.port ?? (args.serve ? 8767 : 0);
-  const { out: dist } = await buildSite(args.out ? { out: args.out } : {});
+  const { out: dist, precache } = await buildSite(args.out ? { out: args.out } : {});
   // The primary reading in the schema-2 shape, whatever the week's schema. For the check (not for
   // --serve) a week without highlights gets one, so the page's highlight path is exercised.
   const disk = JSON.parse(await readFile(join(week, "sheet.json"), "utf8"));
@@ -148,7 +148,14 @@ async function main() {
       expect("current verse marked", a.current === v.ref, a.current);
       expect("dark paper", a.paper === "rgb(18, 17, 16)", a.paper);
       expect("title", /·/.test(a.title || ""), a.title);
-      expect("rows carry the reading in their id", a.anchor === `${flat[0].reading}-${flat[0].chapter}-${flat[0].verse}`, a.anchor);
+      // The offline app (spec 5.10): a fresh profile is a first install, so no update note.
+      expect("the worker registers and controls the page", a.sw === "active", a.sw);
+      console.log(`      (the page held Chrome's virtual clock for ${a["sw-rounds"] ?? "?"} requests while the worker settled)`);
+      expect("the shell is precached in full", Number(a["sw-shell"]) === precache.length, `${a["sw-shell"]} (precache: ${precache.length})`);
+      expect("the week file is cached once the worker serves it", a["sw-week"] === "true", a["sw-week"]);
+      expect("no update note on a first install", a.update === "hidden", a.update);
+      expect("the update note's Dismiss is a 44px target and puts the note away", Number(a["update-min"]) >= 44 && a["update-dismiss"] === "true", `${a["update-min"]} ${a["update-dismiss"]}`);
+      expect("rows carry the reading in their id",a.anchor === `${flat[0].reading}-${flat[0].chapter}-${flat[0].verse}`, a.anchor);
       if (extra.highlights) {
         expect("a teacher highlight marks one verse", a.highlights === "1", a.highlights);
         expect("a teacher highlight tints two words", a["hl-words"] === "2", a["hl-words"]);
@@ -246,6 +253,7 @@ async function main() {
     expect("B blanks the screen", p["present-blank"] === "true", p["present-blank"]);
     expect("Escape leaves the presenter", p["present-exit"] === "true", p["present-exit"]);
     expect("focus lands on the verse's number after Escape", p["present-focus"] === `${v2.reading}-${v2.chapter}-${v2.verse}`, p["present-focus"]);
+    expect("the update note is off the shared screen", p["update-display"] === "shown none", p["update-display"]);
     const l = attrs(await dumpDom(browser, `${base}/?check=1`, { size: "1440,900" }));
     console.log("\nlanding: /");
     expect("landing finished", l.done === "1", l.done);
@@ -256,6 +264,7 @@ async function main() {
     expect("the grid has a cell for every parashah", l.cells === "54", l.cells);
     expect("the week's parashah holds a sheet", l.held === "1", l.held);
     expect("a door shows its view and hides the others", l["door-switch"] === "ok", l["door-switch"]);
+    expect("the landing warms this week's sheet", l.warm === slug, l.warm);
     // The library's short addresses: the fixture week is filed under its parashah and year.
     const key = L.parashahKey(raw.shabbat.parashah.en), cycle = String(raw.series.year);
     const book = (PARASHOT.find(x => x.key === key) || { book: "Genesis" }).book;

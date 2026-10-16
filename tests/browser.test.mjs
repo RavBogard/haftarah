@@ -157,6 +157,8 @@ test("week-figures with the geo files missing: the verses render, no figure, and
     assert.equal(attr("fig-places"), "0");
     assert.equal(attr("fig-credit"), "");
     assert.doesNotMatch(dom, /<figure class="fig /);
+    // The precache lists the deleted geo files, so the worker's install fails; the check says so and still finishes.
+    assert.equal(attr("sw"), "failed");
   } finally { if (server) server.close(); await iso.cleanup(); }
 });
 

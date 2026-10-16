@@ -5,6 +5,7 @@ import { createAnalytics } from "./analytics.js";
 import { load, store } from "./storage.js";
 import { parashahGrid, byBook, specials } from "./library.js";
 import { gridHtml, bookHtml, specialHtml } from "./library-view.js";
+import { registerOffline, showUpdate, warmWeek, waitForControl } from "./offline-client.js";
 
 const DAY = 86400000;
 
@@ -95,7 +96,15 @@ export async function run() {
     initDoors($("index"), { initial: load("door") || "week", remember: d => store("door", d) });
     $("index").hidden = false;
   }
+  // The offline app: register the worker, then warm this week's sheet into the cache once a worker
+  // controls the page (an uncontrolled first visit warms nothing, by design). The check waits for the
+  // worker to take control first, as the week page's check does, so the warm-up is exercised.
+  const offlineReady = registerOffline({ onUpdate: () => showUpdate($("update")) });
+  const slug = hero ? hero.entry.slug : null;
+  const warmed = !check ? offlineReady.then(() => warmWeek(slug))
+    : Promise.race([offlineReady, new Promise(r => setTimeout(() => r(null), 10000))]).then(async reg => { if (reg) await waitForControl({ reg }); return warmWeek(slug); });
   if (check) {
+    html.dataset.checkWarm = await warmed;
     html.dataset.checkWeeks = String(index.weeks.length);
     html.dataset.checkHero = hero ? hero.entry.slug : "";
     html.dataset.checkHeading = hero ? hero.heading : "";

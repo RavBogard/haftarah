@@ -228,6 +228,10 @@ sup.fn button::after { content: ""; position: absolute; inset: -.7em -.35em; }
 
 /* load and error states */
 .status { margin: 2rem 0; color: var(--ink-2); font-style: italic; } .status a { color: var(--rubric); }
+/* the update note (offline-client.js): a new build waits for the next launch; never on the shared screen */
+.update { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin: 1rem 0 0; padding: .6rem .9rem; border: .5px solid var(--rule); font-size: .95rem; }
+.update .act { min-height: max(2.75rem, 44px); color: var(--rubric); font-weight: 500; }
+html[data-present] .update { display: none; }
 
 /* end matter */
 .end { border-top: .5px solid var(--rule); margin-top: 2rem; padding-top: 1.25rem; }
