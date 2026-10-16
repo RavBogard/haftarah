@@ -3,7 +3,7 @@
 // here; the building and delivering tools (Task 5 of the plan) are added to TOOLS in table order.
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readFile, rm } from "node:fs/promises";
+import { readFile, readdir, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { getJSON, leyningUrl, nextWeekFor, weekSlug, nextShabbat, fetchWeek, fetchTextsFor, withEntryIds } from "../../scripts/fetch.mjs";
@@ -199,7 +199,8 @@ export const startWeek = defineTool({
     const lines = [];
     const r = await fetchWeek({ date, outRoot: ctx.workDir, force, haftarahRef, wantTexts: false, carry, noTorah, torahRef, torahPick, customs, fetchImpl: ctx.fetchImpl, log: m => lines.push(m), site: ctx.config.site });
     await pushWeek(ctx.store, slug, dir, ["sheet.json", "candidates.json", "candidates-torah.json", "prior.json"]);
-    const status = force || !existing ? await writeStatus(ctx.store, slug, { status: "drafting", built: null, delivered: null }, ctx.now) : await writeStatus(ctx.store, slug, {}, ctx.now);
+    // A kept week whose sheet gained the Torah reading: a new version, and back to drafting if it was built or delivered.
+    const status = force || !existing ? await writeStatus(ctx.store, slug, { status: "drafting", built: null, delivered: null }, ctx.now) : await writeStatus(ctx.store, slug, existing.status !== "drafting" ? { status: "drafting" } : {}, ctx.now);
     return { slug, status: status.status, version: status.version, readings: r.readings, aliyot: r.leyning ? aliyotLines(r.leyning) : [], lastTime: r.prior?.slug ? { slug: r.prior.slug, hebrewEn: r.prior.hebrewEn, source: r.prior.source } : null, carried: r.carried, nextWeek: r.nextWeek, notes: lines.filter(l => l.startsWith("  ") || l.startsWith("customs/") || l.startsWith("Torah")) };
   },
 });
@@ -222,7 +223,7 @@ export const fetchTexts = defineTool({
 
 export const saveEntries = defineTool({
   name: "save_entries",
-  description: "Add or update commentary entries and margin glosses in one reading (upsert by id; a new entry gets its id), add glossary items, remove entries by id. Each entry passes the citation gate (a Sefaria ref outside the critical register, works from the bibliography for historians) and its ref is checked against Sefaria; the valid are saved, the rest refused and named. Lint runs on the result. Needs the week's current version.",
+  description: "Add or update commentary entries and margin glosses in one reading (upsert by id; a new entry gets its id), add glossary items, remove entries by id. An entry sent without an id is always added (sending the same entry again adds a second one with a -2 id); send the id to update. Each entry passes the citation gate (a Sefaria ref outside the critical register, works from the bibliography for historians) and its ref is checked against Sefaria; the valid are saved, the rest refused and named. Lint runs on the result. Needs the week's current version.",
   inputSchema: { type: "object", properties: { slug: slugProp, expectedVersion: { type: "integer" }, reading: readingProp, entries: { type: "array", items: { type: "object" } }, glossary: { type: "array", items: { type: "object" } }, remove: { type: "array", items: { type: "string" } } }, required: ["slug", "expectedVersion", "reading"] },
   annotations: {},
   async handler({ slug, expectedVersion, reading, entries = [], glossary = [], remove = [] }, ctx) {
@@ -235,7 +236,8 @@ export const saveEntries = defineTool({
     const gateProblems = validateEntries(up.sheet, reading, up.touched, { biblio: union });
     const r = readingIn(up.sheet, reading);
     const itemOf = id => [...(r.commentary || []), ...(r.glosses || [])].find(x => x.id === id);
-    const refs = await verifyRefs(up.touched.map(id => (r.commentary || []).find(e => e.id === id)?.sourceRef).filter(Boolean), { fetchImpl: ctx.fetchImpl });
+    // Sefaria is asked only about the refs of entries the gate passed.
+    const refs = await verifyRefs(up.touched.filter(id => !(gateProblems.get(id) || []).length).map(id => (r.commentary || []).find(e => e.id === id)?.sourceRef).filter(Boolean), { fetchImpl: ctx.fetchImpl });
     const results = [], refused = new Set();
     for (const id of up.touched) {
       const e = itemOf(id);
@@ -289,6 +291,18 @@ export const setStatus = defineTool({
   },
 });
 
+/**
+ * The books a bibliography line can belong to, lower-cased name → { name, file }: the repo's bibliography
+ * files (named in the book's own case, e.g. "I Samuel.md"; file is that name), then the books of the store's weeks (file null).
+ */
+async function knownBooks(ctx) {
+  const known = new Map();
+  for (const f of await readdir(join(ctx.root, "bibliography")).catch(() => [])) if (f.endsWith(".md") && f.toLowerCase() !== "readme.md") known.set(f.slice(0, -3).toLowerCase(), { name: f.slice(0, -3), file: f });
+  const sheets = (await ctx.store.list("weeks/")).map(b => b.pathname).filter(p => /^weeks\/[^/]+\/sheet\.json$/.test(p));
+  for (const p of sheets) { try { const s = await readJson(ctx.store, p); for (const r of L.readings(s || {})) if (r.book && !known.has(r.book.toLowerCase())) known.set(r.book.toLowerCase(), { name: r.book, file: null }); } catch {} }
+  return known;
+}
+
 export const addBibliographyWork = defineTool({
   name: "add_bibliography_work",
   description: "Add a work to the bibliography a historians entry may cite, as an overlay line in the store (bibliography/<book>.md there; merged into the repo's file by hand later). The citation is verified by a publisher or WorldCat URL. The same key again replaces the line.",
@@ -296,6 +310,10 @@ export const addBibliographyWork = defineTool({
   annotations: {},
   async handler({ book, key, citation, verifiedBy }, ctx) {
     if (/[|\n]/.test(key) || /\n/.test(citation)) throw new Error("key cannot contain | or a line break; citation cannot contain a line break");
+    if (/^[\s-]/.test(key)) throw new Error("key cannot start with a space or -");
+    const known = await knownBooks(ctx);
+    const kb = known.get(book.toLowerCase());
+    if (!kb) throw new Error(`no bibliography for ${book}; the known books are ${[...known.values()].map(x => x.name).sort().join(", ") || "none"}`);
     const path = `bibliography/${book.toLowerCase()}.md`;
     const cur = (await ctx.store.get(path))?.toString("utf8") || `# ${book} (overlay)\n\n`;
     const line = `- key: ${key.trim()} | ${citation.trim()} | verified: ${verifiedBy.trim()}`;
@@ -305,7 +323,7 @@ export const addBibliographyWork = defineTool({
     if (replaced) lines[i] = line; else lines.push(line);
     const md = lines.join("\n").replace(/\n*$/, "\n");
     await ctx.store.put(path, Buffer.from(md, "utf8"), "text/markdown; charset=utf-8");
-    let repo = ""; try { repo = await readFile(join(ctx.root, "bibliography", `${book.toLowerCase()}.md`), "utf8"); } catch {}
+    let repo = ""; if (kb.file) try { repo = await readFile(join(ctx.root, "bibliography", kb.file), "utf8"); } catch {}   // by its real name: a case-sensitive filesystem has no isaiah.md
     const merged = new Map([...L.parseBibliography(repo), ...L.parseBibliography(md)]);
     return { book, key: key.trim(), line, replaced, merged: merged.size };
   },

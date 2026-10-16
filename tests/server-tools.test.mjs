@@ -236,3 +236,48 @@ test("add_bibliography_work appends a parseable line to the store's overlay for 
     await assert.rejects(call("add_bibliography_work", { book: "Isaiah", key: "Bad|Key", citation: "x", verifiedBy: "https://example.org" }, ctx), /key cannot contain/);
   } finally { await rm(workDir, { recursive: true, force: true }); }
 });
+
+test("add_bibliography_work knows which books exist (the repo's files, the store's weeks) and refuses a key starting with - or a space", async () => {
+  const { ctx, store, workDir } = await ctxWith();
+  try {
+    const lower = await call("add_bibliography_work", { book: "isaiah", key: "Paul 2012", citation: "x", verifiedBy: "https://example.org" }, ctx);
+    assert.ok(lower.merged > 10, "the repo file is read by its real name, Isaiah.md");
+    await assert.rejects(call("add_bibliography_work", { book: "Isaiahh", key: "Paul 2012", citation: "x", verifiedBy: "https://example.org" }, ctx), /no bibliography for Isaiahh; the known books are I Samuel, Isaiah/);
+    await assert.rejects(call("add_bibliography_work", { book: "Isaiah", key: "-x", citation: "x", verifiedBy: "https://example.org" }, ctx), /key cannot start with a space or -/);
+    await assert.rejects(call("add_bibliography_work", { book: "Isaiah", key: " x", citation: "x", verifiedBy: "https://example.org" }, ctx), /key cannot start with a space or -/);
+    await writeJson(store, "weeks/2026-10-17-noach/sheet.json", torahWeek);
+    const g = await call("add_bibliography_work", { book: "Genesis", key: "Sarna 1989", citation: "x", verifiedBy: "https://example.org" }, ctx);
+    assert.equal(g.replaced, false, "a book a stored week reads is known");
+  } finally { await rm(workDir, { recursive: true, force: true }); }
+});
+
+test("start_week: a Torah pick added to a built week sends it back to drafting", async () => {
+  const passage = (book, ch, from, to) => ({ book, sections: [ch, from], toSections: [ch, to], versions: [{ languageFamilyName: "hebrew", text: Array.from({ length: to - from + 1 }, (_, i) => `עברית ${i}`) }, { languageFamilyName: "english", text: Array.from({ length: to - from + 1 }, (_, i) => `English ${i}`) }] });
+  const sefaria = { "https://www.sefaria.org/api/v3/texts/Isaiah": () => passage("Isaiah", 54, 1, 3), "https://www.sefaria.org/api/v3/texts/Genesis": () => passage("Genesis", 6, 9, 11), "https://www.sefaria.org/api/links/": () => [] };
+  const { ctx, store, workDir } = await ctxWith(new MemoryStore(), { fetchImpl: net(sefaria) });
+  try {
+    await call("start_week", { date: "2026-10-17" }, ctx);
+    await writeStatus(store, "2026-10-17-noach", { status: "built", built: "x" });
+    const t = await call("start_week", { date: "2026-10-17", torahPick: "aliyah:1" }, ctx);
+    assert.equal(t.status, "drafting"); assert.equal(t.version, 3);
+  } finally { await rm(workDir, { recursive: true, force: true }); }
+});
+
+test("save_entries asks Sefaria only about the refs of entries the gate passed", async () => {
+  const v = torahWeek.readings.find(r => r.id === "haftarah").verses[0];
+  const asked = [];
+  const inner = net({ "https://www.sefaria.org/api/v3/texts/": () => ({ versions: [{}] }) });
+  const { ctx, store, workDir } = await ctxWith(new MemoryStore(), { fetchImpl: async (url, o) => { if (String(url).includes("/api/v3/texts/")) asked.push(decodeURIComponent(String(url))); return inner(url, o); } });
+  try {
+    await writeJson(store, "weeks/2026-10-17-noach/sheet.json", torahWeek);
+    await writeStatus(store, "2026-10-17-noach", { status: "drafting" });
+    const text = "<p>A comment of some length that says something true about the verse and its words.</p>";
+    const r = await call("save_entries", { slug: "2026-10-17-noach", expectedVersion: 1, reading: "haftarah", entries: [
+      { verse: v.verse, chapter: v.chapter, register: "traditional", source: "Rashi", lemma: "x", text, sourceRef: `Rashi on ${v.book} ${v.chapter}:${v.verse}:1` },
+      { verse: v.verse, chapter: v.chapter, register: "critical", source: "Historians", lemma: "x", text, works: ["Nobody 1999"], sourceRef: `Gate Refused ${v.chapter}:${v.verse}` },
+    ] }, ctx);
+    assert.deepEqual(r.results.map(x => x.saved), [true, false]);
+    assert.match(r.results[1].errors[0], /work not in bibliography/);
+    assert.equal(asked.length, 1); assert.ok(asked[0].includes("Rashi on"));
+  } finally { await rm(workDir, { recursive: true, force: true }); }
+});

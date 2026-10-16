@@ -69,3 +69,46 @@ test("setStatuses marks and unmarks entries and glosses across readings, countin
   assert.equal(h(back.sheet).commentary[0].status, undefined);
   assert.throws(() => setStatuses(week, ["e-ffffffff"], "rejected"), /no entry e-ffffffff/);
 });
+
+test("validateEntries gates each entry alone: 1:1 Rashi is not blamed for 11:1 Rashi, verse 1 not for verse 21, and of two twins only the bad one is refused", () => {
+  const a = upsertEntries(week, "haftarah", { entries: [entry({ chapter: 1, verse: 1, sourceRef: "Rashi on Isaiah 1:1:1" }), entry({ chapter: 11, verse: 1, sourceRef: undefined })] });
+  const pa = validateEntries(a.sheet, "haftarah", a.touched, {});
+  assert.deepEqual(pa.get(a.touched[0]), [], "1:1 Rashi is clean");
+  assert.match(pa.get(a.touched[1])[0], /no Sefaria ref: 11:1 Rashi/);
+  const b = upsertEntries(week, "haftarah", { entries: [entry({ chapter: undefined, verse: 1, sourceRef: "Rashi on Isaiah 54:1:1" }), entry({ chapter: undefined, verse: 21, sourceRef: undefined })] });
+  const pb = validateEntries(b.sheet, "haftarah", b.touched, {});
+  assert.deepEqual(pb.get(b.touched[0]), [], "verse 1 is clean");
+  assert.equal(pb.get(b.touched[1]).length, 1);
+  const twins = upsertEntries(week, "haftarah", { entries: [entry(), entry({ sourceRef: undefined, text: "<p>Another comment of some length on the very same verse by the same source.</p>" })] });
+  const pt = validateEntries(twins.sheet, "haftarah", twins.touched, {});
+  assert.deepEqual(pt.get(twins.touched[0]), [], "the valid twin");
+  assert.match(pt.get(twins.touched[1])[0], /no Sefaria ref/);
+  const noIncipit = upsertEntries({ ...week, readings: week.readings.map(r => r.id === "haftarah" ? { ...r, incipit: {} } : r) }, "haftarah", { entries: [entry()] });
+  assert.deepEqual(validateEntries(noIncipit.sheet, "haftarah", noIncipit.touched, {}).get(noIncipit.touched[0]), [], "the reading's empty incipit is not the entry's problem");
+});
+
+test("verifyRefs: a body that fails to read is unknown, not missing", async () => {
+  const fetchImpl = async () => ({ status: 200, ok: true, json: async () => { throw new Error("body timeout"); } });
+  assert.deepEqual([...(await verifyRefs(["Rashi on Isaiah 54:1:1"], { fetchImpl })).entries()], [["Rashi on Isaiah 54:1:1", "unknown"]]);
+});
+
+test("verifyRefs asks four at a time, and a ref with no answer by the deadline is unknown", async () => {
+  const refs = Array.from({ length: 12 }, (_, i) => `Rashi on Isaiah 54:${i + 1}:1`);
+  const slow = () => new Promise(res => setTimeout(() => res(new Response(JSON.stringify({ versions: [{}] }), { status: 200 })), 50));
+  let t = Date.now();
+  const r = await verifyRefs(refs, { fetchImpl: slow });
+  assert.ok(Date.now() - t < 400, `took ${Date.now() - t} ms; serial would be 600`);
+  assert.ok([...r.values()].every(x => x === "ok"));
+  t = Date.now();
+  const hung = await verifyRefs(refs, { fetchImpl: () => new Promise(() => {}), deadlineMs: 100 });
+  assert.ok(Date.now() - t < 250, `took ${Date.now() - t} ms`);
+  assert.equal(hung.size, 12); assert.ok([...hung.values()].every(x => x === "unknown"));
+});
+
+test("applyPatch checks the shape of each key: a list where a list belongs, an object for the incipit, a region of four numbers", () => {
+  assert.throws(() => applyPatch(week, { glossary: { term: "X" } }), /glossary must be a list/);
+  assert.throws(() => applyPatch(week, { readings: { haftarah: { incipit: "Shout" } } }), /incipit must be an object/);
+  assert.throws(() => applyPatch(week, { mapRegion: [30, 31] }), /mapRegion must be a string, a list of four numbers, or null/);
+  assert.throws(() => applyPatch(week, { openingNote: ["x"] }), /openingNote must be an object/);
+  assert.equal(applyPatch(week, { mapRegion: [34, 29, 37, 34] }).sheet.mapRegion.length, 4);
+});

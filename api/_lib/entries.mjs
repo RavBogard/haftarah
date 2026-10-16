@@ -39,38 +39,53 @@ export function upsertEntries(sheet, readingId, { entries = [], glossary = [], r
   return { sheet: out, touched, glossaryTouched };
 }
 
-/** The citation gate's problems for the touched entries, keyed by id ([] when clean). */
+/** The citation gate's problems for the touched entries, keyed by id ([] when clean). Each entry is gated alone. */
 export function validateEntries(sheet, readingId, ids, { biblio = null } = {}) {
   const view = L.readingView(sheet, readingId);
-  const problems = gate(view, biblio);
   const r = readingOf(sheet, readingId);
   const out = new Map();
   for (const id of ids) {
     const e = (r.commentary || []).find(x => x.id === id);
     if (!e) { out.set(id, []); continue; }   // a gloss: lint covers it
-    const where = `${e.chapter ? e.chapter + ":" : ""}${e.verse} ${e.source}`;
-    out.set(id, problems.filter(p => p.endsWith(where) || p.includes(`(${where})`)));
+    const { status, ...alone } = e;   // a rejected entry is still checked when it is saved
+    out.set(id, gate({ ...view, commentary: [alone] }, biblio).filter(p => p !== "incipit.en is empty"));   // the incipit is the reading's, not the entry's
   }
   return out;
 }
 
-/** Ask Sefaria whether each ref resolves (one call per distinct ref): ok / missing / unknown (could not ask). */
-export async function verifyRefs(refs, { fetchImpl = globalThis.fetch } = {}) {
-  const out = new Map();
-  for (const ref of refs) {
-    if (!ref || out.has(ref)) continue;
-    try {
-      const res = await fetchImpl(`https://www.sefaria.org/api/v3/texts/${encodeURIComponent(ref)}?return_format=default`, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(8000) });
-      if (res.status === 404 || res.status === 400) { out.set(ref, "missing"); continue; }
-      if (!res.ok) { out.set(ref, "unknown"); continue; }
-      const j = await res.json().catch(() => null);
-      out.set(ref, j && !j.error && Array.isArray(j.versions) && j.versions.length ? "ok" : "missing");
-    } catch { out.set(ref, "unknown"); }
-  }
-  return out;
+/**
+ * Ask Sefaria whether each ref resolves (one call per distinct ref, four at a time, 8 seconds each, all of
+ * them within `deadlineMs`): ok / missing / unknown (could not ask, or no answer by the deadline).
+ */
+export async function verifyRefs(refs, { fetchImpl = globalThis.fetch, deadlineMs = 20_000, concurrency = 4 } = {}) {
+  const todo = [...new Set(refs.filter(Boolean))];
+  const out = new Map(todo.map(ref => [ref, "unknown"]));
+  const deadline = AbortSignal.timeout(deadlineMs);
+  const ask = async ref => {
+    const res = await fetchImpl(`https://www.sefaria.org/api/v3/texts/${encodeURIComponent(ref)}?return_format=default`, { headers: { accept: "application/json" }, signal: AbortSignal.any([AbortSignal.timeout(8000), deadline]) });
+    if (res.status === 404 || res.status === 400) return "missing";
+    if (!res.ok) return "unknown";
+    const j = await res.json();   // a body that fails or times out is "unknown" (the catch below), not "missing"
+    return j && !j.error && Array.isArray(j.versions) && j.versions.length ? "ok" : "missing";
+  };
+  let next = 0;
+  const worker = async () => { while (next < todo.length && !deadline.aborted) { const ref = todo[next++]; try { out.set(ref, await ask(ref)); } catch { out.set(ref, "unknown"); } } };
+  let timer;
+  const stop = new Promise(res => { timer = setTimeout(res, deadlineMs); });
+  await Promise.race([Promise.all(Array.from({ length: Math.min(concurrency, todo.length) }, worker)), stop]);
+  clearTimeout(timer);
+  return new Map(out);   // a copy: an answer arriving after the deadline changes nothing
 }
 
-const PATCHABLE = ["openingNote", "glossary", "nextWeek", "credits", "highlights", "places", "mapRegion", "timeline"];
+const isObj = v => !!v && typeof v === "object" && !Array.isArray(v);
+const isList = v => Array.isArray(v);
+// Each patchable key and the shape its value must have.
+const SHAPES = {
+  openingNote: [isObj, "an object"], credits: [isObj, "an object"], nextWeek: [v => v === null || isObj(v), "an object or null"],
+  glossary: [isList, "a list"], highlights: [isList, "a list"], places: [isList, "a list"], timeline: [isList, "a list"],
+  mapRegion: [v => v === null || typeof v === "string" || (isList(v) && v.length === 4 && v.every(n => typeof n === "number" && Number.isFinite(n))), "a string, a list of four numbers, or null"],
+};
+const PATCHABLE = Object.keys(SHAPES);
 /** JSON-merge the allowed keys (objects merge one level, lists and scalars replace) and each reading's incipit. */
 export function applyPatch(sheet, patch) {
   const out = clone(sheet), changed = [];
@@ -78,11 +93,16 @@ export function applyPatch(sheet, patch) {
     if (k === "readings") {
       for (const [id, rp] of Object.entries(v || {})) {
         const r = readingOf(out, id);
-        for (const [rk, rv] of Object.entries(rp || {})) { if (rk !== "incipit") throw new Error(`readings.${id}.${rk}: only incipit can be patched on a reading`); r.incipit = { ...(r.incipit || {}), ...rv }; changed.push(`readings.${id}.incipit`); }
+        for (const [rk, rv] of Object.entries(rp || {})) {
+          if (rk !== "incipit") throw new Error(`readings.${id}.${rk}: only incipit can be patched on a reading`);
+          if (!isObj(rv)) throw new Error(`readings.${id}.incipit: incipit must be an object`);
+          r.incipit = { ...(r.incipit || {}), ...rv }; changed.push(`readings.${id}.incipit`);
+        }
       }
       continue;
     }
     if (!PATCHABLE.includes(k)) throw new Error(`${k} cannot be patched; use save_entries for entries and glosses`);
+    if (!SHAPES[k][0](v)) throw new Error(`${k} must be ${SHAPES[k][1]}`);
     out[k] = v && typeof v === "object" && !Array.isArray(v) && out[k] && typeof out[k] === "object" && !Array.isArray(out[k]) ? { ...out[k], ...v } : v;
     changed.push(k);
   }
