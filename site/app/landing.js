@@ -3,6 +3,7 @@ import { applyStored, initSettings } from "./settings.js";
 import { indexUrl } from "./contract.js";
 import { createAnalytics } from "./analytics.js";
 import { load, store } from "./storage.js";
+import { installCard } from "./install.js";
 import { parashahGrid, byBook, specials } from "./library.js";
 import { gridHtml, bookHtml, specialHtml } from "./library-view.js";
 import { registerOffline, showUpdate, warmWeek, settleOffline } from "./offline-client.js";
@@ -55,6 +56,8 @@ export async function run() {
   }
   applyStored();
   initSettings({ host: $("settings"), button: $("aaBtn"), trope: false, langs: false });
+  const installState = installCard({ host: $("install") });
+  if (check) html.dataset.checkInstall = installState;
   const analytics = createAnalytics();
   addEventListener("appinstalled", () => analytics.track("install", {}));
   const status = (msg) => { $("status").innerHTML = msg; $("status").hidden = false; };

@@ -69,6 +69,15 @@ test("dumpDom starts Chrome with the environment it is given, and process.env by
   assert.equal(calls[1].opts.env, process.env);
 });
 
+test("dumpDom puts extraArgs after the size flag and before the URL", async () => {
+  const { spawnImpl, calls } = fakeSpawn(child => { child.stdout.end("<html></html>"); setTimeout(() => child.emit("close", 0), 5); });
+  await dumpDom("chrome", "file:///x.html", { size: "820,1180", extraArgs: ["--user-agent=x"], spawnImpl });
+  const a = calls[0].args;
+  assert.ok(a.indexOf("--window-size=820,1180") < a.indexOf("--user-agent=x"));
+  assert.ok(a.indexOf("--user-agent=x") < a.indexOf("file:///x.html"));
+  assert.equal(a.at(-1), "file:///x.html");
+});
+
 test("parseBrowserVersion names Chrome, and Edge when it is Edge", () => {
   assert.equal(parseBrowserVersion("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36"), "HeadlessChrome/155.0.0.0");
   assert.equal(parseBrowserVersion("AppleWebKit/537.36 HeadlessChrome/131.0.0.0 Safari/537.36 Edg/131.0.2903.70"), "HeadlessChrome/131.0.0.0 Edg/131.0.2903.70");

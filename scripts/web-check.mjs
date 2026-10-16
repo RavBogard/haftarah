@@ -154,6 +154,7 @@ async function main() {
       expect("the shell is precached in full", Number(a["sw-shell"]) === precache.length, `${a["sw-shell"]} (precache: ${precache.length})`);
       expect("the week file is cached once the worker serves it", a["sw-week"] === "true", a["sw-week"]);
       expect("no update note on a first install", a.update === "hidden", a.update);
+      expect("no install card in a desktop browser", a.install === "hidden", a.install);
       expect("the update note's Dismiss is a 44px target and puts the note away", Number(a["update-min"]) >= 44 && a["update-dismiss"] === "true", `${a["update-min"]} ${a["update-dismiss"]}`);
       expect("rows carry the reading in their id",a.anchor === `${flat[0].reading}-${flat[0].chapter}-${flat[0].verse}`, a.anchor);
       if (extra.highlights) {
@@ -273,8 +274,13 @@ async function main() {
     expect("Escape leaves the presenter", p["present-exit"] === "true", p["present-exit"]);
     expect("focus lands on the verse's number after Escape", p["present-focus"] === `${v2.reading}-${v2.chapter}-${v2.verse}`, p["present-focus"]);
     expect("the update note is off the shared screen", p["update-display"] === "shown none", p["update-display"]);
+    const IPHONE_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1";
+    const i = attrs(await dumpDom(browser, `${base}/${slug}?check=1`, { size: "820,1180", extraArgs: [`--user-agent=${IPHONE_UA}`] }));
+    console.log(`\niPhone Safari user agent, 820x1180: /${slug}`);
+    expect("the install card shows in iPhone Safari", i.install === "shown" && i.errors === "0", `${i.install} ${i.errors}`);
     const l = attrs(await dumpDom(browser, `${base}/?check=1`, { size: "1440,900" }));
     console.log("\nlanding: /");
+    expect("no install card on the landing in a desktop browser", l.install === "hidden", l.install);
     expect("landing finished", l.done === "1", l.done);
     expect("landing errors", l.errors === "0", l.errors);
     expect("one week listed", l.weeks === "1", l.weeks);

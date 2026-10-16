@@ -18,12 +18,13 @@ export const DUMP_TIMEOUT_MS = 90_000;
 const span = ms => (ms >= 1000 ? `${Math.round(ms / 1000)}s` : `${ms}ms`);
 
 /**
- * The DOM after the page's scripts ran. `size` ("1440,900") sets the window; `env` is Chrome's
+ * The DOM after the page's scripts ran. `size` ("1440,900") sets the window; `extraArgs` are more Chrome
+ * flags (a user agent), placed after the size and before the URL; `env` is Chrome's
  * environment (tests pass isolatedEnv's). On timeout the child is killed, its pipes destroyed and the
  * promise rejected at once: on Windows a surviving helper can hold stdout open, so "close" may never come.
  */
-export async function dumpDom(browser, url, { size = null, timeoutMs = DUMP_TIMEOUT_MS, spawnImpl = spawn, env = process.env } = {}) {
-  const args = [...(size ? [`--window-size=${size}`] : []), "--dump-dom", url];
+export async function dumpDom(browser, url, { size = null, timeoutMs = DUMP_TIMEOUT_MS, spawnImpl = spawn, env = process.env, extraArgs = [] } = {}) {
+  const args = [...(size ? [`--window-size=${size}`] : []), ...extraArgs, "--dump-dom", url];
   return (await runChrome(browser, args, { url, label: "dump-dom", timeoutMs, spawnImpl, env })).stdout;
 }
 

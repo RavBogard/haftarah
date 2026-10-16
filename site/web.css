@@ -234,6 +234,12 @@ sup.fn button::after { content: ""; position: absolute; inset: -.7em -.35em; }
 .strip .strip-acts { display: flex; flex-wrap: wrap; gap: 0 1rem; }
 .strip .act { min-height: max(2.75rem, 44px); color: var(--rubric); font-weight: 500; }
 html[data-present] .strip { display: none; }
+.install { margin: 1.5rem 0 0; padding: .9rem 1.1rem; border: .5px solid var(--rule); background: var(--paper); max-width: 38em; }
+.install h2 { font-size: 1rem; font-weight: 600; margin: 0 0 .4rem; }
+.install ol { margin: 0 0 .5rem; padding-left: 1.3rem; }
+.install p { margin: 0 0 .4rem; color: var(--ink-2); font-size: .95rem; }
+.install .act { min-height: max(2.75rem, 44px); color: var(--rubric); font-weight: 500; }
+html[data-present] .install { display: none; }
 
 /* end matter */
 .end { border-top: .5px solid var(--rule); margin-top: 2rem; padding-top: 1.25rem; }

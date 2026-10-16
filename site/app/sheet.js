@@ -11,6 +11,7 @@ import { initRoving, focusables } from "./a11y.js";
 import { createAnalytics } from "./analytics.js";
 import { initPresent, isPresent } from "./present.js";
 import { hasFigures, renderFigures } from "./figures.js";
+import { installCard } from "./install.js";
 import { registerOffline, showUpdate, loadFailure, settleOffline, held } from "./offline-client.js";
 
 const DRIVE = "https://drive.google.com/drive/folders/1TbSmoeBaCSLciL_-_HSCuKWkJMSZvGwd";
@@ -186,6 +187,7 @@ export async function run() {
     </div>`;
   if (voices.length) front.append(el("div", "voices", `<h2>Voices on this sheet</h2><p>${voices.map(v => `<span class="voice"><span class="name">${esc(v.name)}</span>${v.refs && v.refs.length ? ` (${esc(v.refs.join(", "))})` : ""}${v.line ? ` ${esc(v.line)}` : ""}</span>`).join('<span class="sep"> · </span>')}</p>`));
   front.append(el("div", "provenance", `Hebrew: ${esc(prov.he)}. English: ${esc(prov.en)}. ${prov.signoffHtml}${prov.signed ? ` <span class="sign">— ${esc(prov.editor)}</span>` : ""}`));
+  { const state = installCard({ host: $("install") }); if (check) html.dataset.checkInstall = state; }
   $("footAttr").textContent = `Hebrew: ${prov.he}. English: ${prov.en}. Sources from Sefaria. Calendar and readings: Hebcal (CC BY 4.0).`;
   // While a week carries word analysis, the footer credits its source (spec 8); the file itself names the credit.
   if (data.side && data.side.words) $("footAttr").textContent += ` ${data.side.words === "oshb" ? "Word analysis: Open Scriptures Hebrew Bible morphology (CC BY 4.0); Westminster Leningrad Codex (public domain)." : "Word analysis: STEPBible TAHOT and TBESH, data created by www.STEPBible.org based on work at Tyndale House Cambridge (CC BY 4.0), trimmed and aligned for this site."}`;
