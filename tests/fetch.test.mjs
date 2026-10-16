@@ -59,7 +59,8 @@ test("a flag that needs a value and has none is a usage error: --prior, --torah,
   assert.equal(missingValue({ prior: true }), "--prior needs a folder");
   assert.match(missingValue({ torah: true }), /^--torah needs a range/);
   assert.match(missingValue({ pick: true }), /^--torah-pick needs a pick/);
-  assert.equal(missingValue({ prior: "weeks/x", torah: "Genesis 6:9-22", pick: "aliyah:1" }), null);
+  assert.match(missingValue({ ref: true }), /^--ref needs a haftarah range/);
+  assert.equal(missingValue({ prior: "weeks/x", torah: "Genesis 6:9-22", pick: "aliyah:1", ref: "Isaiah 42:5-43:10" }), null);
   assert.equal(missingValue({}), null);
 });
 

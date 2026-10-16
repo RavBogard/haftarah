@@ -21,6 +21,10 @@ test("checkWeek renders every built reading twice through the injected dumpDom a
     assert.equal(r.ok, true);
     assert.deepEqual(r.readings.map(x => [x.kind, x.summary.pages, x.problems]), [["torah", 2, []], ["haftarah", 2, []]]);
     assert.equal(urls.length, 4, "two renders per reading");
+    const seen = [];
+    const rec = await checkWeek(dir, { browser: { path: "/fake/chrome", extraArgs: ["--x"] }, log: () => {}, dumpDomImpl: async (browser, url, opts) => { seen.push([browser, opts.extraArgs]); return dom(2, url.includes("torah") ? yyOf("torah") : yyOf("haftarah")); } });
+    assert.equal(rec.ok, true, "a browserRecord works as well as a path");
+    assert.deepEqual(seen[0], ["/fake/chrome", ["--x"]]);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
@@ -35,5 +39,6 @@ test("checkWeek: a divine-name count that disagrees with the data is a problem, 
     const m = await checkWeek(dir, { browser: "/fake/chrome", log: () => {}, dumpDomImpl: async () => dom(1, 0) });
     assert.equal(m.ok, false);
     assert.match(m.readings[0].problems[0], /sheet\.html is missing/);
+    assert.ok(!m.readings[0].problems[0].includes(tmpdir()), "an absolute folder is named by its last part only");
   } finally { await rm(dir, { recursive: true, force: true }); }
 });

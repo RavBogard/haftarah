@@ -8,7 +8,7 @@ import { promisify } from "node:util";
 import { join, relative, basename, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isolatedEnv } from "./helpers/isolatedEnv.mjs";
-import { readingsToBuild, torahColophonData, haftarahColophonData, buildWeek, BuildRefused, browserRecord } from "../scripts/build.mjs";
+import { readingsToBuild, torahColophonData, haftarahColophonData, buildWeek, BuildRefused, browserRecord, makeProfile } from "../scripts/build.mjs";
 import { makeWeekTorah } from "./helpers/makeWeekTorah.mjs";
 
 const run = promisify(execFile);
@@ -103,9 +103,13 @@ test("buildWeek writes the HTML for every reading from the repo template and ret
   try {
     await cp(new URL("./fixtures/week-torah/", import.meta.url), dir, { recursive: true });
     const lines = [];
-    const r = await buildWeek(dir, { pdf: false, log: m => lines.push(m), warn: m => lines.push(m) });
+    const r = await buildWeek(dir, { pdf: false, trope: true, log: m => lines.push(m), warn: m => lines.push(m) });
     assert.deepEqual(r.builds.map(b => [b.kind, basename(b.html)]), [["torah", "sheet-torah.html"], ["haftarah", "sheet.html"]]);
     assert.equal(r.builds[0].pdf, null);
+    assert.ok(r.trope.html.endsWith("sheet-trope.html"), "the chanter's copy is reported");
+    assert.equal(r.trope.pdf, null);
+    const plain = await buildWeek(dir, { pdf: false, log: () => {}, warn: () => {} });
+    assert.equal(plain.trope, null, "no chanter's copy asked for, none reported");
     const html = await readFile(r.builds[1].html, "utf8");
     assert.ok(/href="[^"]*template\/sheet\.css"/.test(html), "the HTML links the repo template by relative path");
     assert.ok(lines.some(l => l.startsWith("Wrote ") && l.includes("sheet.html")));
@@ -147,5 +151,29 @@ test("browserRecord, and pdf true with browser null: the no-browser line, HTML o
     const r = await buildWeek(dir, { pdf: true, browser: null, log: m => lines.push(m), warn: m => lines.push(m) });
     assert.equal(r.builds[0].pdf, null);
     assert.ok(lines.some(l => l.startsWith("No Chrome or Edge found.")));
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test("makeProfile gives each build its own existing Chrome profile folder", async () => {
+  const [a, b] = await Promise.all([makeProfile(), makeProfile()]);
+  try {
+    assert.notEqual(a, b);
+    assert.ok(existsSync(a) && existsSync(b));
+  } finally { await rm(a, { recursive: true, force: true }); await rm(b, { recursive: true, force: true }); }
+});
+
+test("buildWeek refuses a lint error with BuildRefused: the lemma error among its problems, the CLI's heading on its message", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "haftarah-build-"));
+  try {
+    await cp(new URL("./fixtures/week-min/", import.meta.url), dir, { recursive: true });
+    const sheet = JSON.parse(await readFile(join(dir, "sheet.json"), "utf8"));
+    sheet.glosses = [{ verse: 18, lemma: "זזז", en: "And", text: "A gloss on a word that is nowhere in this verse, long enough to pass the length check.", status: "approved" }];
+    await writeFile(join(dir, "sheet.json"), JSON.stringify(sheet));
+    await assert.rejects(buildWeek(dir, { pdf: false, log: () => {}, warn: () => {} }), err => {
+      assert.ok(err instanceof BuildRefused);
+      assert.ok(err.problems.some(p => /gloss .*זזז.*Hebrew lemma not found/.test(p)), err.problems.join("\n"));
+      assert.ok(err.message.startsWith("Not built; fix these first"));
+      return true;
+    });
   } finally { await rm(dir, { recursive: true, force: true }); }
 });

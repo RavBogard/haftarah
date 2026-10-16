@@ -8,7 +8,7 @@
  *   node scripts/check.mjs weeks/<slug> --trope          # the haftarah's chanter's copy, sheet-trope.html
  */
 import { readFile, access } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { join, resolve, isAbsolute, basename } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { findBrowser } from "./build.mjs";
 import { dumpDom } from "./chrome.mjs";
@@ -123,27 +123,32 @@ export function checkTargets(file, { only = null, trope = false } = {}) {
 /**
  * Render every built reading twice and assert the layout invariants. Returns { ok, readings: [{ id, kind, html,
  * summary, problems, diagnostics, page }] }; the CLI prints the table. `dumpDomImpl` replaces chrome.mjs's dumpDom
- * (tests); `extraArgs` reach the browser (the pack's flags on Vercel). `browser` is an executable path,
- * undefined to look one up with findBrowser().
+ * (tests); `extraArgs` reach the browser (the pack's flags on Vercel). `browser` is an executable path or a
+ * browserRecord ({ path, extraArgs }, as buildWeek takes; its extraArgs come before the ones given), or undefined
+ * to look one up with findBrowser(). A missing HTML file is a problem naming the folder as given, or only its
+ * last part when `dir` is absolute.
  */
 export async function checkWeek(dir, { only = null, trope = false, browser = undefined, extraArgs = [], dumpDomImpl = dumpDom, log = console.log } = {}) {
   const weekDir = resolve(dir);
   const file = JSON.parse(await readFile(join(weekDir, "sheet.json"), "utf8"));
   const targets = checkTargets(file, { only, trope });
-  const b = browser === undefined ? findBrowser() : browser;
+  const rec = browser && typeof browser === "object" ? browser : null;
+  const b = rec ? rec.path : browser === undefined ? findBrowser() : browser;
+  const args = rec ? [...(rec.extraArgs || []), ...extraArgs] : extraArgs;
   if (!b) throw new Error("No Chrome or Edge found.");
   log(`Browser: ${b}`);
+  const shown = isAbsolute(String(dir)) ? basename(weekDir) : String(dir);
   const out = [];
   for (const t of targets) {
     const html = join(weekDir, t.html);
     // A missing file would render as Chrome's error page and surface as a page-count mismatch.
     if (!(await access(html).then(() => true, () => false))) {
-      out.push({ id: t.id, kind: t.kind, html: t.html, summary: null, problems: [`${String(dir).replace(/[\\/]+$/, "")}/${t.html} is missing; run node scripts/build.mjs ${dir}${trope ? " --trope" : ""} first`], diagnostics: [], page: [] });
+      out.push({ id: t.id, kind: t.kind, html: t.html, summary: null, problems: [`${shown.replace(/[\\/]+$/, "")}/${t.html} is missing; run node scripts/build.mjs ${shown}${trope ? " --trope" : ""} first`], diagnostics: [], page: [] });
       continue;
     }
     const url = pathToFileURL(html).href;
-    const a = analyse(await dumpDomImpl(b, url, { extraArgs }));
-    const c = analyse(await dumpDomImpl(b, url, { extraArgs }));
+    const a = analyse(await dumpDomImpl(b, url, { extraArgs: args }));
+    const c = analyse(await dumpDomImpl(b, url, { extraArgs: args }));
     const problems = a.problems.slice();
     if (JSON.stringify(a.summary) !== JSON.stringify(c.summary)) problems.push("two renders differ (pagination is not deterministic on this browser)");
     // The divine-name count in the render must equal the count in the data (verses plus incipit).

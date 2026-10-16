@@ -11,7 +11,7 @@
  * Needs Node 18+ and Chrome or Edge installed (or set HAFTARAH_BROWSER to a browser executable).
  */
 
-import { readFile, writeFile, access, mkdir, rm, rename } from "node:fs/promises";
+import { readFile, writeFile, access, mkdir, mkdtemp, rm, rename } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join, resolve, relative, dirname, basename } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -48,6 +48,8 @@ export class BuildRefused extends Error {
 }
 /** The browser a build renders with: an executable and the flags to add after chromeFlags (none locally; the pack's on Vercel). */
 export const browserRecord = (path, extraArgs = []) => ({ path, extraArgs });
+/** A fresh Chrome profile folder for one build: two builds in one process never share (or delete) each other's. */
+export const makeProfile = () => mkdtemp(join(tmpdir(), "haftarah-chrome-"));
 
 /** The Torah sheet's data: its colophon's "Next week" line names next week's Torah reading, and is dropped when none is known. */
 export function torahColophonData(data) {
@@ -255,7 +257,9 @@ export async function buildWeek(dir, { pdf = true, png = false, trope = false, r
   }
   if (trope && !builds.some(b => b.kind === "haftarah")) warn("--trope makes the haftarah's chanter's copy; this build has no haftarah");
 
-  const result = () => ({ builds: builds.map(b => ({ id: b.id, kind: b.kind, html: b.html, pdf: b.pdf || null, pages: b.pages || null, bytes: b.bytes || null })), warnings: linted.warnings });
+  // The chanter's copy, when asked for and the build has a haftarah: its HTML, and its PDF once printed.
+  const tropeOut = trope && builds.some(b => b.kind === "haftarah") ? { html: tropePath, pdf: null, pages: null, bytes: null } : null;
+  const result = () => ({ builds: builds.map(b => ({ id: b.id, kind: b.kind, html: b.html, pdf: b.pdf || null, pages: b.pages || null, bytes: b.bytes || null })), trope: tropeOut, warnings: linted.warnings });
   if (!pdf && !png) return result();
 
   let b0 = browser;
@@ -265,8 +269,7 @@ export async function buildWeek(dir, { pdf = true, png = false, trope = false, r
     return result();
   }
   log(`Browser: ${b0.path}`);
-  const profile = join(tmpdir(), `haftarah-chrome-${process.pid}`);
-  await mkdir(profile, { recursive: true });
+  const profile = await makeProfile();
   const common = [...chromeFlags(profile), ...(b0.extraArgs || [])];
   const kb = buf => `${Math.round(buf.length / 1024)} KB`;
 
@@ -277,16 +280,16 @@ export async function buildWeek(dir, { pdf = true, png = false, trope = false, r
       const url = pathToFileURL(b.html).href;
       const pdfPath = pdf ? join(weekDir, PDF_FILES[b.kind]) : join(profile, `probe-${b.kind}.pdf`);
       const { pages, buf } = await printPdf(b0, url, pdfPath, { common });
-      if (pdf) {
-        log(`Wrote ${relative(root, pdfPath)}: ${pages} pages, ${kb(buf)}`);
-        Object.assign(b, { pdf: pdfPath, pages, bytes: buf.length });
-      }
+      // pages and bytes whenever a PDF was printed (a png-only build prints a probe); the path only when it was wanted.
+      Object.assign(b, { pdf: pdf ? pdfPath : null, pages, bytes: buf.length });
+      if (pdf) log(`Wrote ${relative(root, pdfPath)}: ${pages} pages, ${kb(buf)}`);
       if (png) await writePreviews({ browser: b0, common, url, pdfPath, pages, outDir: join(weekDir, b.kind === "torah" ? "preview-torah" : "preview"), root, log });
       // The chanter's copy prints after the study sheet, the same way; previews stay the sheet's.
       if (b.kind === "haftarah" && trope && pdf) {
         const tropePdf = join(weekDir, "sheet-trope.pdf");
         const t = await printPdf(b0, pathToFileURL(tropePath).href, tropePdf, { common });
         log(`Wrote ${relative(root, tropePdf)}: ${t.pages} pages, ${kb(t.buf)}`);
+        Object.assign(tropeOut, { pdf: tropePdf, pages: t.pages, bytes: t.buf.length });
       }
     }
   } finally {

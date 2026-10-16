@@ -617,10 +617,11 @@ export function weeksTaken(date, local = [], known = []) {
 }
 
 /** A flag that needs a value but was given none (arg() returns true then): the usage error, else null. */
-export function missingValue({ prior = null, torah = null, pick = null } = {}) {
+export function missingValue({ prior = null, torah = null, pick = null, ref = null } = {}) {
   if (prior === true) return "--prior needs a folder";
   if (torah === true) return `--torah needs a range, e.g. --torah "Genesis 6:9-7:16"`;
   if (pick === true) return "--torah-pick needs a pick: aliyah:N[-M], aliyah:M, triennial or full";
+  if (ref === true) return `--ref needs a haftarah range, e.g. --ref "Isaiah 42:5-43:10"`;
   return null;
 }
 
@@ -775,7 +776,7 @@ export async function fetchWeek({
 }
 
 async function main() {
-  const usage = missingValue({ prior: arg("prior", null), torah: arg("torah", null), pick: arg("torah-pick", null) });
+  const usage = missingValue({ prior: arg("prior", null), torah: arg("torah", null), pick: arg("torah-pick", null), ref: arg("ref", null) });
   if (usage) throw new Error(usage);
   const customsArg = arg("customs", null);
   const customs = await loadCustoms(typeof customsArg === "string" ? customsArg : "crc");
