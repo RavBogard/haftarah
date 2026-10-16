@@ -489,19 +489,45 @@
     return [x0, y0, x1, y1];
   }
 
-  function mapRegion(places, region) {
+  function isBox(b) { return Array.isArray(b) && b.length === 4 && b.every(Number.isFinite) && b[0] < b[2] && b[1] < b[3]; }
+  // A fitted frame kept inside `bounds` (the basemap's box): moved in, cut to the bounds where it is larger,
+  // then narrowed around its centre back to 5:4 (narrowing keeps the centre's latitude, so the aspect is exact).
+  function clampFrame(frame, bounds) {
+    if (!isBox(bounds) || (frame[0] >= bounds[0] && frame[1] >= bounds[1] && frame[2] <= bounds[2] && frame[3] <= bounds[3])) return frame;
+    const into = (a, b, lo, hi) => b - a >= hi - lo ? [lo, hi] : a < lo ? [lo, lo + (b - a)] : b > hi ? [hi - (b - a), hi] : [a, b];
+    let [x0, x1] = into(frame[0], frame[2], bounds[0], bounds[2]), [y0, y1] = into(frame[1], frame[3], bounds[1], bounds[3]);
+    const lat0 = (y0 + y1) / 2, c = Math.cos(lat0 * Math.PI / 180), want = MAP_VIEW[0] / MAP_VIEW[1];
+    const w = (x1 - x0) * c, h = y1 - y0;
+    if (w / h > want) { const half = want * h / c / 2, m = (x0 + x1) / 2; x0 = m - half; x1 = m + half; }
+    else if (w / h < want) { const half = w / want / 2; y0 = lat0 - half; y1 = lat0 + half; }
+    return [x0, y0, x1, y1];
+  }
+
+  // The region a map draws. `bounds` (the basemap's box) clamps the automatic region only: an explicit
+  // region is the author's choice and is drawn as given.
+  function mapRegion(places, region, bounds) {
     if (typeof region === "string" && MAP_REGIONS[region]) return { name: region, box: MAP_REGIONS[region].slice() };
     if (Array.isArray(region) && region.length === 4) return { name: "custom", box: region.slice() };
+    const auto = (name, box) => { const fitted = fitBox(box), kept = clampFrame(fitted, bounds); return { name, box: kept === fitted ? box : kept }; };
     const pts = (places || []).filter(hasCoord);
-    if (!pts.length || pts.every(p => inBoxLL(p, MAP_REGIONS.land))) return { name: "land", box: MAP_REGIONS.land.slice() };
-    if (pts.every(p => inBoxLL(p, MAP_REGIONS["near-east"]))) return { name: "near-east", box: MAP_REGIONS["near-east"].slice() };
+    if (!pts.length || pts.every(p => inBoxLL(p, MAP_REGIONS.land))) return auto("land", MAP_REGIONS.land.slice());
+    if (pts.every(p => inBoxLL(p, MAP_REGIONS["near-east"]))) return auto("near-east", MAP_REGIONS["near-east"].slice());
     const lons = pts.map(p => p.lon), lats = pts.map(p => p.lat);
     let x0 = Math.min(...lons), x1 = Math.max(...lons), y0 = Math.min(...lats), y1 = Math.max(...lats);
     const px = (x1 - x0) * 0.2, py = (y1 - y0) * 0.2;
     x0 -= px; x1 += px; y0 -= py; y1 += py;
     if (x1 - x0 < 0.6) { const m = (x0 + x1) / 2; x0 = m - 0.3; x1 = m + 0.3; }
     if (y1 - y0 < 0.5) { const m = (y0 + y1) / 2; y0 = m - 0.25; y1 = m + 0.25; }
-    return { name: "custom", box: fitBox([x0, y0, x1, y1]) };
+    return auto("custom", fitBox([x0, y0, x1, y1]));
+  }
+  // The frame a map draws: its region fitted to 5:4 (clamped to the basemap's box when the region is automatic).
+  function mapFrame(places, region, basemap) {
+    return fitBox(mapRegion(places, region, basemap && basemap.box).box);
+  }
+  // The places a map draws a dot for: located, not an empire, inside its frame.
+  function mapDots(places, region, basemap) {
+    const frame = mapFrame(places, region, basemap);
+    return (places || []).filter(p => p && (p.role === "scene" || p.role === "context") && hasCoord(p) && inBoxLL(p, frame));
   }
 
   // Sutherland–Hodgman against the box's four edges (scripts/geo.mjs clipPolygon, copied: lib.js cannot import).
@@ -576,12 +602,12 @@
 
   function mapSvg(places, region, basemap, { id = "map", title, desc } = {}) {
     const esc = escapeHtml;
-    const frame = fitBox(mapRegion(places, region).box), proj = projector(frame);
+    const frame = mapFrame(places, region, basemap), proj = projector(frame);
     const shown = ["scene", "context", "empire"].map(role => (places || []).filter(p => p.role === role && hasCoord(p) && inBoxLL(p, frame))).reduce((a, b) => a.concat(b), [])
       .map(p => { const [x, y] = proj([p.lon, p.lat]); return { p, x, y }; });
     if (!shown.length) return "";
     if (title == null || desc == null) {
-      const t = figureText(places, [], null, region).map || { title: "", desc: "" };
+      const t = figureText(places, [], null, region, basemap).map || { title: "", desc: "" };
       if (title == null) title = t.title;
       if (desc == null) desc = t.desc;
     }
@@ -634,7 +660,7 @@
   // The same function as scripts/geo.mjs resolveTimeline (lib.js cannot import); keep the two identical.
   function timelineItems(items, chronology) {
     return (items || []).map(it => {
-      const t = it.chronology && chronology && chronology.entries ? chronology.entries[it.chronology] : null;
+      const t = it.chronology && chronology && chronology.entries && Object.hasOwn(chronology.entries, it.chronology) ? chronology.entries[it.chronology] : null;
       const r = t ? { id: it.id, label: it.label || t.label, kind: t.kind, start: t.start, end: t.end, approx: !!t.approx }
         : { id: it.id, label: it.label || "", kind: it.kind, start: it.start, end: it.end == null ? it.start : it.end, approx: !!it.approx };
       if (it.works) r.works = it.works;
@@ -762,9 +788,18 @@
     });
     const ay = TOP + rows.length * ROW + 4;
     out.push(`<line class="tl-axis" x1="${PAD}" y1="${ay}" x2="${W - PAD}" y2="${ay}"/>`);
-    for (let y = lo; y <= hi; y += step) {
-      if (y === 0) continue;
-      out.push(`<text class="tl-tick" x="${fig1(X(y))}" y="${ay + 24}" font-size="18" text-anchor="middle">${Math.abs(y)}${y > 0 ? " CE" : ""}</text>`);
+    // Every tick, or every other (every fourth…) when the widest label is wider than the spacing; a label
+    // that would pass the frame's right edge is anchored at its end.
+    const tickText = y => Math.abs(y) + (y > 0 ? " CE" : "");
+    const ticks = [];
+    for (let y = lo; y <= hi; y += step) if (y !== 0) ticks.push(y);
+    const widest = Math.max(0, ...ticks.map(y => PER * tickText(y).length));
+    let every = 1;
+    while (widest > X(lo + step * every) - X(lo) && every < ticks.length) every *= 2;
+    for (const y of ticks) {
+      if (every > 1 && Math.round((y - lo) / step) % every !== 0) continue;
+      const x = X(y), end = x + PER * tickText(y).length / 2 > W;
+      out.push(`<text class="tl-tick" x="${fig1(x)}" y="${ay + 24}" font-size="18" text-anchor="${end ? "end" : "middle"}">${tickText(y)}</text>`);
     }
     out.push("</svg>");
     return out.join("");
@@ -775,13 +810,13 @@
   }
 
   // The figures' titles, descriptions (the SVG's <desc>, read aloud) and captions; null for a figure with nothing in it.
-  function figureText(places, items, chronology, region) {
+  function figureText(places, items, chronology, region, basemap) {
     let map = null, timeline = null;
     const located = (places || []).filter(hasCoord);
     if (located.length) {
-      const reg = mapRegion(places, region), frame = fitBox(reg.box);
+      const reg = mapRegion(places, region, basemap && basemap.box), frame = fitBox(reg.box);
       const inside = located.filter(p => inBoxLL(p, frame)), outside = located.filter(p => !inBoxLL(p, frame));
-      const first = located.find(p => p.role === "scene") || located[0];
+      const first = inside.find(p => p.role === "scene") || inside[0] || located.find(p => p.role === "scene") || located[0];
       const where = reg.name === "land" ? "the land of Israel" : reg.name === "near-east" ? "the Near East" : "the area of " + first.name;
       const groups = [["scene", "scene of the reading", "scenes of the reading"], ["context", "nearby", "nearby"], ["empire", "a people or kingdom", "peoples or kingdoms"]]
         .map(([role, one, many]) => { const n = inside.filter(p => p.role === role).map(p => p.name); return n.length ? `${joinAnd(n)} (${n.length === 1 ? one : many})` : ""; })
@@ -918,5 +953,5 @@
     return map;
   }
 
-  return { TETRA, divineName, stripMarks, splitPoetry, nowrapKeys, letterFor, isDeadRef, normalizeRefs, assignKeys, SIGLA, REGISTER_ORDER, REGISTER_NAMES, voicesFor, voiceKey, hebrewKey, hebrewWords, verseWords, findHebrew, plainText, findEnglish, fitIncipitSize, parseBibliography, tropePhrases, tropeHtml, tropeFamiliesUsed, TROPE_FAMILIES, escapeHtml, enDash, shabbatName, sheetModel, readings, primaryReading, readingView, parashahKey, entryId, assignEntryIds, readingModel, MAP_REGIONS, MAP_VIEW, mapRegion, mapSvg, timelineItems, timelineSvg, figureText, yearLabel };
+  return { TETRA, divineName, stripMarks, splitPoetry, nowrapKeys, letterFor, isDeadRef, normalizeRefs, assignKeys, SIGLA, REGISTER_ORDER, REGISTER_NAMES, voicesFor, voiceKey, hebrewKey, hebrewWords, verseWords, findHebrew, plainText, findEnglish, fitIncipitSize, parseBibliography, tropePhrases, tropeHtml, tropeFamiliesUsed, TROPE_FAMILIES, escapeHtml, enDash, shabbatName, sheetModel, readings, primaryReading, readingView, parashahKey, entryId, assignEntryIds, readingModel, MAP_REGIONS, MAP_VIEW, mapRegion, mapFrame, mapDots, mapSvg, timelineItems, timelineSvg, figureText, yearLabel };
 });

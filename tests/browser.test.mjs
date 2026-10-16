@@ -98,6 +98,25 @@ test("week-figures: no margin note meets the inline end matter", { skip, timeout
   } finally { await iso.cleanup(); }
 });
 
+// The figures are the week's: a Torah-plus-haftarah week whose timeline cites a work from the haftarah's
+// bibliography (McCarter, in I Samuel.md, not Genesis.md) builds both sheets, and both draw the figures.
+test("week-torah carrying week-figures' places and timeline builds both sheets, each with its figures", { skip, timeout: 240_000 }, async () => {
+  const iso = await isolatedEnv();
+  try {
+    const dir = join(iso.home, "week-torah-figures");
+    await mkdir(dir);
+    const two = JSON.parse(await readFile(join(ROOT, "tests", "fixtures", "week-torah", "sheet.json"), "utf8"));
+    const fig = JSON.parse(await readFile(join(ROOT, "tests", "fixtures", "week-figures", "sheet.json"), "utf8"));
+    assert.ok(fig.timeline.some(it => (it.works || []).includes("McCarter 1980")), "the timeline cites McCarter (the case under test)");
+    await writeFile(join(dir, "sheet.json"), JSON.stringify({ ...two, places: fig.places, mapRegion: fig.mapRegion, timeline: fig.timeline }));
+    await run(process.execPath, [join(ROOT, "scripts", "build.mjs"), dir, "--no-pdf"], { env: iso.env, cwd: ROOT, maxBuffer: 1 << 24 });
+    for (const page of ["sheet.html", "sheet-torah.html"]) {
+      const dom = await dumpDom(findBrowser(), pathToFileURL(join(dir, page)).href, { env: iso.env });
+      assert.match((dom.match(/<html[^>]*>/) || [""])[0], /\sdata-figures="(front|page2)"/, `${page} draws the figures`);
+    }
+  } finally { await iso.cleanup(); }
+});
+
 test("web-check passes at desktop and phone widths",{ skip, timeout: 300_000 }, async () => {
   const iso = await isolatedEnv();
   try {
@@ -111,7 +130,7 @@ test("web-check passes on week-figures (the figures path)", { skip, timeout: 300
   const iso = await isolatedEnv();
   try {
     const { stdout } = await run(process.execPath, [join(ROOT, "scripts", "web-check.mjs"), join(ROOT, "tests", "fixtures", "week-figures"), "--out", join(iso.home, "dist")], { env: iso.env, cwd: ROOT, maxBuffer: 1 << 24 });
-    for (const line of ["the figures are drawn", "every place is on the map", "the map is described", "the figures are labelled images", "the footer credits the map and the dates",
+    for (const line of ["the figures are drawn", "every place inside the map is on it","the map is described", "the figures are labelled images", "the footer credits the map and the dates",
       "the timeline sits in a named, focusable scroll region", "the timeline scrolls sideways on a phone", "the timeline fits without scrolling on a desktop"])
       assert.match(stdout, new RegExp(`ok {2,}${line}`));
     assert.match(stdout, /All web checks passed\./);

@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { readFile } from "node:fs/promises";
-import { lint, lintSheet, entryCounts, applyFixes, godLanguage, wordCount } from "../scripts/lint.mjs";
+import { lint, lintSheet, entryCounts, applyFixes, godLanguage, wordCount, loadBasemap } from "../scripts/lint.mjs";
 import { makeWeekTorah } from "./helpers/makeWeekTorah.mjs";
 import { migrate3 } from "../scripts/migrate.mjs";
 import { gapReport, analyse } from "../scripts/check.mjs";
@@ -134,6 +134,32 @@ test("lint warns on a crowded map, a long timeline label and a tall timeline ban
     { where: "timeline long", msg: "label is 35 characters; keep it under 28 so it fits its bar" },
     { where: "timeline", msg: "15 items; more than 14 rows make the band taller than its space" },
   ]);
+});
+
+test("lint warns, given the basemap, on a place beyond it and on a map with no place inside its frame", async () => {
+  const basemap = JSON.parse(await readFile(new URL("../data/geo/basemap.json", import.meta.url), "utf8"));
+  const places = w => w.filter(x => x.where === "places");
+  const joppa = { id: "joppa", name: "Joppa", role: "scene", lat: 32.05, lon: 34.75, approved: true };
+  const tarshish = { id: "tarshish", name: "Tarshish", role: "scene", lat: 37.0, lon: -6.0, approved: true };
+  const d = week();
+  d.places = [joppa];
+  assert.deepEqual(places(lint(d, { voices, basemap }).warnings), []);
+  d.places = [joppa, tarshish];
+  assert.deepEqual(places(lint(d, { voices, basemap }).warnings), [{ where: "places", msg: "Tarshish lies outside the basemap and is left off the map" }]);
+  assert.deepEqual(places(lint(d, { voices }).warnings), [], "without the basemap nothing is said");
+  d.places = [tarshish];
+  assert.deepEqual(places(lint(d, { voices, basemap }).warnings), [
+    { where: "places", msg: "Tarshish lies outside the basemap and is left off the map" },
+    { where: "places", msg: "places given but none inside the map" },
+  ]);
+  d.places = [joppa]; d.mapRegion = [40, 30, 44, 33];   // an explicit region with nothing in it
+  assert.deepEqual(places(lint(d, { voices, basemap }).warnings), [{ where: "places", msg: "places given but none inside the map" }]);
+});
+
+test("loadBasemap reads data/geo/basemap.json only for a week with places", async () => {
+  assert.equal(await loadBasemap({ places: [] }), null);
+  assert.equal(await loadBasemap({}), null);
+  assert.deepEqual((await loadBasemap({ places: [{ id: "x" }] })).box, [8, 12, 60, 42]);
 });
 
 test("lint errors name the entry when a lemma or anchor is missing", () => {

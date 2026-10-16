@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { readFile } from "node:fs/promises";
-import { gate } from "../scripts/build.mjs";
+import { gate, figuresGate, weekBibliography } from "../scripts/build.mjs";
 const require = createRequire(import.meta.url);
 const lib = require("../template/lib.js");
 
@@ -60,20 +60,42 @@ test("gate checks citations on entries with no status", () => {
   assert.ok(gate(d, biblio).some(x => /no Sefaria ref.*18 Rashi/.test(x)));
 });
 
-test("gate: figures need the geo data; a resolved place and a table-cited king pass; an unresolved place or a work outside the bibliography is named", () => {
+const geoFix = () => ({ gazetteer: { places: [{ slug: "gibeah-1", name: "Gibeah 1", aliases: ["Gibeah"], verses: 45, sites: [{ lon: 35.231, lat: 31.823, votes: 822, where: "Tel el Ful" }], status: "ok" }] },
+  basemap: { box: [8, 12, 60, 42], land: [], lakes: [], rivers: [] },
+  chronology: { entries: { david: { label: "David", kind: "king", realm: "united", start: -1010, end: -970, approx: true } } } });
+
+test("figuresGate: figures need the geo data; a resolved place and a table-cited king pass; an unresolved place or a work outside the bibliography is named", () => {
   const d = structuredClone(fixture);
   d.places = [{ id: "gibeah", name: "Gibeah", role: "scene", source: "openbible:gibeah-1", lat: 31.823, lon: 35.231 }];
   d.timeline = [{ id: "david", chronology: "david" }];
-  assert.deepEqual(gate(d, biblio, null), ["data/geo and data/chronology.json are needed for the figures (loadGeo failed)"]);
-  const geo = { gazetteer: { places: [{ slug: "gibeah-1", name: "Gibeah 1", aliases: ["Gibeah"], verses: 45, sites: [{ lon: 35.231, lat: 31.823, votes: 822, where: "Tel el Ful" }], status: "ok" }] },
-    chronology: { entries: { david: { label: "David", kind: "king", realm: "united", start: -1010, end: -970, approx: true } } } };
-  assert.deepEqual(gate(d, biblio, geo), []);
+  assert.deepEqual(figuresGate(d, biblio, null), ["data/geo and data/chronology.json are needed for the figures (loadGeo failed)"]);
+  assert.deepEqual(figuresGate(d, biblio, null, new Error("ENOENT: data/geo/basemap.json")), ["data/geo and data/chronology.json are needed for the figures (loadGeo failed: ENOENT: data/geo/basemap.json)"], "the failure says why");
+  const geo = geoFix();
+  assert.deepEqual(figuresGate(d, biblio, geo), []);
+  assert.deepEqual(gate(d, biblio), [], "the per-reading gate no longer checks the figures");
   d.places.push({ id: "nob", name: "Nob", role: "context", source: "openbible:nob" });
   d.timeline.push({ id: "e", label: "A thing", kind: "event", start: -1000, works: ["Nobody 2000"] });
-  const got = gate(d, biblio, geo);
+  const got = figuresGate(d, biblio, geo);
   assert.ok(got.some(p => /^Nob: openbible:nob is not in the gazetteer/.test(p)), got.join("\n"));
   assert.ok(got.includes("A thing: work not in the bibliography: Nobody 2000"));
-  assert.deepEqual(gate({ ...fixture, places: [], timeline: [] }, biblio, null), [], "empty lists are no figures");
+  assert.deepEqual(figuresGate({ ...fixture, places: [], timeline: [] }, biblio, null), [], "empty lists are no figures");
+});
+
+test("figuresGate checks a two-reading week once against the union of its bibliographies, with no reading prefix", async () => {
+  const two = JSON.parse(await readFile(new URL("./fixtures/week-torah/sheet.json", import.meta.url), "utf8"));
+  const week = { ...two, timeline: [{ id: "flight", label: "David flees Saul", kind: "event", start: -1010, approx: true, works: ["McCarter 1980"] }] };
+  const union = await weekBibliography(week);
+  assert.ok(union.has("McCarter 1980"), "I Samuel.md is in the union");
+  const genesis = lib.parseBibliography(await readFile(new URL("../bibliography/Genesis.md", import.meta.url), "utf8").catch(() => ""));
+  assert.ok(!genesis.has("McCarter 1980"), "Genesis.md alone would not have it (the bug)");
+  assert.deepEqual(figuresGate(week, union, geoFix()), []);
+  assert.deepEqual(figuresGate({ ...week, timeline: [{ ...week.timeline[0], works: ["Nobody 2000"] }] }, union, geoFix()), ["David flees Saul: work not in the bibliography: Nobody 2000"]);
+});
+
+test("figuresGate: a malformed geo file is a problem, not a TypeError", () => {
+  const d = { ...fixture, places: [{ id: "gibeah", name: "Gibeah", role: "scene", source: "openbible:gibeah-1", lat: 31.823, lon: 35.231 }] };
+  assert.deepEqual(figuresGate(d, biblio, { ...geoFix(), gazetteer: {} }), ["data/geo/gazetteer.json is not a gazetteer"]);
+  assert.deepEqual(figuresGate(d, biblio, { ...geoFix(), basemap: {} }), ["data/geo/basemap.json is not a basemap"]);
 });
 
 import { fillTemplate } from "../scripts/build.mjs";

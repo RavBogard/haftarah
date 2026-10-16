@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFile, mkdir, copyFile } from "node:fs/promises";
+import { readFile, mkdir, copyFile, writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { join } from "node:path";
@@ -75,5 +75,21 @@ test("build.mjs passes geo in the page options only when the week has figures", 
     assert.ok(!/"geo":/.test(html["week-min"].sheet) && !/"geo":/.test(html["week-min"].trope));
     assert.match(html["week-figures"].sheet, /"geo":\{"basemap"/);
     assert.match(html["week-figures"].trope, /"geo":\{"basemap"/);
+  } finally { await iso.cleanup(); }
+});
+
+// The figures are the week's. A Torah-plus-haftarah week whose timeline cites McCarter (in I Samuel.md,
+// not the Torah's Genesis.md) is checked once against both bibliographies, so both sheets build with the figures.
+test("a two-reading week whose timeline cites the haftarah's bibliography builds both sheets with the figures", { timeout: 120_000 }, async () => {
+  const iso = await isolatedEnv();
+  try {
+    const dir = join(iso.home, "week-torah-figures");
+    await mkdir(dir);
+    const two = await load("week-torah"), fig = await load("week-figures");
+    assert.ok(fig.timeline.some(it => (it.works || []).includes("McCarter 1980")));
+    await writeFile(join(dir, "sheet.json"), JSON.stringify({ ...two, places: fig.places, mapRegion: fig.mapRegion, timeline: fig.timeline }));
+    const { stdout } = await run(process.execPath, [fileURLToPath(new URL("../scripts/build.mjs", import.meta.url)), dir, "--no-pdf"], { env: iso.env, cwd: fileURLToPath(new URL("..", import.meta.url)), maxBuffer: 1 << 24 });
+    assert.match(stdout, /sheet-torah\.html/);
+    for (const page of ["sheet.html", "sheet-torah.html"]) assert.match(await readFile(join(dir, page), "utf8"), /"geo":\{"basemap"/, page);
   } finally { await iso.cleanup(); }
 });

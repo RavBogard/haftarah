@@ -54,7 +54,7 @@ export function godLanguage(html) {
   return hits;
 }
 
-export function lint(data, { voices = {} } = {}) {
+export function lint(data, { voices = {}, basemap = null } = {}) {
   const errors = [], warnings = [], fixes = [];
   const err = (where, msg) => errors.push({ where, msg });
   const warn = (where, msg) => warnings.push({ where, msg });
@@ -122,6 +122,15 @@ export function lint(data, { voices = {} } = {}) {
   // ---- the figures: a crowded map, a label too long for its bar, a band taller than its space ----
   const places = Array.isArray(data.places) ? data.places : [];
   if (places.length > 12) warn("places", `${places.length} places; more than 12 labels crowd the map`);
+  // A place beyond the basemap is never drawn (the automatic region stops at the basemap's box), and a map
+  // with no place inside its frame draws nothing at all.
+  if (places.length && basemap) {
+    const located = places.filter(p => p && Number.isFinite(p.lat) && Number.isFinite(p.lon));
+    const inside = (p, b) => p.lon >= b[0] && p.lon <= b[2] && p.lat >= b[1] && p.lat <= b[3];
+    if (Array.isArray(basemap.box)) for (const p of located) if (!inside(p, basemap.box)) warn("places", `${p.name || p.id} lies outside the basemap and is left off the map`);
+    const frame = L.mapFrame(places, data.mapRegion ?? null, basemap);
+    if (!located.some(p => inside(p, frame))) warn("places", "places given but none inside the map");
+  }
   const timeline = Array.isArray(data.timeline) ? data.timeline : [];
   for (const it of timeline)
     if (it && typeof it.label === "string" && it.label.length > 28) warn(`timeline ${it.id}`, `label is ${it.label.length} characters; keep it under 28 so it fits its bar`);
@@ -153,14 +162,14 @@ export function entryCounts(reading) {
  * customs.entryCap a reading gets a warning with its count by register; the cap never stops a build.
  * With fix, the gloss fixes are written into `file` itself (each view shares its reading's glosses).
  */
-export function lintSheet(file, { voices = {}, fix = false, customs = null, only = null } = {}) {
+export function lintSheet(file, { voices = {}, fix = false, customs = null, only = null, basemap = null } = {}) {
   const all = L.readings(file).filter(r => (r.verses || []).length);
   const multi = all.length > 1;
   const out = { errors: [], warnings: [], fixes: [], counts: [] };
   for (const r of all) {
     if (only && !only.includes(r.id)) continue;
     const view = L.readingView(file, r.id);
-    const res = lint(view, { voices });
+    const res = lint(view, { voices, basemap });
     const tag = x => (multi ? { ...x, where: `${r.id}: ${x.where}` } : x);
     // readingView drops ids, so a missing one is seen here, on the reading's own entries.
     if (Number(file.schema) >= 3)
@@ -182,6 +191,12 @@ export async function loadVoices() {
   return JSON.parse(await readFile(join(ROOT, "template", "voices.json"), "utf8"));
 }
 
+/** data/geo/basemap.json (read only, no gazetteer) when the week has places, else null; a missing file is null (the gate reports it). */
+export async function loadBasemap(file, root = ROOT) {
+  if (!(Array.isArray(file.places) && file.places.length)) return null;
+  try { return JSON.parse(await readFile(join(root, "data", "geo", "basemap.json"), "utf8")); } catch { return null; }
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const dirArg = args.find((a, i) => !a.startsWith("--") && args[i - 1] !== "--customs");
@@ -192,7 +207,7 @@ async function main() {
   const fix = process.argv.includes("--fix");
   const ci = process.argv.indexOf("--customs");
   const customs = await loadCustoms(ci > 0 ? process.argv[ci + 1] : "crc");
-  const r = lintSheet(data, { voices: await loadVoices(), fix, customs });
+  const r = lintSheet(data, { voices: await loadVoices(), fix, customs, basemap: await loadBasemap(data) });
   for (const c of r.counts) console.log(`${c.reading}: ${c.total} entries (cap ${c.cap}): ${L.REGISTER_ORDER.map(k => `${k} ${c[k]}`).join(", ")}`);
   if (r.errors.length) console.error(`Lint errors:\n${formatLint(r.errors)}`);
   if (r.warnings.length) console.warn(`Lint warnings:\n${formatLint(r.warnings)}`);

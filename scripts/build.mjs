@@ -113,8 +113,8 @@ export function fillTemplate(tpl, vars) {
 
 // The citation checks. Status is optional and only "rejected" keeps an item off the page; Daniel
 // approves a sheet by printing it, so nothing here asks whether an item was approved. The figures
-// (places, timeline) need the geo data and the chronology table; an empty list is no figure.
-export function gate(data, biblio, geo = null) {
+// are the week's, not a reading's: figuresGate checks them once.
+export function gate(data, biblio) {
   const problems = [];
   const where = e => `${e.chapter ? e.chapter + ":" : ""}${e.verse} ${e.source}`;
   if (!data.haftarah?.incipit?.en) problems.push("incipit.en is empty");
@@ -124,11 +124,26 @@ export function gate(data, biblio, geo = null) {
     else if (!biblio) problems.push(`bibliography/${data.haftarah.book}.md is missing (needed by ${where(e)})`);
     else for (const k of e.works) if (!biblio.has(k)) problems.push(`work not in bibliography/${data.haftarah.book}.md: ${k} (${where(e)})`);
   }
-  if (data.places?.length || data.timeline?.length) {
-    if (!geo) problems.push("data/geo and data/chronology.json are needed for the figures (loadGeo failed)");
-    else problems.push(...placeProblems(data.places, geo.gazetteer, { region: data.mapRegion ?? null }), ...timelineProblems(data.timeline, geo.chronology, biblio));
-  }
   return problems;
+}
+
+// The figures (places, timeline) are the week's: checked once, with no reading's prefix, against every
+// bibliography the week's readings load (`biblio`, their union), and they need the geo data and the
+// chronology table; an empty list is no figure. `geoError` is why loadGeo failed, when it did.
+export function figuresGate(file, biblio, geo = null, geoError = null) {
+  if (!(file.places?.length || file.timeline?.length)) return [];
+  if (!geo) return [`data/geo and data/chronology.json are needed for the figures (loadGeo failed${geoError ? `: ${geoError.message || geoError}` : ""})`];
+  return [...placeProblems(file.places, geo.gazetteer, { region: file.mapRegion ?? null, basemap: geo.basemap }), ...timelineProblems(file.timeline, geo.chronology, biblio)];
+}
+
+/** The union of the bibliographies the week's readings load (bibliography/<book>.md), or null when none exists. */
+export async function weekBibliography(file, root = ROOT) {
+  let union = null;
+  const books = [...new Set(HaftarahLib.readings(file).map(r => HaftarahLib.readingView(file, r.id).haftarah?.book).filter(Boolean))];
+  for (const book of books) {
+    try { union = new Map([...(union || []), ...HaftarahLib.parseBibliography(await readFile(join(root, "bibliography", `${book}.md`), "utf8"))]); } catch {}
+  }
+  return union;
 }
 
 function run(cmd, args, okCodes = [0]) {
@@ -153,7 +168,8 @@ async function main() {
   let targets;
   try { targets = readingsToBuild(file, READING); } catch (err) { console.error(`Not built: ${err.message}`); process.exit(1); }
   const multi = HaftarahLib.readings(file).length > 1;
-  const geo = (file.places?.length || file.timeline?.length) ? await loadGeo().catch(() => null) : null;
+  let geoError = null;
+  const geo = (file.places?.length || file.timeline?.length) ? await loadGeo().catch(err => { geoError = err; return null; }) : null;
 
   // The citation gate for every reading built first: nothing is written while any of them fails.
   const builds = [], problems = [];
@@ -163,14 +179,15 @@ async function main() {
     data = t.kind === "torah" ? torahColophonData(data) : haftarahColophonData(data);
     let biblio = null;
     try { biblio = HaftarahLib.parseBibliography(await readFile(join(ROOT, "bibliography", `${data.haftarah.book}.md`), "utf8")); } catch {}
-    problems.push(...gate(data, biblio, geo).map(p => (multi ? `${t.id}: ${p}` : p)));
+    problems.push(...gate(data, biblio).map(p => (multi ? `${t.id}: ${p}` : p)));
     builds.push({ ...t, data });
   }
+  problems.push(...figuresGate(file, await weekBibliography(file), geo, geoError));
   if (problems.length) { console.error("Not built; fix these first:\n" + problems.map(x => "  - " + x).join("\n")); process.exit(1); }
 
   // Entry lint (scripts/lint.mjs): errors stop the build, warnings print and the build goes on.
   const voices = JSON.parse(await readFile(join(ROOT, "template", "voices.json"), "utf8"));
-  const linted = lintSheet(file, { voices, customs: await loadCustoms(CUSTOMS), only: targets.map(t => t.id) });
+  const linted = lintSheet(file, { voices, customs: await loadCustoms(CUSTOMS), only: targets.map(t => t.id), basemap: geo ? geo.basemap : null });
   if (linted.warnings.length) console.warn(`Lint warnings:\n${formatLint(linted.warnings)}`);
   if (linted.errors.length) {
     const fixable = linted.fixes.length ? "\n(node scripts/lint.mjs <week> --fix rewrites gloss lemmas to the verse's exact text)" : "";

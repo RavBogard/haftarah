@@ -246,7 +246,7 @@
   function figureNodes() {
     const places = Array.isArray(data.places) ? data.places : [], items = Array.isArray(data.timeline) ? data.timeline : [];
     if (!(places.length || items.length) || !opts.geo) return null;
-    const text = L.figureText(places, items, opts.geo.chronology, data.mapRegion || null);
+    const text = L.figureText(places, items, opts.geo.chronology, data.mapRegion || null, opts.geo.basemap);
     const figure = (cls, svg, t) => {
       const f = el("figure", `fig ${cls}`);
       f.innerHTML = svg + `<figcaption>${esc(t.caption)}</figcaption>`;

@@ -255,11 +255,23 @@ export function resolvePlaces(places, gazetteer) {
 export const KINDS = ["king", "empire", "prophet", "composition", "event"];
 export const REGION_NAMES = ["land", "near-east"];
 
-/** The gate's problems for a week's places: ids, roles, coordinates, sources; nothing is resolved here. */
-export function placeProblems(places, gazetteer, { region = null } = {}) {
+const isBox = b => Array.isArray(b) && b.length === 4 && b.every(Number.isFinite) && b[0] < b[2] && b[1] < b[3];
+/** A geo file that is not the shape its readers expect (a hand-edited or truncated file), as a gate message, or null. */
+function geoFileProblem(gazetteer, basemap) {
+  if (!(gazetteer && typeof gazetteer === "object" && Array.isArray(gazetteer.places) && gazetteer.places.every(p => p && typeof p === "object" && typeof p.slug === "string")))
+    return "data/geo/gazetteer.json is not a gazetteer";
+  if (basemap !== undefined && !(basemap && typeof basemap === "object" && isBox(basemap.box) && Array.isArray(basemap.land)))
+    return "data/geo/basemap.json is not a basemap";
+  return null;
+}
+
+/** The gate's problems for a week's places: ids, roles, coordinates, sources; nothing is resolved here.
+ *  `basemap`, when given, is checked for its shape as the gazetteer always is. */
+export function placeProblems(places, gazetteer, { region = null, basemap } = {}) {
   const out = [];
   if (places == null) return out;
   if (!Array.isArray(places)) return ["places must be a list"];
+  if (places.length) { const bad = geoFileProblem(gazetteer, basemap); if (bad) return [bad]; }
   const ids = new Set();
   for (const p of places) {
     const name = p && p.name ? p.name : (p && p.id) || "(unnamed place)";
@@ -281,7 +293,7 @@ export function placeProblems(places, gazetteer, { region = null } = {}) {
 /** Dates filled from the table; an item that cites the table takes its kind and (unless given) its label. */
 export function resolveTimeline(items, chronology) {
   return (items || []).map(it => {
-    const t = it.chronology && chronology && chronology.entries ? chronology.entries[it.chronology] : null;
+    const t = it.chronology && chronology && chronology.entries && Object.hasOwn(chronology.entries, it.chronology) ? chronology.entries[it.chronology] : null;
     const r = t ? { id: it.id, label: it.label || t.label, kind: t.kind, start: t.start, end: t.end, approx: !!t.approx }
       : { id: it.id, label: it.label || "", kind: it.kind, start: it.start, end: it.end == null ? it.start : it.end, approx: !!it.approx };
     if (it.works) r.works = it.works;
@@ -295,15 +307,20 @@ export function timelineProblems(items, chronology, biblio) {
   if (items == null) return out;
   if (!Array.isArray(items)) return ["timeline must be a list"];
   const ids = new Set();
+  // Only the table's own keys: "constructor" or "__proto__" is not an entry.
+  const entries = chronology && chronology.entries && typeof chronology.entries === "object" ? chronology.entries : null;
+  const entry = id => (entries && Object.hasOwn(entries, id) ? entries[id] : null);
   for (const it of items) {
     if (!it || typeof it !== "object") { out.push("a timeline item is not an object"); continue; }
-    const name = it.label || chronology?.entries?.[it.chronology]?.label || it.id || "(unnamed item)";   // the label it prints with
+    const name = it.label || entry(it.chronology)?.label || it.id || "(unnamed item)";   // the label it prints with
     if (!/^[a-z][a-z0-9-]*$/.test(it.id || "")) out.push(`${name}: id must be lowercase letters, digits and hyphens`);
     else if (ids.has(it.id)) out.push(`${name}: duplicate id ${it.id}`); else ids.add(it.id);
     if (it.chronology != null) {
+      const t = entry(it.chronology);
       if (!chronology) out.push(`${name}: data/chronology.json is missing`);
-      else if (!chronology.entries[it.chronology]) out.push(`${name}: ${it.chronology} is not in data/chronology.json`);
-      else if (it.kind != null && it.kind !== chronology.entries[it.chronology].kind) out.push(`${name}: kind ${it.kind} does not match the table's ${chronology.entries[it.chronology].kind}`);
+      else if (!t) out.push(`${name}: cites ${it.chronology}, not in the chronology table`);
+      else if (it.kind != null && it.kind !== t.kind) out.push(`${name}: kind ${it.kind} does not match the table's ${t.kind}`);
+      if (t && (it.start != null || it.end != null || it.approx != null)) out.push(`${name}: a table-cited item takes its dates from the table`);
       continue;
     }
     if (!KINDS.includes(it.kind)) out.push(`${name}: kind must be one of ${KINDS.join(", ")}`);

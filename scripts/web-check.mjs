@@ -170,7 +170,8 @@ async function main() {
       expect("a PDF link per reading", Number(a.pdfs) === order.length, a.pdfs);
       if (raw.places?.length || raw.timeline?.length) {
         expect("the figures are drawn", a.figures === [raw.places?.length && "map", raw.timeline?.length && "timeline"].filter(Boolean).join(","), a.figures);
-        expect("every place is on the map", Number(a["fig-places"]) === (raw.places || []).filter(p => p.role !== "empire").length, a["fig-places"]);
+        // Only the places inside the map's frame are drawn; the page reports how many those are (lib.js mapDots).
+        expect("every place inside the map is on it", Number(a["fig-places"]) === Number(a["fig-dots"]), `${a["fig-places"]} drawn, ${a["fig-dots"]} inside`);
         if (raw.places?.length) expect("the map is described", /^Map of /.test(a["fig-desc"] || ""), a["fig-desc"]);
         expect("the figures are labelled images", a["fig-labelled"] === "true", a["fig-labelled"]);
         if (raw.timeline?.length) {

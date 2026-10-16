@@ -64,6 +64,18 @@ test("renderFigures: nothing to draw builds no figure and credits nothing", asyn
   assert.equal(r.map, null);
   assert.equal(r.timeline, null);
   assert.equal(r.credit, "");
+  assert.equal(r.dots, 0);
+});
+
+test("renderFigures reports the dots the map draws: a place beyond the basemap is not one of them", async () => {
+  const tarshish = { id: "tarshish", name: "Tarshish", role: "scene", lat: 37.0, lon: -6.0, approved: true };
+  const both = await renderFigures({ data: week, L, fetchImpl: fetcher().fetchImpl, doc });
+  assert.equal(both.dots, (both.map.innerHTML.match(/<circle class="place /g) || []).length);
+  const far = await renderFigures({ data: { places: [...week.places.filter(p => p.role !== "empire"), tarshish] }, L, fetchImpl: fetcher().fetchImpl, doc });
+  const drawn = (far.map.innerHTML.match(/<circle class="place /g) || []).length;
+  assert.equal(far.dots, drawn);
+  assert.equal(drawn, 4, "the four Judean places, not Tarshish");
+  assert.match(far.map.innerHTML, /Outside this map: Tarshish\./);
 });
 
 test("renderFigures: a failed fetch rejects with the address and status", async () => {

@@ -217,6 +217,65 @@ test("names and titles are escaped: no markup, no handlers, no styles get throug
   }
 });
 
+test("hostile ids and kinds are escaped too: the figure's id, an item's id and an item's kind", () => {
+  const hostile = '"><img onerror=x>';
+  const svgs = [
+    L.mapSvg([{ id: hostile, name: "Gibeah", role: "scene", lat: 31.8, lon: 35.2 }], null, basemap, { id: hostile }),
+    L.timelineSvg([{ id: hostile, label: "A", kind: hostile, start: -900, end: -800 }, { id: "e", label: "B", kind: "event", start: -850 }], chron, { id: hostile }),
+  ];
+  for (const svg of svgs) {
+    // the hostile text survives only inside quoted attribute values, escaped: no quote closes an attribute early, no tag opens
+    assert.ok(!svg.includes(hostile) && !/<img/.test(svg) && !/style=/.test(svg), svg);
+    assert.equal((svg.match(/"/g) || []).length % 2, 0);
+    assert.match(svg, /aria-labelledby="&quot;&gt;&lt;img onerror=x&gt;-title &quot;&gt;&lt;img onerror=x&gt;-desc"/);
+    assert.match(svg, /<title id="&quot;&gt;&lt;img onerror=x&gt;-title">/);
+  }
+  assert.match(svgs[1], /class="tl-bar &quot;&gt;&lt;img onerror=x&gt;"/);
+});
+
+test("mapRegion: with a basemap the automatic region stays inside its box; a place beyond it is left off and named outside; an explicit region is not clamped", () => {
+  const bm = { ...basemap, box: [8, 12, 60, 42] };
+  const joppa = { id: "joppa", name: "Joppa", role: "scene", lat: 32.05, lon: 34.75 }, tarshish = { id: "tarshish", name: "Tarshish", role: "scene", lat: 37.0, lon: -6.0 };
+  const pl = [joppa, { id: "nineveh", name: "Nineveh", role: "context", lat: 36.359, lon: 43.153 }, tarshish];
+  const frame = L.mapFrame(pl, null, bm), e = 1e-9;
+  assert.ok(frame[0] >= 8 - e && frame[1] >= 12 - e && frame[2] <= 60 + e && frame[3] <= 42 + e, frame.join(","));
+  const lat0 = (frame[1] + frame[3]) / 2;
+  assert.ok(Math.abs(((frame[2] - frame[0]) * Math.cos(lat0 * Math.PI / 180)) / (frame[3] - frame[1]) - 1.25) < 1e-9, "still 5:4");
+  const t = L.figureText(pl, [], chron, null, bm);
+  assert.match(t.map.desc, /^Map of the area of Joppa: /);
+  assert.match(t.map.desc, /Outside this map: Tarshish\./);
+  const svg = L.mapSvg(pl, null, bm);
+  assert.ok(/>Joppa<\/text>/.test(svg) && !/Tarshish/.test(svg.replace(/<desc[^]*<\/desc>/, "")), "Tarshish is not drawn");
+  assert.deepEqual(L.mapDots(pl, null, bm).map(p => p.id), ["joppa", "nineveh"]);
+  // without a box the old behaviour: the frame reaches Tarshish
+  assert.ok(L.mapFrame(pl, null, null)[0] < -6);
+  // an explicit region is the author's: drawn as given, even beyond the basemap
+  assert.deepEqual(L.mapFrame(pl, [-10, 30, 40, 45], bm)[0] < 8, true);
+  // inside the box nothing moves
+  assert.deepEqual(L.mapRegion(places, null, bm.box), L.mapRegion(places, null));
+  const ne = [...places, { id: "n", name: "Nineveh", role: "context", lat: 36.359, lon: 43.153 }];
+  assert.deepEqual(L.mapRegion(ne, null, bm.box), L.mapRegion(ne, null));
+});
+
+test("timelineSvg ticks: the last label stays inside the frame and crowded ticks thin out", () => {
+  const tickOf = svg => [...svg.matchAll(/<text class="tl-tick" x="([\d.]+)" y="[\d.]+" font-size="18" text-anchor="(middle|end)">([^<]*)<\/text>/g)].map(m => ({ x: +m[1], anchor: m[2], text: m[3] }));
+  const spans = ts => ts.map(t => { const w = 0.56 * 18 * t.text.length; return t.anchor === "end" ? [t.x - w, t.x] : [t.x - w / 2, t.x + w / 2]; });
+  for (const list of [
+    [{ id: "f", label: "Fall", kind: "event", start: -586, works: ["x"] }, { id: "t", label: "Temple", kind: "event", start: 70, works: ["x"] }],
+    [{ id: "a", label: "Early", kind: "composition", start: -3000, end: -2900, works: ["x"] }, { id: "b", label: "Late", kind: "event", start: 0, works: ["x"] }],
+  ]) {
+    const ticks = tickOf(L.timelineSvg(list, chron));
+    assert.ok(ticks.length >= 3, JSON.stringify(ticks));
+    const s = spans(ticks);
+    assert.ok(s.every(([, b]) => b <= 1000), "no tick label passes x = 1000: " + JSON.stringify(ticks));
+    for (let i = 1; i < s.length; i++) assert.ok(s[i][0] >= s[i - 1][1], `ticks ${ticks[i - 1].text} and ${ticks[i].text} overlap`);
+  }
+  const long = tickOf(L.timelineSvg([{ id: "a", label: "Early", kind: "composition", start: -3000, end: -2900, works: ["x"] }, { id: "b", label: "Late", kind: "event", start: 0, works: ["x"] }], chron));
+  assert.ok(long.length < 30, `thinned: ${long.length} ticks`);
+  const ce = tickOf(L.timelineSvg([{ id: "f", label: "Fall", kind: "event", start: -586, works: ["x"] }, { id: "t", label: "Temple", kind: "event", start: 70, works: ["x"] }], chron));
+  assert.equal(ce[ce.length - 1].anchor, "end", "the CE label at the right edge is anchored at its end");
+});
+
 test("timelineSvg: bars that touch in a row (Saul then David) part by 3 units; every text prints at 18 units (9pt at 7.15in)", () => {
   const svg = L.timelineSvg(items, chron);
   const kings = [...svg.matchAll(/<rect class="tl-bar king[^"]*" x="([\d.]+)" y="([\d.]+)" width="([\d.]+)"/g)].map(m => ({ x0: +m[1], y: +m[2], x1: +m[1] + +m[3] }));

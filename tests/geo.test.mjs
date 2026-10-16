@@ -6,6 +6,8 @@ import { makeGeodata } from "../tools/make-geodata.mjs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createRequire } from "node:module";
+const L = createRequire(import.meta.url)("../template/lib.js");
 
 test("simplify keeps the ends and drops points within the tolerance; a ring stays closed", () => {
   assert.deepEqual(simplify([[0, 0], [1, 0.001], [2, 0]], 0.01), [[0, 0], [2, 0]]);
@@ -205,13 +207,40 @@ test("timelineProblems and resolveTimeline: table keys fill dates; inline items 
     { id: "e2", label: "Later", kind: "event", start: -700, end: -800, works: ["McCarter 1980"] },
     { id: "david", chronology: "david", kind: "prophet" },
   ], chron, biblio), [
-    "x: nobody is not in data/chronology.json",
+    "x: cites nobody, not in the chronology table",
     "Saul: a king cites a chronology key (chronology: \"<id>\"); dates are never entered by hand",
     "Saul: an event or composition names its works from the bibliography",
     "Something: work not in the bibliography: Nobody 1999",
     "Later: end must be a whole year at or after start",
     "David: kind prophet does not match the table's king",
   ]);
+});
+
+test("timelineProblems and resolveTimeline: only the table's own keys count; a table without entries does not throw", () => {
+  const proto = [{ id: "constructor", chronology: "constructor" }, { id: "proto", chronology: "__proto__" }, { id: "tostring", chronology: "toString" }];
+  assert.deepEqual(timelineProblems(proto, chron, biblio), [
+    "constructor: cites constructor, not in the chronology table",
+    "proto: cites __proto__, not in the chronology table",
+    "tostring: cites toString, not in the chronology table",
+  ]);
+  assert.deepEqual(timelineProblems([{ id: "david", chronology: "david" }], {}, biblio), ["david: cites david, not in the chronology table"]);
+  assert.deepEqual(resolveTimeline(proto, chron).map(r => [r.kind, r.start]), [[undefined, undefined], [undefined, undefined], [undefined, undefined]], "never Object.prototype's members");
+  assert.deepEqual(resolveTimeline(proto, chron), L.timelineItems(proto, chron));
+});
+
+test("timelineProblems: a table-cited item that also carries dates is named", () => {
+  for (const extra of [{ start: -1000 }, { end: -900 }, { approx: true }])
+    assert.deepEqual(timelineProblems([{ id: "david", chronology: "david", ...extra }], chron, biblio), ["David: a table-cited item takes its dates from the table"]);
+});
+
+test("placeProblems: a gazetteer or basemap that is not the expected shape is named, never a TypeError", () => {
+  const p = [{ id: "gibeah", name: "Gibeah", role: "scene", source: "openbible:gibeah-1", lat: 31.823, lon: 35.231 }];
+  assert.deepEqual(placeProblems(p, {}), ["data/geo/gazetteer.json is not a gazetteer"]);
+  assert.deepEqual(placeProblems(p, null), ["data/geo/gazetteer.json is not a gazetteer"]);
+  assert.deepEqual(placeProblems(p, { places: [null] }), ["data/geo/gazetteer.json is not a gazetteer"]);
+  assert.deepEqual(placeProblems(p, gaz, { basemap: {} }), ["data/geo/basemap.json is not a basemap"]);
+  assert.deepEqual(placeProblems(p, gaz, { basemap: { box: [8, 12, 60, 42], land: [] } }), []);
+  assert.deepEqual(placeProblems([], {}), [], "no places, no need for the gazetteer");
 });
 
 test("loadGeo on the repo returns the basemap's land, a gazetteer of over 1,000 places, and the chronology table", async () => {

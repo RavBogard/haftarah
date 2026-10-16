@@ -380,7 +380,7 @@ export async function run() {
     if (figs.map) { opening.classList.add("with-map"); opening.append(figs.map); }   // after .setting, or after the calendar paragraphs
     if (figs.timeline) opening.after(figs.timeline);
     if (figs.credit) $("footAttr").textContent += " " + figs.credit;
-    figuresSeen = { status: [figs.map && "map", figs.timeline && "timeline"].filter(Boolean).join(",") };
+    figuresSeen = { status: [figs.map && "map", figs.timeline && "timeline"].filter(Boolean).join(","), dots: figs.dots || 0 };
     if (!(location.hash && goToHash()) && scrollY > 0) scrollBy(0, front.getBoundingClientRect().height - before);
     sync();
   });
@@ -575,13 +575,14 @@ async function runCheck(api, L) {
   // The figures: what was drawn, the places on the map, the map's description, the footer's credit, the labelling.
   h.dataset.checkFigures = figuresSeen.status;
   h.dataset.checkFigPlaces = String(document.querySelectorAll("#front .place").length);
+  h.dataset.checkFigDots = String(figuresSeen.dots || 0);   // the places inside the map's frame, as lib.js fitted it
   h.dataset.checkFigDesc = (document.querySelector("#front .map-svg desc") || {}).textContent || "";
   const footText = document.getElementById("footAttr").textContent;
   h.dataset.checkFigCredit = [/OpenBible/.test(footText) && "map", /Galil/.test(footText) && "dates"].filter(Boolean).join(",");
   const scroller = document.querySelector("#front .fig-timeline > .fig-scroll");
   h.dataset.checkFigScroll = scroller ? [scroller.getAttribute("role"), scroller.getAttribute("tabindex"), scroller.getAttribute("aria-label")].join("|") : "none";
   h.dataset.checkFigScrolls = scroller ? String(scroller.scrollWidth > scroller.clientWidth + 1) : "none";
-  h.dataset.checkFigLabelled =String([...document.querySelectorAll("#front .fig-svg")].every(s => s.getAttribute("role") === "img"
+  h.dataset.checkFigLabelled = String([...document.querySelectorAll("#front .fig-svg")].every(s => s.getAttribute("role") === "img"
     && (s.getAttribute("aria-labelledby") || "").split(" ").every(id => id && document.getElementById(id) && s.contains(document.getElementById(id)))));
   const priorLink = document.querySelector("#front a.prior");
   h.dataset.checkPrior = priorLink ? priorLink.getAttribute("href") : "";
