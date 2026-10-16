@@ -67,6 +67,44 @@ test("GET and DELETE are 405; a body over MAX_BODY is 413; a batch is answered a
   assert.deepEqual(b.map(x => x.id), [1, 2]);
 });
 
+// Fix round 1: every result passes the guards, and nothing escapes the transport as a 500.
+const more = [
+  { name: "leakThrow", description: "Throws a secret", inputSchema: { type: "object", properties: {} }, annotations: {}, handler: async (_, ctx) => { throw new Error(`token ${ctx.config.cronSecret} rejected`); } },
+  { name: "nothing", description: "Returns undefined", inputSchema: { type: "object", properties: {} }, annotations: {}, handler: async () => undefined },
+  { name: "leakContent", description: "Content with a secret", inputSchema: { type: "object", properties: {} }, annotations: {}, handler: async (_, ctx) => ({ content: [{ type: "text", text: ctx.config.cronSecret }] }) },
+];
+const postWith = (o, body) => handleMcp(new Request("https://haftarah.vercel.app/api/mcp", { method: "POST", headers: { "content-type": "application/json" }, body: typeof body === "string" ? body : JSON.stringify(body) }), o);
+const opts2 = { ...opts, tools: [...tools, ...more] };
+
+test("a thrown error carrying a credential, and pass-through content carrying one, are refused without a trace of it", async () => {
+  for (const name of ["leakThrow", "leakContent"]) {
+    const r = await postWith(opts2, rpc("tools/call", { name, arguments: {} }));
+    assert.equal(r.status, 200);
+    const raw = await r.text();
+    assert.ok(!raw.includes("cron-secret-value"), name);
+    const j = JSON.parse(raw);
+    assert.equal(j.result.isError, true); assert.equal(j.result.content[0].text, "a credential would have left the server in a result; refused");
+  }
+});
+
+test("a handler returning undefined answers null text; initialize with params null works; a broken tools value is -32603 without its message", async () => {
+  const u = await (await postWith(opts2, rpc("tools/call", { name: "nothing", arguments: {} }))).json();
+  assert.deepEqual(u.result, { content: [{ type: "text", text: "null" }] });
+  const i = await postWith(opts2, rpc("initialize", null));
+  assert.equal(i.status, 200); assert.equal((await i.json()).result.protocolVersion, "2025-06-18");
+  const c = await postWith(opts2, rpc("tools/call", null));
+  assert.equal(c.status, 200); assert.equal((await c.json()).error.code, -32602);
+  const bad = await postWith({ ...opts, tools: "not a list" }, rpc("tools/list", {}, 9));
+  assert.equal(bad.status, 200);
+  assert.deepEqual(await bad.json(), { jsonrpc: "2.0", id: 9, error: { code: -32603, message: "Internal error" } });
+});
+
+test("an empty batch is an invalid request with id null", async () => {
+  const r = await postWith(opts, "[]");
+  assert.equal(r.status, 200);
+  assert.deepEqual(await r.json(), { jsonrpc: "2.0", id: null, error: { code: -32600, message: "Invalid Request" } });
+});
+
 test("textResult and errorResult shapes", () => {
   assert.deepEqual(textResult({ a: 1 }), { content: [{ type: "text", text: JSON.stringify({ a: 1 }, null, 1) }] });
   assert.deepEqual(errorResult("no"), { content: [{ type: "text", text: "no" }], isError: true });

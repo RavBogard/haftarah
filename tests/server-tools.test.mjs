@@ -72,6 +72,28 @@ test("find_past_sheets: by parashah, by book, by overlapping ref; joined with th
   } finally { await rm(workDir, { recursive: true, force: true }); }
 });
 
+test("find_past_sheets: an en-dashed ref finds the week; the limit is clamped to 1..100", async () => {
+  const { ctx, workDir } = await ctxWith();
+  try {
+    assert.deepEqual((await call("find_past_sheets", { ref: "Isaiah 54:10–54:17" }, ctx)).map(r => r.slug), ["2025-10-25-noach"]);
+    assert.equal((await call("find_past_sheets", { book: "Isaiah", limit: 0 }, ctx)).length, 1);
+    assert.equal((await call("find_past_sheets", { book: "Isaiah", limit: -3 }, ctx)).length, 1);
+    assert.equal((await call("find_past_sheets", { book: "Isaiah", limit: 1000 }, ctx)).length, 2);
+  } finally { await rm(workDir, { recursive: true, force: true }); }
+});
+
+test("get_calendar: an impossible date is refused before Hebcal is asked; a clock in milliseconds works", async () => {
+  const urls = [];
+  const inner = net();
+  const { ctx, workDir } = await ctxWith(new MemoryStore(), { fetchImpl: async (url, o) => { urls.push(String(url)); return inner(url, o); } });
+  try {
+    await assert.rejects(call("get_calendar", { date: "2026-02-30" }, ctx), /2026-02-30 is not a date/);
+    assert.equal(urls.length, 0, "Hebcal was not asked");
+    const r = await call("get_calendar", {}, { ...ctx, now: () => Date.parse("2026-10-15T12:00:00Z") });
+    assert.equal(r.shabbat.civil, "2026-10-17");
+  } finally { await rm(workDir, { recursive: true, force: true }); }
+});
+
 test("get_sheet: parts, version and status, counts by register, lint; a slug the store lacks is an error", async () => {
   const { ctx, store, workDir } = await ctxWith();
   try {

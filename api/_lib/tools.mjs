@@ -1,7 +1,6 @@
 // api/_lib/tools.mjs — the fourteen tools: what each takes, what it returns, and how it uses the store and
 // the scripts. Pure of process.env and process.argv: everything arrives in ctx. The read tools here; the
 // writing, building and delivering tools in Tasks 4 and 5 of the plan are added to TOOLS in table order.
-import { readFile, writeFile, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createRequire } from "node:module";
@@ -12,9 +11,9 @@ import { defaultHaftarahFor } from "../../scripts/rites.mjs";
 import { lintSheet, entryCounts, loadVoices, loadBasemap } from "../../scripts/lint.mjs";
 import { loadCustoms } from "../../scripts/customs.mjs";
 import { parashahKeysOf } from "../../site/app/parashot.js";
-import { pullWeek, pushWeek, readJson, writeJson, readStatus, writeStatus, listWeeks } from "./store.mjs";
+import { pullWeek, readJson, readStatus, writeStatus } from "./store.mjs";
 import { sliceTexts } from "./texts.mjs";
-import { SLUG_SOURCE } from "../../site/app/contract.js";
+import { SLUG, SLUG_SOURCE } from "../../site/app/contract.js";
 const L = createRequire(import.meta.url)("../../template/lib.js");
 export const ROOT = fileURLToPath(new URL("../../", import.meta.url));
 
@@ -72,7 +71,8 @@ export const getCalendar = defineTool({
   annotations: { readOnlyHint: true },
   async handler({ date = null }, ctx) {
     const customs = await customsOf(ctx);
-    const d = date || nextShabbat(ctx.now());
+    const d = date || nextShabbat(new Date(ctx.now()));   // now() may return a Date or milliseconds
+    if (Number.isNaN(Date.parse(d + "T12:00:00Z")) || new Date(d + "T12:00:00Z").toISOString().slice(0, 10) !== d) throw new Error(`${d} is not a date`);
     const g = get(ctx);
     const item = ((await g(leyningUrl(d, customs))).items || [])[0];
     if (!item) throw new Error(`Hebcal has no reading for ${d}; is it a Shabbat?`);
@@ -81,7 +81,10 @@ export const getCalendar = defineTool({
     const dflt = defaultHaftarahFor(name, customs.haftarahRite);
     const after = new Date(d + "T12:00:00Z"); after.setUTCDate(after.getUTCDate() + 7);
     const next = after.toISOString().slice(0, 10);
-    const weeks = (await listWeeks(ctx.store)).filter(w => w.slug.startsWith(d) || w.slug.startsWith(next)).map(w => ({ slug: w.slug, status: w.status?.status || null, version: w.status?.version || null }));
+    // One listing; status.json read only for this Shabbat's and next Shabbat's weeks.
+    const slugs = [...new Set((await ctx.store.list("weeks/")).map(b => b.pathname.split("/")[1]).filter(s => SLUG.test(s || "") && (s.startsWith(d) || s.startsWith(next))))].sort().reverse();
+    const weeks = [];
+    for (const slug of slugs) { const st = await readStatus(ctx.store, slug); weeks.push({ slug, status: st?.status || null, version: st?.version || null }); }
     return { shabbat: { civil: d, hebrewEn: `${conv.hd} ${conv.hm} ${conv.hy}` }, parashah: { en: name, he: item.name?.he || "", ref: item.summary || "" }, haftarah: { ref: item.haftara || null, special, defaultHaftarah: special && dflt !== item.haftara ? dflt : null }, aliyot: aliyotLines(leyningOf(item)), nextWeek: await nextWeekFor(d, customs, g), slug: weekSlug(d, name, special), weeks, customsToConfirm: customs.toConfirm || [] };
   },
 });
@@ -94,9 +97,14 @@ export const findPastSheets = defineTool({
   async handler({ parashah = null, book = null, ref = null, limit = 10 }, ctx) {
     const idx = await get(ctx)(`${ctx.config.site}/data/index.json`);
     const keys = parashah ? parashahKeysOf(parashah) : null;
-    const statuses = new Map((await listWeeks(ctx.store)).map(w => [w.slug, w.status]));
-    return (idx.weeks || []).filter(r => (!keys || (r.parashahKeys || []).some(k => keys.includes(k))) && (!book || (r.readings || [{ book: r.book }]).some(x => (x.book || "").toLowerCase() === book.toLowerCase())) && (!ref || (r.readings || [{ ref: r.ref }]).some(x => overlaps(String(x.ref || "").replace(/–/g, "-"), ref))))
-      .slice(0, limit).map(r => ({ slug: r.slug, civil: r.civil, hebrewEn: r.hebrewEn, parashah: r.parashah, special: r.special || null, readings: r.readings || [{ id: "haftarah", kind: "haftarah", ref: r.ref, book: r.book }], page: `${ctx.config.site}/${r.slug}`, pdf: `${ctx.config.site}/data/${r.pdf}`, pdfTorah: r.pdfTorah ? `${ctx.config.site}/data/${r.pdfTorah}` : null, status: statuses.get(r.slug)?.status || null }));
+    const want = ref ? ref.replace(/–/g, "-") : null;
+    const n = Math.min(100, Math.max(1, Number.isFinite(Number(limit)) ? Math.floor(Number(limit)) : 10));   // 0 or less is one row
+    const rows = (idx.weeks || []).filter(r => (!keys || (r.parashahKeys || []).some(k => keys.includes(k))) && (!book || (r.readings || [{ book: r.book }]).some(x => (x.book || "").toLowerCase() === book.toLowerCase())) && (!ref || (r.readings || [{ ref: r.ref }]).some(x => overlaps(String(x.ref || "").replace(/–/g, "-"), want)))).slice(0, n);
+    // status.json read only for the rows returned; a row whose slug is not a week slug has none.
+    const statusOf = async slug => { try { return (await readStatus(ctx.store, slug))?.status || null; } catch { return null; } };
+    const out = [];
+    for (const r of rows) out.push({ slug: r.slug, civil: r.civil, hebrewEn: r.hebrewEn, parashah: r.parashah, special: r.special || null, readings: r.readings || [{ id: "haftarah", kind: "haftarah", ref: r.ref, book: r.book }], page: `${ctx.config.site}/${r.slug}`, pdf: `${ctx.config.site}/data/${r.pdf}`, pdfTorah: r.pdfTorah ? `${ctx.config.site}/data/${r.pdfTorah}` : null, status: await statusOf(r.slug) });
+    return out;
   },
 });
 
@@ -134,7 +142,7 @@ export const getTexts = defineTool({
     const file = reading === "torah" ? "texts-torah.json" : "texts.json";
     const texts = await readJson(ctx.store, `weeks/${slug}/${file}`);
     if (!texts) throw new Error(`no ${file} for ${slug}; run fetch_texts for the ${reading} first`);
-    return sliceTexts(texts, { source, kind, chapter, verse }, cursor, 100_000);
+    return sliceTexts(texts, { source, kind, chapter, verse }, cursor, 90_000);   // under MAX_RESULT_CHARS, measured as the transport prints it
   },
 });
 
