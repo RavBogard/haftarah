@@ -1,7 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
-import { buildDigest, classify, opening, englishOpening, alsoLine, digestInput, weekDigest } from "../scripts/digest.mjs";
+import { readFile, mkdtemp, rm, cp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { buildDigest, classify, opening, englishOpening, alsoLine, digestInput, weekDigest, writeDigest } from "../scripts/digest.mjs";
 import { makeWeekTorah } from "./helpers/makeWeekTorah.mjs";
 import { migrate3 } from "../scripts/migrate.mjs";
 
@@ -129,4 +131,15 @@ test("weekDigest puts Last time after the Torah calendar and before the readings
   const md = weekDigest({ sheet: two, readings: { haftarah: { texts, candidates } }, prior: { slug: null, parashahKey: "bereshit", searched: "web library" } });
   assert.ok(md.startsWith("# Last time\n\nNo earlier sheet for bereshit in the web library.\n"));
   assert.ok(md.indexOf(`# ${texts.ref}: digest`) > 0);
+});
+
+test("writeDigest writes digest.md beside the texts and returns the markdown", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "haftarah-digest-"));
+  try {
+    await cp(new URL("./fixtures/week-min/", import.meta.url), dir, { recursive: true });
+    await cp(new URL("./fixtures/digest/", import.meta.url), dir, { recursive: true });
+    const md = await writeDigest(dir);
+    assert.ok(md.startsWith("# "));
+    assert.equal(await readFile(join(dir, "digest.md"), "utf8"), md);
+  } finally { await rm(dir, { recursive: true, force: true }); }
 });

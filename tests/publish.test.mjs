@@ -7,7 +7,7 @@ import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { migrate3 } from "../scripts/migrate.mjs";
 import { makeWeekTorah } from "./helpers/makeWeekTorah.mjs";
-import { cleanSheet, indexEntry, upsertIndex, loadWebConfig, storeIdFromToken, publish, STORE_ID, PUBLISHED_FIELDS, listBlobs, weeksInListing, reindex, STORE_ORIGIN, sideManifestFrom, buildSide, backfillSide, parseArgs } from "../scripts/publish.mjs";
+import { cleanSheet, indexEntry, upsertIndex, loadWebConfig, storeIdFromToken, publish, STORE_ID, PUBLISHED_FIELDS, listBlobs, weeksInListing, reindex, STORE_ORIGIN, sideManifestFrom, buildSide, backfillSide, parseArgs, putBlob, getBlob, blobOrigin } from "../scripts/publish.mjs";
 
 const TOKEN = "vercel_blob_rw_wOGdAqvPmTFjKrmY_s3cr3tpart";
 const STORE = "https://wogdaqvpmtfjkrmy.public.blob.vercel-storage.com";
@@ -599,4 +599,23 @@ test("backfillSide: a published week gets its side files from the store's sheet,
   assert.equal(row.published, "2026-10-15T20:11:03Z");
   assert.deepEqual([row.hasWords, row.hasLinks, row.translations], [true, true, ["jps1985", "koren"]]);
   await assert.rejects(backfillSide("2026-10-03-haazinu", { config: { token: TOKEN }, fetchImpl: api.fetchImpl, log: () => {}, builders: fakeBuilders() }), /publish --side: 2026-10-03-haazinu is not published/);
+});
+
+test("putBlob sends x-vercel-blob-access private when asked, public by default; blobOrigin and getBlob read a private blob with the bearer", async () => {
+  const seen = [];
+  const token = "vercel_blob_rw_ABCDEFGHIJKLMNOP_secret";
+  const fetchImpl = async (url, init) => { seen.push({ url: String(url), headers: init.headers, method: init.method }); return new Response(JSON.stringify({ url: "https://abcdefghijklmnop.private.blob.vercel-storage.com/weeks/x/sheet.json", pathname: "weeks/x/sheet.json" }), { status: 200 }); };
+  await putBlob({ pathname: "weeks/x/sheet.json", body: "{}", contentType: "application/json", maxAge: 0, token, fetchImpl, access: "private" });
+  assert.equal(seen[0].headers["x-vercel-blob-access"], "private");
+  await putBlob({ pathname: "weeks/x/sheet.json", body: "{}", contentType: "application/json", maxAge: 0, token, fetchImpl });
+  assert.equal(seen[1].headers["x-vercel-blob-access"], "public");
+  assert.equal(blobOrigin(token, "private"), "https://abcdefghijklmnop.private.blob.vercel-storage.com");
+  assert.equal(blobOrigin(token, "public"), "https://abcdefghijklmnop.public.blob.vercel-storage.com");
+  const got = await getBlob({ pathname: "weeks/x/sheet.json", token, access: "private", fetchImpl: async (url, init) => { seen.push({ url: String(url), headers: init.headers }); return new Response("{\"a\":1}", { status: 200 }); } });
+  assert.ok(seen[2].url.startsWith("https://abcdefghijklmnop.private.blob.vercel-storage.com/weeks/x/sheet.json?"));
+  assert.equal(seen[2].headers.authorization, `Bearer ${token}`);
+  assert.equal(await got.text(), "{\"a\":1}");
+  const missing = await getBlob({ pathname: "weeks/x/none.json", token, access: "private", fetchImpl: async () => new Response("", { status: 404 }) });
+  assert.equal(missing, null, "a 404 is null, not an error");
+  await assert.rejects(getBlob({ pathname: "weeks/x/sheet.json", token, access: "private", fetchImpl: async () => new Response("", { status: 500 }) }), err => /HTTP 500/.test(err.message) && !err.message.includes("secret"));
 });

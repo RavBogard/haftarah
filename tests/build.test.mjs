@@ -1,12 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFile, mkdir, copyFile, writeFile } from "node:fs/promises";
+import { readFile, mkdir, copyFile, writeFile, mkdtemp, rm, cp } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { join } from "node:path";
+import { join, relative, basename, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isolatedEnv } from "./helpers/isolatedEnv.mjs";
-import { readingsToBuild, torahColophonData, haftarahColophonData } from "../scripts/build.mjs";
+import { readingsToBuild, torahColophonData, haftarahColophonData, buildWeek, BuildRefused, browserRecord } from "../scripts/build.mjs";
 import { makeWeekTorah } from "./helpers/makeWeekTorah.mjs";
 
 const run = promisify(execFile);
@@ -92,4 +94,58 @@ test("a two-reading week whose timeline cites the haftarah's bibliography builds
     assert.match(stdout, /sheet-torah\.html/);
     for (const page of ["sheet.html", "sheet-torah.html"]) assert.match(await readFile(join(dir, page), "utf8"), /"geo":\{"basemap"/, page);
   } finally { await iso.cleanup(); }
+});
+
+const toPosix = p => p.split(sep).join("/");
+
+test("buildWeek writes the HTML for every reading from the repo template and returns what it built; pdf false needs no browser", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "haftarah-build-"));
+  try {
+    await cp(new URL("./fixtures/week-torah/", import.meta.url), dir, { recursive: true });
+    const lines = [];
+    const r = await buildWeek(dir, { pdf: false, log: m => lines.push(m), warn: m => lines.push(m) });
+    assert.deepEqual(r.builds.map(b => [b.kind, basename(b.html)]), [["torah", "sheet-torah.html"], ["haftarah", "sheet.html"]]);
+    assert.equal(r.builds[0].pdf, null);
+    const html = await readFile(r.builds[1].html, "utf8");
+    assert.ok(/href="[^"]*template\/sheet\.css"/.test(html), "the HTML links the repo template by relative path");
+    assert.ok(lines.some(l => l.startsWith("Wrote ") && l.includes("sheet.html")));
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test("buildWeek refuses on a gate problem with BuildRefused naming it, and writes nothing", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "haftarah-build-"));
+  try {
+    await cp(new URL("./fixtures/week-min/", import.meta.url), dir, { recursive: true });
+    const sheet = JSON.parse(await readFile(join(dir, "sheet.json"), "utf8"));
+    sheet.commentary = [{ verse: 1, register: "traditional", source: "Rashi", text: "x" }];   // no sourceRef
+    await writeFile(join(dir, "sheet.json"), JSON.stringify(sheet));
+    await rm(join(dir, "sheet.html"), { force: true });
+    await assert.rejects(buildWeek(dir, { pdf: false, log: () => {}, warn: () => {} }), err => err instanceof BuildRefused && /no Sefaria ref: 1 Rashi/.test(err.problems.join("\n")));
+    assert.ok(!existsSync(join(dir, "sheet.html")));
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test("buildWeek with templateDir links that folder instead of the repo's template", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "haftarah-build-"));
+  const tpl = await mkdtemp(join(tmpdir(), "haftarah-tpl-"));
+  try {
+    await cp(new URL("./fixtures/week-min/", import.meta.url), dir, { recursive: true });
+    await cp(new URL("../template/", import.meta.url), tpl, { recursive: true });
+    const r = await buildWeek(dir, { pdf: false, templateDir: tpl, log: () => {}, warn: () => {} });
+    const html = await readFile(r.builds[0].html, "utf8");
+    assert.ok(html.includes(toPosix(relative(dir, join(tpl, "sheet.css")))), "the stylesheet path points into templateDir");
+  } finally { await rm(dir, { recursive: true, force: true }); await rm(tpl, { recursive: true, force: true }); }
+});
+
+test("browserRecord, and pdf true with browser null: the no-browser line, HTML only", async () => {
+  assert.deepEqual(browserRecord("/x/chrome", ["--a"]), { path: "/x/chrome", extraArgs: ["--a"] });
+  assert.deepEqual(browserRecord("/x/chrome"), { path: "/x/chrome", extraArgs: [] });
+  const dir = await mkdtemp(join(tmpdir(), "haftarah-build-"));
+  try {
+    await cp(new URL("./fixtures/week-min/", import.meta.url), dir, { recursive: true });
+    const lines = [];
+    const r = await buildWeek(dir, { pdf: true, browser: null, log: m => lines.push(m), warn: m => lines.push(m) });
+    assert.equal(r.builds[0].pdf, null);
+    assert.ok(lines.some(l => l.startsWith("No Chrome or Edge found.")));
+  } finally { await rm(dir, { recursive: true, force: true }); }
 });

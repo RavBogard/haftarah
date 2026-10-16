@@ -307,3 +307,10 @@ test("a haftarah-only week whose sheet.pdf is older than sheet.json still plans 
   assert.equal(plan.publicName, "2026-10-17 Noach — Isaiah 54.1-55.5.pdf");
   assert.deepEqual(await deliver(week, { dryRun: true, log: () => {} }), []);
 });
+
+test("deliver passes cache and customs through to the publish step", async () => {
+  const got = {};
+  await deliver(week, { config: { url: `${base}/exec`, token: TOKEN }, webConfig: { token: "t" }, log: () => {}, publishImpl: async (dir, opts) => { Object.assign(got, opts); return { urls: {}, page: "" }; }, cache: "/tmp/cache-x", customs: { id: "test" } });
+  assert.equal(got.cache, "/tmp/cache-x");
+  assert.equal(got.customs.id, "test");
+});

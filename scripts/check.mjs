@@ -120,48 +120,63 @@ export function checkTargets(file, { only = null, trope = false } = {}) {
   return targets;
 }
 
-async function main() {
-  const args = process.argv.slice(2);
-  const dirArg = args.find((a, i) => !a.startsWith("--") && args[i - 1] !== "--reading");
-  if (!dirArg) { console.error("usage: node scripts/check.mjs weeks/<slug> [--reading torah|haftarah] [--trope]"); process.exit(1); }
-  const weekDir = resolve(dirArg);
-  const trope = args.includes("--trope");
-  const ri = args.indexOf("--reading");
-  const only = ri >= 0 ? (args[ri + 1] && !args[ri + 1].startsWith("--") ? args[ri + 1] : "") : null;
+/**
+ * Render every built reading twice and assert the layout invariants. Returns { ok, readings: [{ id, kind, html,
+ * summary, problems, diagnostics, page }] }; the CLI prints the table. `dumpDomImpl` replaces chrome.mjs's dumpDom
+ * (tests); `extraArgs` reach the browser (the pack's flags on Vercel). `browser` is an executable path,
+ * undefined to look one up with findBrowser().
+ */
+export async function checkWeek(dir, { only = null, trope = false, browser = undefined, extraArgs = [], dumpDomImpl = dumpDom, log = console.log } = {}) {
+  const weekDir = resolve(dir);
   const file = JSON.parse(await readFile(join(weekDir, "sheet.json"), "utf8"));
-  let targets;
-  try { targets = checkTargets(file, { only, trope }); } catch (err) { console.error(`${dirArg}: ${err.message}`); process.exit(1); }
-  const browser = findBrowser();
-  if (!browser) { console.error("No Chrome or Edge found."); process.exit(1); }
-  console.log(`Browser: ${browser}`);
-  let failed = false;
+  const targets = checkTargets(file, { only, trope });
+  const b = browser === undefined ? findBrowser() : browser;
+  if (!b) throw new Error("No Chrome or Edge found.");
+  log(`Browser: ${b}`);
+  const out = [];
   for (const t of targets) {
     const html = join(weekDir, t.html);
     // A missing file would render as Chrome's error page and surface as a page-count mismatch.
     if (!(await access(html).then(() => true, () => false))) {
-      console.error(`${dirArg.replace(/[\\/]+$/, "")}/${t.html} is missing; run node scripts/build.mjs ${dirArg}${trope ? " --trope" : ""} first`);
-      failed = true;
+      out.push({ id: t.id, kind: t.kind, html: t.html, summary: null, problems: [`${String(dir).replace(/[\\/]+$/, "")}/${t.html} is missing; run node scripts/build.mjs ${dir}${trope ? " --trope" : ""} first`], diagnostics: [], page: [] });
       continue;
     }
     const url = pathToFileURL(html).href;
-    const a = analyse(await dumpDom(browser, url));
-    const b = analyse(await dumpDom(browser, url));
+    const a = analyse(await dumpDomImpl(b, url, { extraArgs }));
+    const c = analyse(await dumpDomImpl(b, url, { extraArgs }));
     const problems = a.problems.slice();
-    if (JSON.stringify(a.summary) !== JSON.stringify(b.summary)) problems.push("two renders differ (pagination is not deterministic on this browser)");
+    if (JSON.stringify(a.summary) !== JSON.stringify(c.summary)) problems.push("two renders differ (pagination is not deterministic on this browser)");
     // The divine-name count in the render must equal the count in the data (verses plus incipit).
     const data = L.readingView(file, t.id);
     const yyExpected = [...data.verses.map(v => v.he), data.haftarah.incipit?.he || ""].reduce((n, h) => n + (String(h).match(TETRA) || []).length, 0);
     if (yyExpected !== a.summary.yy) problems.push(`divine name: ${a.summary.yy} replaced in the render, ${yyExpected} in the data`);
-    if (targets.length > 1) console.log(`\n${t.kind === "torah" ? "Torah" : "Haftarah"}: ${t.html}`);
-    console.log(`Pages: ${a.summary.pages}; divine name ${a.summary.yy}x; keys ${a.summary.keys.length}; voices without a line: ${a.summary.voicesMissing.join(", ") || "none"}; figures: ${a.summary.figures || "none"}`);
-    console.table(a.summary.page.map((p, i) => ({ page: i + 1, kind: p.kind, rows: p.rows, gap: p.gap, fill: p.fill, split: p.split, offpage: p.offpage, voices: p.voices || "" })));
-    if (problems.length) {
-      console.error("Check failed:\n  - " + problems.join("\n  - "));
-      if (a.diagnostics.length) console.error("\nGap diagnostics:\n" + a.diagnostics.join("\n"));
-      failed = true;
+    out.push({ id: t.id, kind: t.kind, html: t.html, summary: a.summary, problems, diagnostics: a.diagnostics, page: a.summary.page });
+  }
+  return { ok: out.every(r => !r.problems.length), readings: out };
+}
+
+async function main() {
+  const args = process.argv.slice(2);
+  const dirArg = args.find((a, i) => !a.startsWith("--") && args[i - 1] !== "--reading");
+  if (!dirArg) { console.error("usage: node scripts/check.mjs weeks/<slug> [--reading torah|haftarah] [--trope]"); process.exit(1); }
+  const trope = args.includes("--trope");
+  const ri = args.indexOf("--reading");
+  const only = ri >= 0 ? (args[ri + 1] && !args[ri + 1].startsWith("--") ? args[ri + 1] : "") : null;
+  const file = JSON.parse(await readFile(join(resolve(dirArg), "sheet.json"), "utf8"));
+  try { checkTargets(file, { only, trope }); } catch (err) { console.error(`${dirArg}: ${err.message}`); process.exit(1); }
+  const r = await checkWeek(dirArg, { only, trope });
+  for (const x of r.readings) {
+    if (!x.summary) { console.error(x.problems[0]); continue; }
+    if (r.readings.length > 1) console.log(`\n${x.kind === "torah" ? "Torah" : "Haftarah"}: ${x.html}`);
+    const s = x.summary;
+    console.log(`Pages: ${s.pages}; divine name ${s.yy}x; keys ${s.keys.length}; voices without a line: ${s.voicesMissing.join(", ") || "none"}; figures: ${s.figures || "none"}`);
+    console.table(s.page.map((p, i) => ({ page: i + 1, kind: p.kind, rows: p.rows, gap: p.gap, fill: p.fill, split: p.split, offpage: p.offpage, voices: p.voices || "" })));
+    if (x.problems.length) {
+      console.error("Check failed:\n  - " + x.problems.join("\n  - "));
+      if (x.diagnostics.length) console.error("\nGap diagnostics:\n" + x.diagnostics.join("\n"));
     }
   }
-  if (failed) process.exit(1);
+  if (!r.ok) process.exit(1);
   console.log("Check passed.");
 }
 

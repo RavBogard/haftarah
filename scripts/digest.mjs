@@ -238,19 +238,24 @@ export function weekDigest({ sheet, readings, prior = null }) {
   return parts.join("\n");
 }
 
-async function main() {
-  const dir = process.argv[2];
-  if (!dir) { console.error("usage: node scripts/digest.mjs weeks/<slug>"); process.exit(1); }
+/** digest.md for a week folder from its texts and candidates files; returns the markdown. Throws when there is nothing to digest. */
+export async function writeDigest(dir) {
   const sheet = await readJSON(join(dir, "sheet.json"));
   const readings = {};
   for (const kind of ["torah", "haftarah"]) {
     const f = READING_FILES[kind];
     readings[kind] = { texts: await readJSON(join(dir, f.texts)), candidates: await readJSON(join(dir, f.candidates)) };
   }
-  if (!Object.values(readings).some(x => x.texts || x.candidates)) { console.error(`No texts.json or candidates.json in ${dir}; run fetch.mjs first.`); process.exit(1); }
+  if (!Object.values(readings).some(x => x.texts || x.candidates)) throw new Error(`No texts.json or candidates.json in ${dir}; run fetch.mjs first.`);
   const md = weekDigest({ sheet, readings, prior: await readJSON(join(dir, PRIOR_FILE)) });
   await writeFile(join(dir, "digest.md"), md, "utf8");
-  process.stdout.write(md);
+  return md;
+}
+
+async function main() {
+  const dir = process.argv[2];
+  if (!dir) { console.error("usage: node scripts/digest.mjs weeks/<slug>"); process.exit(1); }
+  process.stdout.write(await writeDigest(dir));
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {

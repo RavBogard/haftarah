@@ -170,7 +170,7 @@ async function postFile(url, payload, fetchImpl) {
  * Deliver the week. Returns the per-file replies. Throws on the first failure,
  * including a sha256 mismatch.
  */
-export async function deliver(dir, { only, dryRun = false, config, log = console.log, fetchImpl = globalThis.fetch, webConfig = null, publishImpl = publish, side = true } = {}) {
+export async function deliver(dir, { only, dryRun = false, config, log = console.log, fetchImpl = globalThis.fetch, webConfig = null, publishImpl = publish, side = true, cache = undefined, customs = null } = {}) {
   const plan = await planFiles(dir, { only });
 
   if (dryRun) {
@@ -208,7 +208,7 @@ export async function deliver(dir, { only, dryRun = false, config, log = console
   if (folders.public) log(`Public folder:  ${folders.public}`);
   if (folders.working) log(`Working folder: ${folders.working}`);
   // The web comes last so a Drive failure never leaves the site ahead of the record.
-  if (webConfig) await publishImpl(dir, { config: webConfig, log, fetchImpl, side });
+  if (webConfig) await publishImpl(dir, { config: webConfig, log, fetchImpl, side, cache, customs });
   return results;
 }
 

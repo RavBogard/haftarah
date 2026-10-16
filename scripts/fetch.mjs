@@ -30,6 +30,7 @@
  */
 
 import { mkdir, writeFile, readFile, readdir } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defaultHaftarahFor } from "./rites.mjs";
@@ -38,7 +39,7 @@ import { loadCustoms } from "./customs.mjs";
 import { leyningOf, parsePick, defaultPick, selectTorah, aliyotLines } from "./leyning.mjs";
 import { migrate3 } from "./migrate.mjs";
 import { READING_FILES, PRIOR_FILE } from "./week-files.mjs";
-import { lookupPrior, applyPrior } from "./prior.mjs";
+import { lookupPrior, applyPrior, SITE as PRIOR_SITE } from "./prior.mjs";
 import { parashahKeysOf } from "../site/app/parashot.js";
 
 const L = createRequire(import.meta.url)("../template/lib.js");
@@ -57,7 +58,7 @@ function arg(name, fallback) {
   return v && !v.startsWith("--") ? v : true;
 }
 
-function nextShabbat(from = new Date()) {
+export function nextShabbat(from = new Date()) {
   const d = new Date(Date.UTC(from.getFullYear(), from.getMonth(), from.getDate()));
   const add = (6 - d.getUTCDay() + 7) % 7;
   d.setUTCDate(d.getUTCDate() + add);
@@ -90,8 +91,13 @@ export async function getJSON(url, { fetchImpl = globalThis.fetch, sleepImpl = w
 /** Hebcal's leyning item for one date, on the customs' calendar (Diaspora: i=off). */
 export const leyningUrl = (date, customs) => `https://www.hebcal.com/leyning?cfg=json&start=${date}&end=${date}&i=${customs.calendar.diaspora ? "off" : "on"}`;
 
-function slugify(s) {
+export function slugify(s) {
   return s.toLowerCase().replace(/['’]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+}
+
+/** The folder name and page address of a week: date, parashah, and the special Shabbat's name when there is one. */
+export function weekSlug(date, name, special) {
+  return `${date}-${slugify(name || "shabbat")}${special ? "-" + slugify(special.replace(/^Shabbat\s+/i, "")) : ""}`;
 }
 
 // ---- Sefaria HTML cleanup ---------------------------------------------------
@@ -618,60 +624,90 @@ export function missingValue({ prior = null, torah = null, pick = null } = {}) {
   return null;
 }
 
-async function main() {
-  const usage = missingValue({ prior: arg("prior", null), torah: arg("torah", null), pick: arg("torah-pick", null) });
-  if (usage) throw new Error(usage);
-  const customsArg = arg("customs", null);
-  const customs = await loadCustoms(typeof customsArg === "string" ? customsArg : "crc");
-  const date = arg("date", nextShabbat());
-  const outRoot = arg("out", "weeks");
-  const force = arg("force", false) === true;
-  const refOverride = arg("ref", null);
-  const known = String(arg("known", "") === true ? "" : arg("known", "")).split(",").map(s => s.trim()).filter(Boolean);
-  const wantTexts = !process.argv.includes("--no-texts");
-  const carry = !process.argv.includes("--no-carry");
-  const priorArg = arg("prior", null);
-  const noTorah = process.argv.includes("--no-torah");
-  const torahArg = arg("torah", null), pickArg = arg("torah-pick", null);
-  if (noTorah && (torahArg || pickArg)) throw new Error("--no-torah cannot be combined with --torah <ref> or --torah-pick");
-  const pick = typeof torahArg === "string" ? { kind: "ref", ref: torahArg } : typeof pickArg === "string" ? parsePick(pickArg) : defaultPick(customs);
-  if ((customs.toConfirm || []).length) console.log(`customs/${customs.id}.json: not yet confirmed by Daniel: ${customs.toConfirm.join(", ")}`);
-  const hebcal = d => getJSON(leyningUrl(d, customs));
+/**
+ * One reading's texts file (texts.json or texts-torah.json): the core commentators and the linked
+ * Talmud, midrash, liturgy, Targum and Zohar on its range. A file already present is kept unless force
+ * (the server calls this once per reading, each under the client's time limit). `links` saves the
+ * Sefaria links call when the caller just made it. Returns what was written, or { kept: true }.
+ */
+export async function fetchTextsFor(dir, kind, { sheet = null, links = null, fetchImpl = globalThis.fetch, log = console.log, force = false } = {}) {
+  const files = READING_FILES[kind];
+  if (!files) throw new Error(`no texts file for a ${kind} reading`);
+  const s = sheet || JSON.parse(await readFile(join(dir, "sheet.json"), "utf8"));
+  const r = L.readings(s).find(x => x.kind === kind && (x.verses || []).length);
+  if (!r) throw new Error(`the sheet has no ${kind} reading with verses`);
+  const out = join(dir, files.texts);
+  if (!force && existsSync(out)) return { file: files.texts, kept: true };
+  const get = url => getJSON(url, { fetchImpl });
+  const lk = links || await sefariaLinks(r.ref, get);
+  const { groups } = candidatesFrom(lk, { kind });
+  const opts = kind === "torah" ? { core: TORAH_CORE, extras: false, capCommentaries: true } : {};
+  const texts = await buildTexts({ ref: r.ref, book: r.book, verses: r.verses, links: lk, groups, getText: ref => sefariaText(ref, { fetchImpl }), ...opts });
+  const body = JSON.stringify(texts, null, 1);
+  await writeFile(out, body, "utf8");
+  const segs = Object.values(texts.commentaries).reduce((n, c) => n + Object.keys(c.segments).length, 0);
+  const sf = [...new Set(Object.values(texts.commentaries).flatMap(c => Object.entries(c.segments).filter(([, x]) => x.sectionFiled).map(([ref]) => ref.replace(/:\d+$/, ""))))];
+  log(`Wrote ${join(dir, files.texts)} (${(Buffer.byteLength(body) / 1024).toFixed(0)} KB: ${Object.keys(texts.commentaries).length} commentaries, ${segs} segments, ${Object.keys(texts.linked).length} linked texts)`);
+  if (sf.length) log(`  section-filed: ${sf.join(", ")}`);
+  const nf = texts.notFetched;
+  if (nf.commentaries.length) log(`  not on Sefaria: ${nf.commentaries.join(", ")}`);
+  if ((nf.commentariesOverBudget || []).length) log(`  over the size budget, not fetched: ${nf.commentariesOverBudget.join(", ")}`);
+  if (nf.linkedOverCap.length + nf.linkedOverBudget.length + nf.linkedFailed.length) log(`  linked not fetched: ${nf.linkedOverCap.length} over cap, ${nf.linkedOverBudget.length} over size budget, ${nf.linkedFailed.length} failed`);
+  return { file: files.texts, kept: false, bytes: Buffer.byteLength(body), counts: { commentaries: Object.keys(texts.commentaries).length, segments: segs, linked: Object.keys(texts.linked).length }, sectionFiled: sf, notFetched: nf };
+}
+
+/**
+ * One week's calendar, passage, sheet and candidates, and (wantTexts) its texts files, into outRoot/<slug>.
+ * Pure of process.argv and process.env: every input is a parameter, every network call goes through fetchImpl,
+ * every line of output through log. Returns what it did; the CLI prints it.
+ */
+export async function fetchWeek({
+  date = nextShabbat(), explicitDate = true, outRoot = "weeks", force = false, haftarahRef = null, known = [],
+  wantTexts = true, carry = true, priorDir = null, noTorah = false, torahRef = null, torahPick = null,
+  customs, fetchImpl = globalThis.fetch, log = console.log, site = PRIOR_SITE,
+} = {}) {
+  if (!customs) throw new Error("fetchWeek needs a customs record");
+  if (noTorah && (torahRef || torahPick)) throw new Error("--no-torah cannot be combined with --torah <ref> or --torah-pick");
+  const get = url => getJSON(url, { fetchImpl });
+  const pick = torahRef ? { kind: "ref", ref: torahRef } : torahPick ? parsePick(torahPick) : defaultPick(customs);
+  if ((customs.toConfirm || []).length) log(`customs/${customs.id}.json: not yet confirmed by Daniel: ${customs.toConfirm.join(", ")}`);
+  const hebcal = d => get(leyningUrl(d, customs));
 
   // "This week" is ambiguous once the coming Shabbat already has a folder: name both Shabbatot and
   // stop, so the question to Daniel can offer the one after as well.
-  if (arg("date", null) === null) {
+  if (!explicitDate) {
     const taken = weeksTaken(date, await readdir(outRoot).catch(() => []), known);
     if (taken.length) {
       const after = new Date(date + "T12:00:00Z"); after.setUTCDate(after.getUTCDate() + 7);
       const next = after.toISOString().slice(0, 10);
       const name = async d => { try { const it = (await hebcal(d)).items?.[0]; return it ? `${it.name?.en}, haftarah ${it.haftara}` : "?"; } catch { return "?"; } };
       const local = new Set(await readdir(outRoot).catch(() => []));
-      console.log(`${date} already has ${taken.map(t => local.has(t) ? `${outRoot}/${t}` : `${t} (Drive)`).join(", ")}.`);
-      console.log(`  ${date}: ${await name(date)}\n  ${next}: ${await name(next)}`);
-      console.log(`Run again with --date ${date} or --date ${next}.`);
-      process.exit(2);
+      const options = [{ date, name: await name(date) }, { date: next, name: await name(next) }];
+      log(`${date} already has ${taken.map(t => local.has(t) ? `${outRoot}/${t}` : `${t} (Drive)`).join(", ")}.`);
+      log(`  ${date}: ${options[0].name}\n  ${next}: ${options[1].name}`);
+      log(`Run again with --date ${date} or --date ${next}.`);
+      return { slug: null, dir: null, sheet: null, prior: null, carried: [], write: null, readings: [], leyning: null, nextWeek: null, taken, options };
     }
   }
 
-  console.log(`Shabbat ${date}`);
+  log(`Shabbat ${date}`);
 
   // 1. Calendar: Hebcal's leyning item (parashah, haftarah, aliyot, the reason when special) and the Hebrew date.
   const item = ((await hebcal(date)).items || [])[0];
   if (!item) throw new Error(`Hebcal has no reading for ${date}; is it a Shabbat?`);
-  const conv = await getJSON(`https://www.hebcal.com/converter?cfg=json&gy=${date.slice(0, 4)}&gm=${+date.slice(5, 7)}&gd=${+date.slice(8, 10)}&g2h=1`);
+  const conv = await get(`https://www.hebcal.com/converter?cfg=json&gy=${date.slice(0, 4)}&gm=${+date.slice(5, 7)}&gd=${+date.slice(8, 10)}&g2h=1`);
   const name = item.name?.en || "";
-  const haftRef = refOverride || item.haftara;
+  const haftRef = haftarahRef || item.haftara;
   if (!haftRef) throw new Error(`No haftarah listed for ${date} (${name}).`);
   const special = item.reason?.haftara || null;
   const defaultHaftarah = defaultHaftarahFor(name, customs.haftarahRite);
   const leyning = noTorah ? null : leyningOf(item);
-  console.log(`Parashat ${name}; haftarah ${haftRef}${special ? ` (${special})` : ""}`);
-  if (leyning) console.log(aliyotLines(leyning).join("\n"));
+  log(`Parashat ${name}; haftarah ${haftRef}${special ? ` (${special})` : ""}`);
+  if (leyning) log(aliyotLines(leyning).join("\n"));
   const fetched = new Date().toISOString();
 
   // 2. The haftarah, verse-aligned in both versions.
-  const hp = await fetchPassage(haftRef, { versions: customs.versions });
+  const hp = await fetchPassage(haftRef, { versions: customs.versions, get });
   const haftarah = readingFrom("haftarah", hp, {
     titleEn: special ? special.replace(/^Shabbat\s+/i, "") : `Haftarat ${name}`, versions: customs.versions, fetched,
     extra: { defaultHaftarah: special && defaultHaftarah !== haftRef ? defaultHaftarah : null },
@@ -681,72 +717,76 @@ async function main() {
   let torah = null;
   if (leyning && pick) {
     const sel = selectTorah(leyning, pick);
-    const tp = await fetchPassage(sel.ref, { versions: customs.versions });
+    const tp = await fetchPassage(sel.ref, { versions: customs.versions, get });
     torah = readingFrom("torah", tp, { titleEn: name, versions: customs.versions, fetched, extra: { selection: sel.selection, aliyot: leyning.aliyot, maftir: sel.maftir } });
-    console.log(`Torah selection: ${sel.selection}, ${sel.ref} (${tp.verses.length} verses)${sel.maftir ? `; maftir ${sel.maftir.ref}${sel.maftir.reason ? ` (${sel.maftir.reason})` : ""}` : ""}`);
+    log(`Torah selection: ${sel.selection}, ${sel.ref} (${tp.verses.length} verses)${sel.maftir ? `; maftir ${sel.maftir.ref}${sel.maftir.reason ? ` (${sel.maftir.reason})` : ""}` : ""}`);
   } else if (leyning) {
-    console.log(`Torah: no selection yet. Put the aliyot to Daniel in the briefing, then run again with --torah-pick aliyah:N[-M] (or aliyah:M, triennial, full) or --torah "<ref>".`);
+    log(`Torah: no selection yet. Put the aliyot to Daniel in the briefing, then run again with --torah-pick aliyah:N[-M] (or aliyah:M, triennial, full) or --torah "<ref>".`);
   }
 
   // 4. sheet.json: a new week, or the kept one, with a Torah reading added when there is a new pick.
-  const slug = `${date}-${slugify(name || "shabbat")}${special ? "-" + slugify(special.replace(/^Shabbat\s+/i, "")) : ""}`;
+  const slug = weekSlug(date, name, special);
   const dir = join(outRoot, slug);
   await mkdir(dir, { recursive: true });
   const sheetPath = join(dir, "sheet.json");
   const existing = await readFile(sheetPath, "utf8").then(JSON.parse, () => null);
   let sheet, write = null;
   if (!existing || force) {
-    sheet = freshSheet({ slug, date, item, conv, customs, special, readings: [torah, haftarah].filter(Boolean), leyning, nextWeek: await nextWeekFor(date, customs) });
+    sheet = freshSheet({ slug, date, item, conv, customs, special, readings: [torah, haftarah].filter(Boolean), leyning, nextWeek: await nextWeekFor(date, customs, get) });
     write = existing ? "Replaced" : "Wrote";
   } else {
     const m = mergeWeek(existing, { torah, leyning });
-    for (const n of m.notes) console.log(`  ${n}`);
+    for (const n of m.notes) log(`  ${n}`);
     sheet = m.sheet;
     if (m.changed) write = "Updated";
   }
 
   // 4b. Last time: the latest earlier sheet for this parashah. prior.json every run. By default (Daniel cuts), the pointer on the
   // sheet, the entries that fit this year's readings (status "carried") and the "See also" sentence,
-  // unless --no-carry (then a new sheet gets the pointer only).
-  const prior = await lookupPrior({ keys: parashahKeysOf(name), civil: date, priorDir: typeof priorArg === "string" ? priorArg : null });
+  // unless --no-carry (then a new sheet gets the pointer only). The library is read on `site`.
+  const prior = await lookupPrior({ keys: parashahKeysOf(name), civil: date, priorDir, fetchImpl, site });
   await writeFile(join(dir, PRIOR_FILE), JSON.stringify(prior, null, 1), "utf8");
-  console.log(prior.slug ? `Last time: ${prior.slug} (${prior.hebrewEn}, from the ${prior.source})` : `Last time: none${prior.error ? ` (${prior.error})` : ""}`);
+  log(prior.slug ? `Last time: ${prior.slug} (${prior.hebrewEn}, from the ${prior.source})` : `Last time: none${prior.error ? ` (${prior.error})` : ""}`);
   // 4c. Every entry has an id first (carry-forward depends on them), so a hand-added entry is not carried in twice.
   const ap = withPrior(sheet, prior, { carry, fresh: !existing || force });
   if (ap.changed) { sheet = ap.sheet; if (!write) write = "Updated"; }
-  if (ap.added.length) console.log(`  carried ${ap.added.length} entr${ap.added.length === 1 ? "y" : "ies"} from ${prior.slug}: ${ap.added.map(a => `${a.reading} ${a.chapter}:${a.verse} ${a.source}`).join("; ")}`);
+  if (ap.added.length) log(`  carried ${ap.added.length} entr${ap.added.length === 1 ? "y" : "ies"} from ${prior.slug}: ${ap.added.map(a => `${a.reading} ${a.chapter}:${a.verse} ${a.source}`).join("; ")}`);
 
   // 5. Write sheet.json.
   if (write) {
     await writeFile(sheetPath, JSON.stringify(sheet, null, 2), "utf8");
-    console.log(`${write} ${sheetPath} (${L.readings(sheet).map(r => `${r.id}: ${(r.verses || []).length} verses`).join("; ")})`);
-  } else console.log(`Kept existing ${sheetPath} (use --force to replace). Refreshed candidates and texts only.`);
+    log(`${write} ${sheetPath} (${L.readings(sheet).map(r => `${r.id}: ${(r.verses || []).length} verses`).join("; ")})`);
+  } else log(`Kept existing ${sheetPath} (use --force to replace). Refreshed candidates and texts only.`);
 
   // 6. Candidates and texts, one pair of files per reading the sheet holds.
   for (const r of L.readings(sheet).filter(x => (x.verses || []).length && READING_FILES[x.kind])) {
     const files = READING_FILES[r.kind];
-    const links = await sefariaLinks(r.ref);
-    const { groups, candidates, skipped } = candidatesFrom(links, { kind: r.kind });
+    const links = await sefariaLinks(r.ref, get);
+    const { candidates, skipped } = candidatesFrom(links, { kind: r.kind });
     const cand = { ref: r.ref, fetched, sources: candidates };
     if (r.kind === "torah") cand.skipped = skipped;
     await writeFile(join(dir, files.candidates), JSON.stringify(cand, null, 2), "utf8");
-    console.log(`Wrote ${join(dir, files.candidates)} (${candidates.length} sources, ${links.length} links${skipped.length ? `; ${skipped.length} super-commentaries and quoting commentaries set aside` : ""})`);
-    if (!wantTexts) continue;
-    const opts = r.kind === "torah" ? { core: TORAH_CORE, extras: false, capCommentaries: true } : {};
-    const texts = await buildTexts({ ref: r.ref, book: r.book, verses: r.verses, links, groups, ...opts });
-    const body = JSON.stringify(texts, null, 1);
-    await writeFile(join(dir, files.texts), body, "utf8");
-    const segs = Object.values(texts.commentaries).reduce((s, c) => s + Object.keys(c.segments).length, 0);
-    const sf = Object.values(texts.commentaries).flatMap(c => Object.entries(c.segments).filter(([, x]) => x.sectionFiled).map(([ref]) => ref));
-    console.log(`Wrote ${join(dir, files.texts)} (${(Buffer.byteLength(body) / 1024).toFixed(0)} KB: ${Object.keys(texts.commentaries).length} commentaries, ${segs} segments, ${Object.keys(texts.linked).length} linked texts)`);
-    if (sf.length) console.log(`  section-filed: ${[...new Set(sf.map(x => x.replace(/:\d+$/, "")))].join(", ")}`);
-    const nf = texts.notFetched;
-    if (nf.commentaries.length) console.log(`  not on Sefaria: ${nf.commentaries.join(", ")}`);
-    if ((nf.commentariesOverBudget || []).length) console.log(`  over the size budget, not fetched: ${nf.commentariesOverBudget.join(", ")}`);
-    if (nf.linkedOverCap.length + nf.linkedOverBudget.length + nf.linkedFailed.length) console.log(`  linked not fetched: ${nf.linkedOverCap.length} over cap, ${nf.linkedOverBudget.length} over size budget, ${nf.linkedFailed.length} failed`);
+    log(`Wrote ${join(dir, files.candidates)} (${candidates.length} sources, ${links.length} links${skipped.length ? `; ${skipped.length} super-commentaries and quoting commentaries set aside` : ""})`);
+    if (wantTexts) await fetchTextsFor(dir, r.kind, { sheet, links, fetchImpl, log, force: true });
   }
-  if (wantTexts) console.log(`  overview: node scripts/digest.mjs ${dir}`);
-  console.log(`\nNext: review candidates, add entries to sheet.json, then\n  node scripts/build.mjs ${dir} --png`);
+  if (wantTexts) log(`  overview: node scripts/digest.mjs ${dir}`);
+  log(`\nNext: review candidates, add entries to sheet.json, then\n  node scripts/build.mjs ${dir} --png`);
+  return { slug, dir, sheet, prior, carried: ap.added, write, readings: L.readings(sheet).filter(r => (r.verses || []).length).map(r => ({ id: r.id, kind: r.kind, ref: r.ref, verses: r.verses.length, incipit: r.incipit || null, selection: r.selection || null, maftir: r.maftir || null })), leyning, nextWeek: sheet.nextWeek || null, taken: [], options: [] };
+}
+
+async function main() {
+  const usage = missingValue({ prior: arg("prior", null), torah: arg("torah", null), pick: arg("torah-pick", null) });
+  if (usage) throw new Error(usage);
+  const customsArg = arg("customs", null);
+  const customs = await loadCustoms(typeof customsArg === "string" ? customsArg : "crc");
+  const known = String(arg("known", "") === true ? "" : arg("known", "")).split(",").map(s => s.trim()).filter(Boolean);
+  const str = v => (typeof v === "string" ? v : null);
+  const r = await fetchWeek({
+    date: arg("date", nextShabbat()), explicitDate: arg("date", null) !== null, outRoot: arg("out", "weeks"), force: arg("force", false) === true,
+    haftarahRef: str(arg("ref", null)), known, wantTexts: !process.argv.includes("--no-texts"), carry: !process.argv.includes("--no-carry"),
+    priorDir: str(arg("prior", null)), noTorah: process.argv.includes("--no-torah"), torahRef: str(arg("torah", null)), torahPick: str(arg("torah-pick", null)), customs,
+  });
+  if (r.taken.length) process.exit(2);
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {

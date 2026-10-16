@@ -1,7 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
-import { withPrior, cleanHebrew, missingValue, buildTexts, withEntryIds, withRetry, getJSON, fetchPassage, candidatesFrom, capToBudget, readingFrom, freshSheet, mergeWeek, leyningUrl, TORAH_CORE } from "../scripts/fetch.mjs";
+import { readFile, mkdtemp, rm, readdir } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { withPrior, cleanHebrew, missingValue, buildTexts, withEntryIds, withRetry, getJSON, fetchPassage, candidatesFrom, capToBudget, readingFrom, freshSheet, mergeWeek, leyningUrl, TORAH_CORE, fetchWeek, fetchTextsFor, nextShabbat, weekSlug } from "../scripts/fetch.mjs";
 import { migrate3 } from "../scripts/migrate.mjs";
 import { makeWeekTorah } from "./helpers/makeWeekTorah.mjs";
 
@@ -234,4 +236,81 @@ test("cleanHebrew drops a MAM Hebrew footnote and keeps the break and pisqa hand
   assert.equal(brk, "setumah");
   assert.equal(cleanHebrew('א <i class="footnote">(x <i>y</i>)</i> ב').he, "א ב");
   assert.deepEqual(cleanHebrew("שָׁלוֹם"), { he: "שָׁלוֹם", break: null });
+});
+
+// A fake of every network the fetch touches, answering from a table keyed by the start of the URL.
+function fakeNet(answers) {
+  const calls = [];
+  const fetchImpl = async url => {
+    calls.push(String(url));
+    const hit = Object.entries(answers).find(([k]) => String(url).startsWith(k));
+    if (!hit) return new Response("not faked: " + url, { status: 404, statusText: "Not Found" });
+    const v = typeof hit[1] === "function" ? hit[1](String(url)) : hit[1];
+    return new Response(JSON.stringify(v), { status: 200, headers: { "content-type": "application/json" } });
+  };
+  return { fetchImpl, calls };
+}
+const hebcalItem = { name: { en: "Noach", he: "נח" }, haftara: "Isaiah 54:1-55:5", fullkriyah: { 1: { k: "Genesis", b: "6:9", e: "6:22", v: 14 }, 2: { k: "Genesis", b: "7:1", e: "7:16", v: 16 }, M: { k: "Genesis", b: "11:29", e: "11:32", v: 4 } } };
+const passage = (book, ch, from, to) => ({ book, heRef: "x", sections: [ch, from], toSections: [ch, to], versions: [
+  { languageFamilyName: "hebrew", text: Array.from({ length: to - from + 1 }, (_, i) => `עברית ${from + i}`) },
+  { languageFamilyName: "english", text: Array.from({ length: to - from + 1 }, (_, i) => `English ${from + i}`) },
+] });
+const NET = {
+  "https://www.hebcal.com/leyning": { items: [hebcalItem] },
+  "https://www.hebcal.com/converter": { hd: 6, hm: "Cheshvan", hy: 5787, hebrew: "ו׳ בְּחֶשְׁוָן תשפ״ז" },
+  "https://www.sefaria.org/api/v3/texts/Isaiah": passage("Isaiah", 54, 1, 3),
+  "https://www.sefaria.org/api/v3/texts/Genesis": passage("Genesis", 6, 9, 11),
+  "https://www.sefaria.org/api/links/": [{ ref: "Rashi on Isaiah 54:1:1", anchorRef: "Isaiah 54:1", category: "Commentary", collectiveTitle: { en: "Rashi" }, index_title: "Rashi on Isaiah" }],
+  "https://haftarah.test/data/index.json": { schema: 2, weeks: [] },
+};
+
+test("fetchWeek writes a schema-3 week into the given root from injected network and never touches process.argv", async () => {
+  const root = await mkdtemp(join(tmpdir(), "haftarah-fetch-"));
+  try {
+    const net = fakeNet(NET);
+    const lines = [];
+    const r = await fetchWeek({ date: "2026-10-17", outRoot: root, customs: CUSTOMS, wantTexts: false, fetchImpl: net.fetchImpl, log: m => lines.push(m), site: "https://haftarah.test" });
+    assert.equal(r.slug, "2026-10-17-noach");
+    assert.equal(r.dir, join(root, "2026-10-17-noach"));
+    assert.deepEqual(r.readings.map(x => [x.kind, x.verses]), [["haftarah", 3]], "no Torah pick: the haftarah alone");
+    assert.deepEqual(await readdir(r.dir).then(l => l.sort()), ["candidates.json", "prior.json", "sheet.json"]);
+    assert.equal(r.prior.slug, null);
+    assert.ok(lines.some(l => l.startsWith("Shabbat 2026-10-17")));
+    assert.ok(!net.calls.some(u => u.includes("/api/v3/texts/Rashi")), "wantTexts false fetches no commentary text");
+    assert.ok(net.calls.some(u => u.startsWith("https://haftarah.test/data/index.json")), "the prior is looked up on the site the caller names");
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test("fetchWeek with a Torah pick adds the Torah reading first and fetchTextsFor writes one reading's texts file", async () => {
+  const root = await mkdtemp(join(tmpdir(), "haftarah-fetch-"));
+  try {
+    const net = fakeNet({ ...NET, "https://www.sefaria.org/api/v3/texts/Rashi": { indexTitle: "Rashi on Isaiah", versions: [{ languageFamilyName: "hebrew", text: ["רש״י"] }], sections: [1], toSections: [1] } });
+    const r = await fetchWeek({ date: "2026-10-17", outRoot: root, customs: CUSTOMS, wantTexts: false, torahPick: "aliyah:1", fetchImpl: net.fetchImpl, log: () => {}, site: "https://haftarah.test" });
+    assert.deepEqual(r.readings.map(x => x.kind), ["torah", "haftarah"]);
+    assert.equal(r.readings[0].selection, "aliyah 1");
+    const t = await fetchTextsFor(r.dir, "haftarah", { fetchImpl: net.fetchImpl, log: () => {} });
+    assert.equal(t.file, "texts.json");
+    assert.ok(t.counts.commentaries >= 1);
+    assert.deepEqual((await readdir(r.dir)).filter(f => f.startsWith("texts")).sort(), ["texts.json"]);
+    const again = await fetchTextsFor(r.dir, "haftarah", { fetchImpl: async () => { throw new Error("no network"); }, log: () => {} });
+    assert.equal(again.kept, true, "a texts file already present is kept without a network call unless force");
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test("fetchWeek with no explicit date and a taken Shabbat returns the two options and writes nothing", async () => {
+  const root = await mkdtemp(join(tmpdir(), "haftarah-fetch-"));
+  try {
+    const net = fakeNet(NET);
+    const r = await fetchWeek({ date: "2026-10-17", explicitDate: false, known: ["2026-10-17-noach"], outRoot: root, customs: CUSTOMS, fetchImpl: net.fetchImpl, log: () => {}, site: "https://haftarah.test" });
+    assert.deepEqual(r.taken, ["2026-10-17-noach"]);
+    assert.deepEqual(r.options.map(o => o.date), ["2026-10-17", "2026-10-24"]);
+    assert.deepEqual(await readdir(root), []);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test("nextShabbat and weekSlug", () => {
+  assert.equal(nextShabbat(new Date(2026, 9, 13)), "2026-10-17");
+  assert.equal(nextShabbat(new Date(2026, 9, 17)), "2026-10-17");
+  assert.equal(weekSlug("2026-10-10", "Bereshit", "Shabbat Machar Chodesh"), "2026-10-10-bereshit-machar-chodesh");
+  assert.equal(weekSlug("2026-10-17", "Noach", null), "2026-10-17-noach");
 });

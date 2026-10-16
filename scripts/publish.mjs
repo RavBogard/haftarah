@@ -171,8 +171,8 @@ function human(n) {
   return `${(n / 1024 / 1024).toFixed(2)} MB`;
 }
 
-/** PUT one blob with the headers @vercel/blob sends. Returns the API's reply (url, pathname, ...). */
-export async function putBlob({ pathname, body, contentType, maxAge, token, fetchImpl = globalThis.fetch, api = BLOB_API }) {
+/** PUT one blob with the headers @vercel/blob sends; `access` is the store's, public or private. Returns the API's reply (url, pathname, ...). */
+export async function putBlob({ pathname, body, contentType, maxAge, token, fetchImpl = globalThis.fetch, api = BLOB_API, access = "public" }) {
   const headers = {
     authorization: `Bearer ${token}`,
     "x-api-version": API_VERSION,
@@ -180,7 +180,7 @@ export async function putBlob({ pathname, body, contentType, maxAge, token, fetc
     "x-add-random-suffix": "0",
     "x-allow-overwrite": "1",
     "x-cache-control-max-age": String(maxAge),
-    "x-vercel-blob-access": "public",
+    "x-vercel-blob-access": access,
   };
   const storeId = storeIdFromToken(token);
   if (storeId) headers["x-vercel-blob-store-id"] = storeId;
@@ -198,6 +198,21 @@ export async function putBlob({ pathname, body, contentType, maxAge, token, fetc
   return reply;
 }
 
+/** The store's origin for a token: public or private host. */
+export function blobOrigin(token, access = "public") { const id = storeIdFromToken(token); if (!id) throw new Error("the Blob token names no store"); return `https://${id.toLowerCase()}.${access}.blob.vercel-storage.com`; }
+/** GET one blob by pathname: a private store needs the bearer, a public one does not. null on 404; throws on any other failure (status only, never the token). */
+export async function getBlob({ pathname, token, access = "public", fetchImpl = globalThis.fetch, store = null }) {
+  const origin = store || blobOrigin(token, access);
+  const headers = { "cache-control": "no-cache" };
+  if (access === "private") headers.authorization = `Bearer ${token}`;
+  let res;
+  try { res = await fetchImpl(`${origin}/${pathname}?${Date.now()}`, { method: "GET", headers }); }
+  catch (err) { throw new Error(`${pathname}: network error: ${err.cause?.code || err.message}`); }
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`${pathname}: Blob answered HTTP ${res.status}`);
+  return res;
+}
+
 async function fetchIndex(store, fetchImpl) {
   const url = `${store}/index.json?${Date.now()}`;   // past the CDN's copy
   let res;
@@ -212,8 +227,8 @@ async function fetchIndex(store, fetchImpl) {
   return idx;
 }
 
-/** Every blob under `prefix`, following the listing's cursor. The token is never echoed. */
-export async function listBlobs({ token, prefix, fetchImpl = globalThis.fetch, api = BLOB_API }) {
+/** Every blob under `prefix`, following the listing's cursor. The token is never echoed. `access` is accepted for symmetry with putBlob: the listing is store-wide, so the request is the same. */
+export async function listBlobs({ token, prefix, fetchImpl = globalThis.fetch, api = BLOB_API, access = "public" }) {
   const out = [];
   let cursor = null;
   do {
