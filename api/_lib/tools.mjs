@@ -372,20 +372,26 @@ export const buildSheet = defineTool({
     // The version before anything is read: an edit that lands during the minutes-long build must not be marked built.
     const v0 = (await readStatus(ctx.store, slug))?.version || 0;
     const sheet = await requireSheet(ctx, slug);
-    return withWeek(ctx, slug, NEEDS.build, dir => buildIn(dir, { slug, reading, trope, sheet, v0 }, ctx));
+    return withWeek(ctx, slug, NEEDS.build, async dir => {
+      // A browser that cannot start is reported, not thrown: the gate, the lint and the HTML still run.
+      let launcher = null, browserFailure = null;
+      try { launcher = ctx.launcher ? await ctx.launcher() : null; if (!launcher) browserFailure = "no browser launcher on this server"; }
+      catch (err) { browserFailure = errText(err); }
+      try { return await buildIn(dir, { slug, reading, trope, sheet, v0, launcher, browserFailure }, ctx); }
+      finally { await launcher?.close?.(); }   // one browser for the whole build, closed whatever happened
+    });
   },
 });
 
-async function buildIn(dir, { slug, reading, trope, sheet, v0 }, ctx) {
+async function buildIn(dir, { slug, reading, trope, sheet, v0, launcher, browserFailure }, ctx) {
     const { overlay } = await biblioFor(ctx, sheet);
-    // A browser that cannot start is reported, not thrown: the gate, the lint and the HTML still run.
-    let launcher = null, browserFailure = null;
-    try { launcher = ctx.launcher ? await ctx.launcher() : null; if (!launcher) browserFailure = "no browser launcher on this server"; }
-    catch (err) { browserFailure = errText(err); }
     const browser = browserFailure ? { ok: false, error: browserFailure } : { ok: true };
     const log = m => ctx.log(m);
+    // A launcher that drives its browser itself (Vercel's) prints and dumps the DOM in place of the scripts' spawns.
+    const printImpl = launcher?.print ? { printImpl: launcher.print } : {};
+    const dumpDomImpl = launcher?.dumpDom ? { dumpDomImpl: launcher.dumpDom } : {};
     let built;
-    try { built = await ctx.scripts.buildWeek(dir, { pdf: !!launcher, png: false, trope, reading, customs: ctx.config.customs, browser: launcher ? launcher.browser : null, root: ctx.root, biblioOverlay: overlay, log, warn: log }); }
+    try { built = await ctx.scripts.buildWeek(dir, { pdf: !!launcher, png: false, trope, reading, customs: ctx.config.customs, browser: launcher ? launcher.browser : null, root: ctx.root, biblioOverlay: overlay, log, warn: log, ...printImpl }); }
     catch (err) {
       if (!(err instanceof BuildRefused)) throw err;
       const st = await readStatus(ctx.store, slug);
@@ -393,7 +399,7 @@ async function buildIn(dir, { slug, reading, trope, sheet, v0 }, ctx) {
     }
     const builds = built.builds.filter(b => !reading || b.kind === reading);
     // The study sheets are checked as such; the chanter's copy (checkWeek's trope target) separately.
-    const runCheck = async opts => { try { return { result: await ctx.scripts.checkWeek(dir, { ...opts, browser: launcher.browser, log }) }; } catch (err) { return { failure: errText(err) }; } };
+    const runCheck = async opts => { try { return { result: await ctx.scripts.checkWeek(dir, { ...opts, browser: launcher.browser, log, ...dumpDomImpl }) }; } catch (err) { return { failure: errText(err) }; } };
     const check = launcher && builds.some(b => b.pdf) ? await runCheck({ only: reading }) : null;
     const push = ["sheet.html", "sheet-torah.html", "sheet-trope.html", PDF_FILES.haftarah, PDF_FILES.torah, "sheet-trope.pdf"];
     const readings = [], pages = {};

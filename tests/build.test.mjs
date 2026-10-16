@@ -8,7 +8,7 @@ import { promisify } from "node:util";
 import { join, relative, basename, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isolatedEnv } from "./helpers/isolatedEnv.mjs";
-import { readingsToBuild, torahColophonData, haftarahColophonData, buildWeek, BuildRefused, browserRecord, makeProfile } from "../scripts/build.mjs";
+import { readingsToBuild, torahColophonData, haftarahColophonData, buildWeek, BuildRefused, browserRecord, makeProfile, printPdf, countPdfPages } from "../scripts/build.mjs";
 import { makeWeekTorah } from "./helpers/makeWeekTorah.mjs";
 
 const run = promisify(execFile);
@@ -175,5 +175,27 @@ test("buildWeek refuses a lint error with BuildRefused: the lemma error among it
       assert.ok(err.message.startsWith("Not built; fix these first"));
       return true;
     });
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test("printPdf kills a print that never finishes and says it timed out", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "haftarah-print-"));
+  try {
+    const t0 = Date.now();
+    // node stands in for a hung Chrome; "--" keeps node from reading the print flags as its own.
+    await assert.rejects(printPdf({ path: process.execPath }, "about:blank", join(dir, "x.pdf"), { common: ["-e", "setInterval(() => {}, 1000)", "--"], timeoutMs: 500 }), /timed out after/);
+    assert.ok(Date.now() - t0 < 5000, `${Date.now() - t0} ms`);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test("buildWeek prints through printImpl when one is given, the study sheet and the chanter's copy alike", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "haftarah-printimpl-"));
+  try {
+    await copyFile(new URL("./fixtures/week-min/sheet.json", import.meta.url), join(dir, "sheet.json"));
+    const seen = [];
+    const printImpl = async (browser, url, pdfPath, { common }) => { seen.push({ path: browser.path, url: basename(new URL(url).pathname), pdf: basename(pdfPath), common: common.includes("--x") }); const buf = Buffer.from("%PDF-1.4\n<</Type /Page>>\n<</Type /Page>>\n"); await writeFile(pdfPath, buf); return { pages: countPdfPages(buf), buf }; };
+    const r = await buildWeek(dir, { trope: true, browser: browserRecord("/fake/chromium", ["--x"]), printImpl, log: () => {}, warn: () => {} });
+    assert.deepEqual(seen, [{ path: "/fake/chromium", url: "sheet.html", pdf: "sheet.pdf", common: true }, { path: "/fake/chromium", url: "sheet-trope.html", pdf: "sheet-trope.pdf", common: true }]);
+    assert.equal(r.builds[0].pages, 2); assert.equal(r.trope.pages, 2);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });

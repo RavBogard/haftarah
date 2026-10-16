@@ -163,17 +163,20 @@ export async function weekBibliography(file, root = ROOT, overlay = null) {
   return union;
 }
 
-function run(cmd, args, okCodes = [0]) {
+// A child that has not exited after timeoutMs is killed: a hung print must not hold the build (or a function) forever.
+function run(cmd, args, okCodes = [0], { timeoutMs = 120_000 } = {}) {
   return new Promise((res, rej) => {
     const child = spawn(cmd, args, { stdio: ["ignore", "pipe", "pipe"] });
-    let err = "";
+    let err = "", done = false;
+    const finish = (fn, v) => { if (!done) { done = true; clearTimeout(timer); fn(v); } };
+    const timer = setTimeout(() => { try { child.kill("SIGKILL"); } catch {} finish(rej, new Error(`${basename(cmd)} timed out after ${Math.round(timeoutMs / 1000)} s; killed`)); }, timeoutMs);
     child.stderr.on("data", d => (err += d));
-    child.on("error", rej);
-    child.on("close", code => (okCodes.includes(code) ? res() : rej(new Error(`${basename(cmd)} exited ${code}\n${err.slice(-800)}`))));
+    child.on("error", e => finish(rej, e));
+    child.on("close", code => (okCodes.includes(code) ? finish(res) : finish(rej, new Error(`${basename(cmd)} exited ${code}\n${err.slice(-800)}`))));
   });
 }
 
-function countPdfPages(buf) {
+export function countPdfPages(buf) {
   const s = buf.toString("latin1");
   const m = s.match(/\/Type\s*\/Page(?![s\w])/g);
   return m ? m.length : null;
@@ -186,9 +189,10 @@ function countPdfPages(buf) {
  * browserRecord, undefined to look one up with findBrowser(), null for none; `templateDir` and `root` let a
  * caller build from a packaged engine or from another checkout; `biblioOverlay` is { <book>: markdown } of
  * extra bibliography lines (the server's add_bibliography_work) merged over bibliography/<book>.md; `log`/`warn`
- * replace console.
+ * replace console; `printImpl` replaces printPdf (the server prints through Playwright: the Vercel pack's
+ * headless shell does not print from the command line).
  */
-export async function buildWeek(dir, { pdf = true, png = false, trope = false, reading = null, customs = "crc", browser = undefined, templateDir = join(ROOT, "template"), root = ROOT, biblioOverlay = null, log = console.log, warn = console.warn } = {}) {
+export async function buildWeek(dir, { pdf = true, png = false, trope = false, reading = null, customs = "crc", browser = undefined, templateDir = join(ROOT, "template"), root = ROOT, biblioOverlay = null, log = console.log, warn = console.warn, printImpl = printPdf } = {}) {
   const weekDir = resolve(dir);
   const file = JSON.parse(await readFile(join(weekDir, "sheet.json"), "utf8"));
   let targets;
@@ -279,7 +283,7 @@ export async function buildWeek(dir, { pdf = true, png = false, trope = false, r
       // on Linux Chromium loses the bottom of the page, and the PDF is what prints.
       const url = pathToFileURL(b.html).href;
       const pdfPath = pdf ? join(weekDir, PDF_FILES[b.kind]) : join(profile, `probe-${b.kind}.pdf`);
-      const { pages, buf } = await printPdf(b0, url, pdfPath, { common });
+      const { pages, buf } = await printImpl(b0, url, pdfPath, { common });
       // pages and bytes whenever a PDF was printed (a png-only build prints a probe); the path only when it was wanted.
       Object.assign(b, { pdf: pdf ? pdfPath : null, pages, bytes: buf.length });
       if (pdf) log(`Wrote ${relative(root, pdfPath)}: ${pages} pages, ${kb(buf)}`);
@@ -287,7 +291,7 @@ export async function buildWeek(dir, { pdf = true, png = false, trope = false, r
       // The chanter's copy prints after the study sheet, the same way; previews stay the sheet's.
       if (b.kind === "haftarah" && trope && pdf) {
         const tropePdf = join(weekDir, "sheet-trope.pdf");
-        const t = await printPdf(b0, pathToFileURL(tropePath).href, tropePdf, { common });
+        const t = await printImpl(b0, pathToFileURL(tropePath).href, tropePdf, { common });
         log(`Wrote ${relative(root, tropePdf)}: ${t.pages} pages, ${kb(t.buf)}`);
         Object.assign(tropeOut, { pdf: tropePdf, pages: t.pages, bytes: t.buf.length });
       }
@@ -328,9 +332,10 @@ async function writePreviews({ browser, common, url, pdfPath, pages, outDir, roo
 /**
  * Print one page to one PDF, packed with qpdf when present. `browser` is a browserRecord; `common` the
  * full flag list (chromeFlags plus the record's extraArgs). Returns the page count and the file's bytes.
+ * A print still running after timeoutMs is killed and rejected.
  */
-export async function printPdf(browser, url, pdfPath, { common }) {
-  await run(browser.path, [...common, "--no-pdf-header-footer", `--print-to-pdf=${pdfPath}`, url]);
+export async function printPdf(browser, url, pdfPath, { common, timeoutMs = 120_000 }) {
+  await run(browser.path, [...common, "--no-pdf-header-footer", `--print-to-pdf=${pdfPath}`, url], [0], { timeoutMs });
   // Pages are counted before packing: afterwards the page objects sit inside compressed streams.
   const pages = countPdfPages(await readFile(pdfPath)) || 1;
   // Chrome writes every object uncompressed; qpdf, when installed (the cloud image has it), packs

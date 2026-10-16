@@ -16,7 +16,9 @@ const PDF = Buffer.from("%PDF-1.4\n1 0 obj<</Type/Page>>endobj\n");
 // A build that writes what the real one would, without a browser.
 const fakeBuild = async (dir, opts) => { const out = []; for (const r of torahWeek.readings) { const html = join(dir, r.kind === "torah" ? "sheet-torah.html" : "sheet.html"), pdf = join(dir, r.kind === "torah" ? "sheet-torah.pdf" : "sheet.pdf"); await writeFile(html, "<html data-pages=\"2\"></html>"); if (opts.browser) await writeFile(pdf, PDF); out.push({ id: r.id, kind: r.kind, html, pdf: opts.browser ? pdf : null, pages: opts.browser ? 2 : null, bytes: opts.browser ? PDF.length : null }); } return { builds: out, warnings: [{ where: "haftarah 54:1 Rashi", msg: "a warning" }] }; };
 const fakeCheck = async () => ({ ok: true, readings: torahWeek.readings.map(r => ({ id: r.id, kind: r.kind, summary: { pages: 2 }, problems: [], diagnostics: [], page: [{ kind: "front" }, { kind: "body" }] })) });
-const fakeLauncher = async () => ({ browser: browserRecord("/fake/chromium", ["--x"]), pages: async (url, outDir, count, prefix) => { await mkdir(outDir, { recursive: true }); const names = []; for (let p = 1; p <= count; p++) { const n = `${prefix}-${String(p).padStart(2, "0")}.jpg`; await writeFile(join(outDir, n), Buffer.from([0xff, 0xd8, 0xff])); names.push(n); } return names; } });
+// Like vercelLauncher's: it prints and dumps the DOM itself, and counts its closes.
+const makeLauncher = () => { const l = { browser: browserRecord("/fake/chromium", ["--x"]), print: async () => { throw new Error("the fake build never prints"); }, dumpDom: async () => "", closed: 0, close: async () => { l.closed++; }, pages: async (url, outDir, count, prefix) => { await mkdir(outDir, { recursive: true }); const names = []; for (let p = 1; p <= count; p++) { const n = `${prefix}-${String(p).padStart(2, "0")}.jpg`; await writeFile(join(outDir, n), Buffer.from([0xff, 0xd8, 0xff])); names.push(n); } return names; } }; return l; };
+const fakeLauncher = async () => makeLauncher();
 async function ctxWith(over = {}) {
   const store = new MemoryStore(), workDir = await mkdtemp(join(tmpdir(), "haftarah-work-"));
   await writeJson(store, "weeks/2026-10-17-noach/sheet.json", torahWeek);
@@ -183,6 +185,58 @@ test("the tools leave no week folder behind in the work folder", async () => {
     await call("deliver_week", { slug: "2026-10-17-noach", dryRun: true }, ctx);
     assert.deepEqual(await readdir(workDir), []);
   } finally { await rm(workDir, { recursive: true, force: true }); }
+});
+
+test("build_sheet hands the launcher's print to buildWeek and its dumpDom to checkWeek, and closes the launcher once, a failed build included", async () => {
+  const l = makeLauncher(), seen = {};
+  const { ctx, workDir } = await ctxWith({ launcher: async () => l, scripts: { buildWeek: async (dir, opts) => { seen.build = opts; return fakeBuild(dir, opts); }, checkWeek: async (dir, opts) => { seen.check = opts; return fakeCheck(); } } });
+  try {
+    const r = await call("build_sheet", { slug: "2026-10-17-noach" }, ctx);
+    assert.equal(r.status, "built");
+    assert.equal(seen.build.printImpl, l.print); assert.equal(seen.check.dumpDomImpl, l.dumpDom); assert.equal(l.closed, 1);
+    const l2 = makeLauncher();
+    ctx.launcher = async () => l2;
+    ctx.scripts.buildWeek = async () => { throw new Error("page.pdf timed out after 120 s"); };
+    await assert.rejects(call("build_sheet", { slug: "2026-10-17-noach" }, ctx), /page\.pdf timed out/);
+    assert.equal(l2.closed, 1);
+    // A launcher without print or dumpDom (localLauncher) leaves the scripts' own spawns in place.
+    const local = makeLauncher(); delete local.print; delete local.dumpDom; delete local.close;
+    ctx.launcher = async () => local;
+    ctx.scripts.buildWeek = async (dir, opts) => { seen.build = opts; return fakeBuild(dir, opts); };
+    await call("build_sheet", { slug: "2026-10-17-noach" }, ctx);
+    assert.ok(!("printImpl" in seen.build) && !("dumpDomImpl" in seen.check));
+  } finally { await rm(workDir, { recursive: true, force: true }); }
+});
+
+test("playwrightLauncher: one browser for print, dumpDom and pages; a failing page closes and rethrows one line; close is safe twice and never hangs", async () => {
+  const { playwrightLauncher } = await import("../api/_lib/browser.mjs");
+  const dir = await mkdtemp(join(tmpdir(), "haftarah-pw-"));
+  const log = { launches: 0, pagesOpened: 0, pagesClosed: 0, viewports: [] };
+  const page = (fail) => ({
+    goto: async url => { if (fail) throw new Error(`page.goto: net::ERR_FILE_NOT_FOUND at ${url}\nCall log:\n  - navigating`); },
+    waitForFunction: async () => {}, evaluate: async fn => (String(fn).includes("dataset.pages") ? "3" : true),
+    pdf: async ({ path }) => { await writeFile(path, "%PDF-1.4\n<</Type /Page>>\n<</Type /Page>>\n"); },
+    content: async () => "<html data-pages=\"3\"></html>",
+    screenshot: async ({ path }) => { await writeFile(path, Buffer.from([0xff, 0xd8])); },
+    close: async () => { log.pagesClosed++; },
+  });
+  let failNext = false;
+  const chromium = { launch: async () => { log.launches++; return { newPage: async ({ viewport }) => { log.pagesOpened++; log.viewports.push(`${viewport.width}x${viewport.height}`); return page(failNext); }, close: () => new Promise(() => {}) }; } };
+  try {
+    const l = playwrightLauncher({ chromium, executablePath: "/tmp/chromium", args: [], record: browserRecord("/tmp/chromium"), closeTimeoutMs: 200 });
+    const printed = await l.print(l.browser, "file:///w/sheet.html", join(dir, "sheet.pdf"), { common: [] });
+    assert.equal(printed.pages, 2, "the PDF's own page count first");
+    assert.equal(await l.dumpDom("/tmp/chromium", "file:///w/sheet.html", { size: "800,600" }), "<html data-pages=\"3\"></html>");
+    assert.deepEqual(await l.pages("file:///w/sheet.html", join(dir, "pages"), 2, "haftarah"), ["haftarah-01.jpg", "haftarah-02.jpg"]);
+    failNext = true;
+    await assert.rejects(l.dumpDom("/tmp/chromium", "file:///w/missing.html"), err => err.message === "dump-dom: page.goto: net::ERR_FILE_NOT_FOUND at file:///w/missing.html");
+    assert.equal(log.launches, 1); assert.equal(log.pagesOpened, 4); assert.equal(log.pagesClosed, 4);
+    assert.deepEqual(log.viewports, ["816x1056", "800x600", "816x1056", "816x1056"]);
+    const t0 = Date.now();
+    await l.close(); await l.close();   // the browser's close never settles; close gives up after closeTimeoutMs
+    assert.ok(Date.now() - t0 < 2000, `${Date.now() - t0} ms`);
+    await assert.rejects(l.print(l.browser, "file:///w/sheet.html", join(dir, "x.pdf"), { common: [] }), /the browser is closed/);
+  } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
 test("build_sheet with the real scripts and this machine's Chrome builds the fixture week and checks it", { skip: findBrowser() ? false : "no Chrome or Edge on this machine", timeout: 240_000 }, async () => {
