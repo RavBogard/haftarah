@@ -208,33 +208,36 @@ test("build_sheet hands the launcher's print to buildWeek and its dumpDom to che
   } finally { await rm(workDir, { recursive: true, force: true }); }
 });
 
-test("playwrightLauncher: one browser for print, dumpDom and pages; a failing page closes and rethrows one line; close is safe twice and never hangs", async () => {
+test("playwrightLauncher: one browser and one page for print, dumpDom and pages (headless-shell cannot open a second); a failing step rethrows one line and the next step goes on; close closes the browser once and never hangs", async () => {
   const { playwrightLauncher } = await import("../api/_lib/browser.mjs");
   const dir = await mkdtemp(join(tmpdir(), "haftarah-pw-"));
-  const log = { launches: 0, pagesOpened: 0, pagesClosed: 0, viewports: [] };
-  const page = (fail) => ({
-    goto: async url => { if (fail) throw new Error(`page.goto: net::ERR_FILE_NOT_FOUND at ${url}\nCall log:\n  - navigating`); },
+  const log = { launches: 0, newPage: 0, pageClosed: 0, browserClosed: 0, viewports: [], gotos: [] };
+  let failNext = false;
+  const page = {
+    setViewportSize: async v => { log.viewports.push(`${v.width}x${v.height}`); },
+    goto: async url => { log.gotos.push(url); if (failNext) { failNext = false; throw new Error(`page.goto: net::ERR_FILE_NOT_FOUND at ${url}\nCall log:\n  - navigating`); } },
     waitForFunction: async () => {}, evaluate: async fn => (String(fn).includes("dataset.pages") ? "3" : true),
     pdf: async ({ path }) => { await writeFile(path, "%PDF-1.4\n<</Type /Page>>\n<</Type /Page>>\n"); },
     content: async () => "<html data-pages=\"3\"></html>",
     screenshot: async ({ path }) => { await writeFile(path, Buffer.from([0xff, 0xd8])); },
-    close: async () => { log.pagesClosed++; },
-  });
-  let failNext = false;
-  const chromium = { launch: async () => { log.launches++; return { newPage: async ({ viewport }) => { log.pagesOpened++; log.viewports.push(`${viewport.width}x${viewport.height}`); return page(failNext); }, close: () => new Promise(() => {}) }; } };
+    close: async () => { log.pageClosed++; },
+  };
+  const chromium = { launch: async () => { log.launches++; return { newPage: async ({ viewport }) => { log.newPage++; log.viewports.push(`${viewport.width}x${viewport.height}`); return page; }, newContext: async () => { throw new Error("no second context on headless-shell"); }, close: () => { log.browserClosed++; return new Promise(() => {}); } }; } };
   try {
     const l = playwrightLauncher({ chromium, executablePath: "/tmp/chromium", args: [], record: browserRecord("/tmp/chromium"), closeTimeoutMs: 200 });
     const printed = await l.print(l.browser, "file:///w/sheet.html", join(dir, "sheet.pdf"), { common: [] });
     assert.equal(printed.pages, 2, "the PDF's own page count first");
     assert.equal(await l.dumpDom("/tmp/chromium", "file:///w/sheet.html", { size: "800,600" }), "<html data-pages=\"3\"></html>");
-    assert.deepEqual(await l.pages("file:///w/sheet.html", join(dir, "pages"), 2, "haftarah"), ["haftarah-01.jpg", "haftarah-02.jpg"]);
     failNext = true;
     await assert.rejects(l.dumpDom("/tmp/chromium", "file:///w/missing.html"), err => err.message === "dump-dom: page.goto: net::ERR_FILE_NOT_FOUND at file:///w/missing.html");
-    assert.equal(log.launches, 1); assert.equal(log.pagesOpened, 4); assert.equal(log.pagesClosed, 4);
-    assert.deepEqual(log.viewports, ["816x1056", "800x600", "816x1056", "816x1056"]);
+    assert.deepEqual(await l.pages("file:///w/sheet.html", join(dir, "pages"), 2, "haftarah"), ["haftarah-01.jpg", "haftarah-02.jpg"], "the step after a failure goes on in the same page");
+    assert.equal(log.launches, 1); assert.equal(log.newPage, 1); assert.equal(log.pageClosed, 0);
+    assert.deepEqual(log.viewports, ["816x1056", "800x600", "816x1056"], "resized only when a step needs another size");
+    assert.deepEqual(log.gotos, ["file:///w/sheet.html", "file:///w/sheet.html", "file:///w/missing.html", "file:///w/sheet.html?page=1", "file:///w/sheet.html?page=2"]);
     const t0 = Date.now();
     await l.close(); await l.close();   // the browser's close never settles; close gives up after closeTimeoutMs
     assert.ok(Date.now() - t0 < 2000, `${Date.now() - t0} ms`);
+    assert.equal(log.browserClosed, 1);
     await assert.rejects(l.print(l.browser, "file:///w/sheet.html", join(dir, "x.pdf"), { common: [] }), /the browser is closed/);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });

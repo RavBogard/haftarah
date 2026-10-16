@@ -23,23 +23,28 @@ const viewportOf = size => { const m = /^(\d+),(\d+)$/.exec(String(size || ""));
 
 /**
  * print, dumpDom and pages over one lazily launched browser from `chromium` (playwright-core's, or a fake in
- * tests), and close(), which may be called twice and never waits more than CLOSE_TIMEOUT_MS (a close can hang).
- * Every call has a timeout; a failure closes its page and rethrows with a one-line message.
+ * tests) and ONE page in it, opened on first use and reused by every step. The pack's binary is headless-shell in
+ * a single process: once a page closes, a further newPage or newContext fails with "Target page, context or
+ * browser has been closed" (the Sparticuz README, their issue #298; the preview spike of 932bb15). So no page is
+ * closed between steps; each step resizes the viewport as it needs and navigates. close() closes the browser,
+ * may be called twice, and never waits more than closeTimeoutMs (a close can hang). Every call has a timeout;
+ * a failure leaves the page for the next step (which navigates away) and rethrows with a one-line message.
  */
 export function playwrightLauncher({ chromium, executablePath, args, record, closeTimeoutMs = CLOSE_TIMEOUT_MS }) {
-  let launching = null, closed = false;
+  let launching = null, opening = null, closed = false, size = null;
   const browser = () => {
     if (closed) throw new Error("the browser is closed");
     return (launching ||= chromium.launch({ executablePath, args, headless: true, timeout: 60_000 }));
   };
-  async function onPage(size, what, fn) {
-    let page = null;
+  const thePage = () => (opening ||= (async () => { const v = viewportOf(null); const p = await (await browser()).newPage({ viewport: v, deviceScaleFactor: 1 }); size = `${v.width}x${v.height}`; return p; })().catch(err => { opening = null; throw err; }));
+  async function onPage(want, what, fn) {
     try {
-      const b = await browser();
-      page = await b.newPage({ viewport: viewportOf(size), deviceScaleFactor: 1 });
+      if (closed) throw new Error("the browser is closed");
+      const page = await thePage();
+      const v = viewportOf(want);
+      if (`${v.width}x${v.height}` !== size) { await page.setViewportSize(v); size = `${v.width}x${v.height}`; }
       return await fn(page);
     } catch (err) { throw new Error(`${what}: ${plain(err)}`); }
-    finally { if (page) await withTimeout(page.close(), closeTimeoutMs, "closing the page").catch(() => {}); }
   }
   // render.js sets data-pages after the fonts and the logo's redraw and its synchronous layout; the logo's <img>
   // (a data URL) must also have decoded before it prints. This is what the CLI's --virtual-time-budget covered.
