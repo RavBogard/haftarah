@@ -311,7 +311,8 @@ export const startWeek = defineTool({
 
 // Texts fetched for a reading that start_week replaces: deleted so the next fetch_texts fetches the new range, and
 // digest.md with them so fetch_texts rebuilds it from what is left.
-const STALE_ON_FORCE = ["texts.json", "texts-torah.json", "digest.md"];
+// force also drops the Torah candidates: a restart without a Torah pick must not leave the old pick's list for the digest to read.
+const STALE_ON_FORCE = ["texts.json", "texts-torah.json", "candidates-torah.json", "digest.md"];
 const STALE_ON_TORAH = ["texts-torah.json", "digest.md"];
 
 async function startIn(slug, { date, haftarahRef = null, torahPick = null, torahRef = null, noTorah = false, carry = true, force = false }, customs, ctx) {

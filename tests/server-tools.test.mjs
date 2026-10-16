@@ -149,6 +149,7 @@ test("start_week makes the week in the store from Hebcal and Sefaria, status dra
     assert.deepEqual(t.readings.map(x => x.kind), ["torah", "haftarah"]); assert.equal(t.version, 2);
     const f = await call("start_week", { date: "2026-10-17", force: true }, ctx);
     assert.equal(f.version, 3); assert.deepEqual(f.readings.map(x => x.kind), ["haftarah"], "force starts over");
+    assert.ok(!(await store.list("weeks/2026-10-17-noach/")).some(b => b.pathname.endsWith("candidates-torah.json")), "force drops the old Torah candidates, so the digest never shows a reading the week no longer has");
   } finally { await rm(workDir, { recursive: true, force: true }); }
 });
 
