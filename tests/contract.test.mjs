@@ -79,3 +79,15 @@ test("the offline app's names: the worker, the manifest, the caches under one pr
   const csp = v.headers.flatMap(h => h.headers).find(x => x.key === "Content-Security-Policy").value;
   assert.ok(csp.includes(`connect-src 'self' ${SEFARIA_ORIGIN}`), csp);
 });
+
+import { formatMarks, parseMarks } from "../site/app/contract.js";
+test("formatMarks and parseMarks: a reader's marks in a share link; a bare chapter-verse means the primary reading", () => {
+  assert.equal(formatMarks(["haftarah-54-3", "torah-6-9"]), "m=haftarah-54-3,torah-6-9");
+  assert.deepEqual(parseMarks("#m=haftarah-54-3,54-9", "haftarah"), ["haftarah-54-3", "haftarah-54-9"]);
+  assert.deepEqual(parseMarks("#m=torah-6-9,haftarah-54-3,junk,,haftarah-54-3", "haftarah"), ["torah-6-9", "haftarah-54-3"]);
+  assert.deepEqual(parseMarks("#m=", "haftarah"), []);
+  assert.equal(parseMarks("#haftarah-54-3", "haftarah"), null);
+  assert.equal(parseMarks("", "haftarah"), null);
+  const list = ["torah-6-9", "haftarah-54-3", "haftarah-54-10"];
+  assert.deepEqual(parseMarks(`#${formatMarks(list)}`, "haftarah"), list, "a round trip holds");
+});

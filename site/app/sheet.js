@@ -2,8 +2,9 @@
 // the model comes from lib.js's sheetModel, so the page prepares verses exactly as the print does.
 import { applyStored, initSettings } from "./settings.js";
 import { initPanel, clean, retryMemo } from "./panel.js";
-import { slugFromPath, dataUrl, verseAnchor, parseVerseAnchor, PDF_FILES, isSlug, SIDE_FILES, CACHE_PREFIX, DATA_CACHE } from "./contract.js";
-import { load } from "./storage.js";
+import { slugFromPath, dataUrl, verseAnchor, parseVerseAnchor, parseMarks, PDF_FILES, isSlug, SIDE_FILES, CACHE_PREFIX, DATA_CACHE } from "./contract.js";
+import { load, key } from "./storage.js";
+import { MARKS_KEY, readMarks, writeMarks, toggleMark, orderMarks, marksLink, marksText, sharedText, MARK, UNMARK, MY_MARKS, MARKS_EMPTY, MARKS_UNSAVED, COPY_LINK, COPY_TEXT, REMOVE, ADD_SHARED, DISMISS } from "./marks.js";
 
 export { slugFromPath, dataUrl };
 import { initRoving, focusables } from "./a11y.js";
@@ -111,13 +112,13 @@ export async function run() {
     addEventListener("unhandledrejection", e => errorsSeen.push(String(e.reason)));
     document.addEventListener("securitypolicyviolation", e => errorsSeen.push(`CSP blocked ${e.blockedURI || "inline"} (${e.violatedDirective})`));
   }
-  const fail = (msg) => { const pb = $("presentBtn"); if (pb) pb.closest(".row").remove();   // nothing to present on an error page
+  const fail = (msg) => { for (const id of ["presentBtn", "marksBtn"]) { const b = $(id); if (b) b.closest(".row").remove(); }   // nothing to present or mark on an error page
   const s = $("status"); s.innerHTML = msg; s.hidden = false; if (check) { html.dataset.checkErrors = String(errorsSeen.length + 1) + ": " + s.textContent; html.dataset.checkDone = "1"; } };
 
   applyStored();
   const slug = slugFromPath(location.pathname);
-  let startPresent = null;   // set once the verses exist
-  const settings = initSettings({ host: $("settings"), button: $("aaBtn"), pdfHref: slug ? dataUrl(slug, "sheet.pdf") : null, onPresent: () => startPresent && startPresent(true) });
+  let startPresent = null, openMarks = null;   // set once the verses exist
+  const settings = initSettings({ host: $("settings"), button: $("aaBtn"), pdfHref: slug ? dataUrl(slug, "sheet.pdf") : null, onPresent: () => startPresent && startPresent(true), onMarks: from => openMarks && openMarks(from) });
   if (!slug) return fail(`No sheet at this address. <a href="/">All sheets</a>`);
   const analytics = createAnalytics();
   const track = (name, props = {}) => analytics.track(name, { week: slug, ...props });
@@ -201,6 +202,8 @@ export async function run() {
   const wide = matchMedia("(min-width: 1100px)");
   const gutButton = r => r.row.querySelector(".gut button");
   let current = null;   // the row sync() last marked current
+  let marks = readMarks(slug);   // the reader's own marks on this week, from this device (marks.js)
+  const mine = new Set(marks);
   // A keyed letter becomes a button the popover (panel.js) answers; the sup keeps its classes.
   function keyButtons(node) {
     node.querySelectorAll("sup.fn").forEach(s => {
@@ -272,11 +275,14 @@ export async function run() {
       const ws = [...he.querySelectorAll(".w")];
       for (const h of hls) { const span = wordRange(h.words, ws.length); if (span) ws.slice(span[0], span[1] + 1).forEach(w => w.classList.add("hl-w")); }
     }
+    // The reader's own mark: a bar on the other side, an underlined number, and " Marked." in the number's name.
+    const marked = mine.has(row.id);
+    if (marked) { row.classList.add("mine"); gut.querySelector("button").insertAdjacentHTML("beforeend", '<span class="sr mark-sr"> Marked.</span>'); }
     const count = countLabel(v.entries.length, v.keys.length + hlNotes.length);
     // A verse with nothing gets a div: a <details> without a summary shows the browser's own "Details".
     const app = el(count ? "details" : "div", "vapp"); app.dataset.verse = cv;
     app.innerHTML = (count ? `<summary><span class="count">${count}</span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></summary>` : "") +
-      `<p class="vh"><span>${cv}</span><span class="acts"><button type="button" class="act" data-act="link">Copy link</button><button type="button" class="act" data-act="copy">Copy verse</button>${data.side && data.side.links ? `<button type="button" class="act" data-act="related">Everything on this verse</button>` : ""}<a href="${esc(sefariaUrl(v.ref))}" target="_blank" rel="noopener">on Sefaria</a></span></p>` +
+      `<p class="vh"><span>${cv}</span><span class="acts"><button type="button" class="act" data-act="link">Copy link</button><button type="button" class="act" data-act="copy">Copy verse</button><button type="button" class="act" data-act="mark" aria-pressed="${marked}">${marked ? UNMARK : MARK}</button>${data.side && data.side.links ? `<button type="button" class="act" data-act="related">Everything on this verse</button>` : ""}<a href="${esc(sefariaUrl(v.ref))}" target="_blank" rel="noopener">on Sefaria</a></span></p>` +
       hlNotes.map(h => `<p class="hl-note">${L.divineName(h.note).html}</p>`).join("") +
       v.keys.map(k => `<p class="note ${k.kind}">${noteHtml(k, L)}</p>`).join("") +
       v.entries.map(e => `<p class="entry reg-${e.register}">${entryHtml(e)}</p>`).join("");
@@ -388,16 +394,35 @@ export async function run() {
 
   // verse number: jump to its commentary (the rail when wide, the fold below the verse otherwise)
   for (const r of rows) gutButton(r).addEventListener("click", () => {
+    if (r.swallowClick) { r.swallowClick = false; return; }   // the click that ends a long-press only marked the verse
     if (wide.matches) { railPause = Date.now() + 1500; railTo(r.app); r.app.classList.add("current"); }
     else if (r.app.tagName === "DETAILS") { r.app.open = !r.app.open; }   // the toggle listener updates aria-expanded
     else gutButton(r).setAttribute("aria-expanded", String(r.app.classList.toggle("show")));   // no commentary: just the header (links, copy)
   });
 
-  // "Copy link" and "Copy verse" in each verse's header (in the rail when wide, in the fold otherwise).
+  // Press and hold a verse number to mark the verse (a tap still opens its commentary). The header's
+  // Mark this verse is the keyboard path. A finger that moves is scrolling, not holding.
+  for (const r of rows) {
+    const b = gutButton(r);
+    let timer = 0, x0 = 0, y0 = 0, touch = false;
+    const stop = () => { clearTimeout(timer); timer = 0; };
+    b.addEventListener("pointerdown", e => {
+      r.swallowClick = false; stop();   // a hold that ended without a click (iOS) must not eat the next tap
+      if (e.button !== 0) return;
+      touch = e.pointerType === "touch"; x0 = e.clientX; y0 = e.clientY;
+      timer = setTimeout(() => { timer = 0; r.swallowClick = true; api.marks.toggle(r.row.id); }, 500);
+    });
+    for (const t of ["pointerup", "pointerleave", "pointercancel"]) b.addEventListener(t, stop);
+    b.addEventListener("pointermove", e => { if (timer && Math.hypot(e.clientX - x0, e.clientY - y0) > 10) stop(); });
+    b.addEventListener("contextmenu", e => { if (touch) e.preventDefault(); });   // a mouse keeps its menu
+  }
+
+  // "Copy link", "Copy verse" and "Mark this verse" in each verse's header (in the rail when wide, in the fold otherwise).
   async function onAct(e) {
     const b = e.target.closest("button.act"); if (!b) return;
     const r = rows.find(x => x.app === b.closest(".vapp")); if (!r) return;
     if (b.dataset.act === "related") { panel.openRelated(r, b); return; }
+    if (b.dataset.act === "mark") { api.marks.toggle(r.row.id); return; }
     const url = verseUrl(location.origin, slug, r.row.id);
     // Another edition shown in this verse: copy that English, under its name (a verse the edition lacks keeps the sheet's own).
     const alt = html.dataset.translation && html.dataset.translation !== "jps2023" && r.row.querySelector(".en.alt");
@@ -421,6 +446,108 @@ export async function run() {
   const panel = initPanel({ page: api, L, sefariaUrl, track });
   api.openWord = w => panel.openWord(w);
   api.openRelated = (r, from) => panel.openRelated(r, from);
+
+  // ---- a reader's own marks (spec 5.2): on this device only; shared as a #m= link or as text ----
+  const rowIds = () => rows.map(r => r.row.id);
+  const rowById = id => rows.find(r => r.row.id === id);
+  function setMarked(r, on) {
+    r.row.classList.toggle("mine", on);
+    const gb = gutButton(r), sr = gb.querySelector(".mark-sr");
+    if (on && !sr) { const s = el("span", "sr mark-sr"); s.textContent = " Marked."; gb.append(s); }
+    if (!on && sr) sr.remove();
+    const mb = r.app.querySelector('.act[data-act="mark"]');
+    mb.textContent = on ? UNMARK : MARK; mb.setAttribute("aria-pressed", String(on));
+  }
+  const marksPanelOpen = () => $("panel").hasAttribute("data-open") && $("panelKind").textContent === MY_MARKS;
+  function renderMarks() {
+    const set = new Set(marks);
+    for (const r of rows) if (r.row.classList.contains("mine") !== set.has(r.row.id)) setMarked(r, set.has(r.row.id));
+    settings.setMarksCount(api.marks.list().length);
+    if (marksPanelOpen()) $("panelBody").innerHTML = marksHtml();
+  }
+  let askedPersist = false;
+  function saveMarks(next) {
+    marks = next;
+    const ok = writeMarks(slug, marks);
+    // Ask once, on the first mark of the session, that the browser keep this site's storage.
+    if (!askedPersist) { askedPersist = true; try { navigator.storage?.persist?.().catch(() => {}); } catch {} }
+    renderMarks();   // a refused write keeps the mark on the page for this visit, and says so
+    if (!ok) copyStatus.textContent = MARKS_UNSAVED;
+    return ok;
+  }
+  const firstWords = (s, n = 8) => { const w = s.split(/\s+/).filter(Boolean); return w.length > n ? `${w.slice(0, n).join(" ")}…` : w.join(" "); };
+  const verseEn = r => r.v.enLines.map(t => L.plainText(t).text.trim()).join(" ");
+  function marksHtml() {
+    const list = api.marks.list();
+    if (!list.length) return `<p class="marks-empty">${esc(MARKS_EMPTY)}</p>`;
+    return `<ol class="marks">${list.map(id => {
+      const r = rowById(id), ref = esc(L.enDash(r.v.ref));
+      return `<li><a class="go" href="#${esc(id)}">${ref}</a> <span class="en">${esc(firstWords(verseEn(r)))}</span> <button type="button" class="act" data-mark-remove="${esc(id)}">${esc(REMOVE)}<span class="sr"> ${ref}</span></button></li>`;
+    }).join("")}</ol>` +
+      `<p class="marks-acts"><button type="button" class="act" data-marks-copy="link">${esc(COPY_LINK)}</button><button type="button" class="act" data-marks-copy="text">${esc(COPY_TEXT)}</button></p>`;
+  }
+  openMarks = from => {
+    panel.open(MY_MARKS, marksHtml(), from);
+    const first = $("panelBody").querySelector("a, button") || $("panelClose");   // the opener was in the Aa card, now closed
+    first.focus({ preventScroll: true });
+  };
+  $("panelBody").addEventListener("click", async e => {
+    if (!marksPanelOpen()) return;
+    const go = e.target.closest(".marks a.go"), rm = e.target.closest("[data-mark-remove]"), cp = e.target.closest("[data-marks-copy]");
+    if (go) {
+      e.preventDefault();
+      const r = goToHash(go.getAttribute("href"));
+      // As an occurrence in the word panel: wide, the panel stays beside the verse; narrower, it covers it and closes.
+      if (r && !wide.matches) { panel.close(); gutButton(r).focus({ preventScroll: true }); }
+    } else if (rm) {
+      const at = [...$("panelBody").querySelectorAll("[data-mark-remove]")].indexOf(rm);
+      api.marks.remove(rm.dataset.markRemove);   // re-renders the open list
+      const left = $("panelBody").querySelectorAll("[data-mark-remove]");
+      (left[Math.min(at, left.length - 1)] || $("panelBody").querySelector("button") || $("panelClose")).focus({ preventScroll: true });
+    } else if (cp) {
+      await copyWithStatus(cp, cp.dataset.marksCopy === "link" ? api.marks.link() : api.marks.text(), { write: t => navigator.clipboard.writeText(t), status: copyStatus });
+    }
+  });
+
+  // Marks shared in the address (#m=…): those on this page are outlined, and a strip offers to keep them.
+  const sharedHost = $("shared");
+  let shared = orderMarks(parseMarks(location.hash, reading.id) || [], rowIds());
+  function clearShared() {
+    shared = [];
+    rows.forEach(r => r.row.classList.remove("shared"));
+    sharedHost.hidden = true; sharedHost.textContent = "";
+    history.replaceState(null, "", location.pathname + location.search);
+  }
+  function acceptShared() {
+    const ids = rowIds(), union = [...new Set([...marks, ...shared])];
+    saveMarks([...orderMarks(union, ids), ...union.filter(m => !ids.includes(m))]);
+    clearShared();
+  }
+  if (shared.length) {
+    rows.forEach(r => r.row.classList.toggle("shared", shared.includes(r.row.id)));
+    const span = el("span"); span.textContent = sharedText(shared.length);
+    const acts = el("span", "strip-acts");
+    const add = el("button", "act"); add.type = "button"; add.textContent = ADD_SHARED; add.addEventListener("click", acceptShared);
+    const no = el("button", "act"); no.type = "button"; no.textContent = DISMISS; no.addEventListener("click", clearShared);
+    acts.append(add, no);
+    sharedHost.append(span, acts);
+    sharedHost.hidden = false;
+  }
+
+  api.marks = {
+    list: () => orderMarks(marks, rowIds()),
+    add: anchor => saveMarks(marks.includes(anchor) ? marks : [...marks, anchor]),
+    remove: anchor => saveMarks(marks.filter(x => x !== anchor)),
+    toggle: anchor => saveMarks(toggleMark(marks, anchor)),
+    link: () => marksLink(location.origin, slug, api.marks.list()),
+    text: () => marksText(api.marks.list().map(id => { const r = rowById(id); return { ref: L.enDash(r.v.ref), en: verseEn(r) }; }),
+      { translation: translationLabel(model.front.provenance.en), link: api.marks.link() }),
+    reload: () => { marks = readMarks(slug); renderMarks(); },
+    acceptShared, dismissShared: clearShared,
+  };
+  settings.setMarksCount(api.marks.list().length);
+  // Marks changed in another tab of this site: follow them.
+  addEventListener("storage", e => { if (e.key === key(MARKS_KEY(slug))) api.marks.reload(); });
   // The offline app: register the worker; a new build waiting says so under the masthead (never reloads).
   const offlineReady = registerOffline({ onUpdate: () => showUpdate($("update")) });
   api.offlineReady = offlineReady;
@@ -619,6 +746,29 @@ async function runCheck(api, L) {
   const priorLink = document.querySelector("#front a.prior");
   h.dataset.checkPrior = priorLink ? priorLink.getAttribute("href") : "";
   h.dataset.checkSide = JSON.stringify(api.side ? Object.keys(api.side).sort() : []);
+  // Marks shared in the address (#m=…): the rows outlined, then kept; the address loses the fragment.
+  if (location.hash.startsWith("#m=")) {
+    h.dataset.checkShared = String(document.querySelectorAll("#text .row.shared").length);
+    h.dataset.checkSharedStrip = document.getElementById("shared").hidden ? "hidden" : "shown";
+    api.marks.acceptShared();
+    h.dataset.checkSharedAdded = String(api.marks.list().length);
+    h.dataset.checkSharedHash = location.hash;
+  }
+  // A reader's marks: none to start; adding one marks the row, names the number, flips the header
+  // button, counts in the Aa card, lists in the panel, and the link carries it; removing clears it.
+  h.dataset.checkMarks = String(document.querySelectorAll("#text .row.mine").length);
+  const mr = rows[1];
+  api.marks.add(mr.row.id);
+  h.dataset.checkMarksStored = String(api.marks.list().length);
+  h.dataset.checkMarksName = String(/Marked\.$/.test(mr.row.querySelector(".gut button").textContent));
+  h.dataset.checkMarksButton = mr.app.querySelector('.act[data-act="mark"]').textContent;
+  h.dataset.checkMarksCount = document.getElementById("marksCount").textContent;
+  h.dataset.checkMarksLink = api.marks.link();
+  document.getElementById("marksBtn").click();
+  h.dataset.checkMarksListed = String(document.querySelectorAll("#panelBody .marks li").length);
+  api.closeAll();
+  api.marks.remove(mr.row.id);
+  h.dataset.checkMarksRemoved = String(document.querySelectorAll("#text .row.mine").length + api.marks.list().length);
   // Two thirds down: far enough that a rail which scrolls short of its target misses it.
   const target = rows[Math.floor(rows.length * 2 / 3)];
   target.row.scrollIntoView({ block: "start" });

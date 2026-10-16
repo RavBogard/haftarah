@@ -121,15 +121,16 @@ test("migrateKeys moves the first release's keys under the prefix once; a prefix
 
 test("load and store use the prefix and survive a storage that throws", () => {
   const s = memoryStorage();
-  store("lang", "he", s);
+  assert.equal(store("lang", "he", s), true);
   assert.equal(s.getItem("haftarah:v1:lang"), "he");
   assert.equal(load("lang", s), "he");
-  store("lang", null, s);
+  assert.equal(store("lang", null, s), true);
   assert.equal(load("lang", s), null);
   assert.equal(key("size"), `${PREFIX}size`);
   const broken = { getItem() { throw new Error("SecurityError"); }, setItem() { throw new Error("QuotaExceededError"); }, removeItem() { throw new Error("SecurityError"); } };
   assert.equal(load("size", broken), null);
-  assert.doesNotThrow(() => store("size", "3", broken));
+  assert.equal(store("size", "3", broken), false, "a refused write says so");
+  assert.equal(store("size", null, broken), false);
   assert.deepEqual(migrateKeys(broken), []);
 });
 

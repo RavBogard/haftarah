@@ -53,3 +53,18 @@ export function parseVerseAnchor(hash) {
   m = /^v(\d{1,3})-(\d{1,3})$/.exec(h);
   return m ? { reading: null, chapter: Number(m[1]), verse: Number(m[2]) } : null;
 }
+
+/** A reader's marks in a share link: "#m=haftarah-54-3,haftarah-54-9". A bare "54-9" means the primary reading. */
+export const formatMarks = anchors => `m=${anchors.join(",")}`;
+export function parseMarks(hash, primaryReading) {
+  const h = String(hash == null ? "" : hash).replace(/^#/, "");
+  if (!h.startsWith("m=")) return null;
+  const out = [];
+  for (const item of h.slice(2).split(",")) {
+    const a = parseVerseAnchor(item.startsWith("v") ? item : /^\d/.test(item) ? `v${item}` : item);
+    if (!a) continue;
+    const anchor = verseAnchor(a.reading == null ? primaryReading : a.reading, a.chapter, a.verse);
+    if (!out.includes(anchor)) out.push(anchor);
+  }
+  return out;
+}

@@ -77,7 +77,12 @@ export function initPanel({ page, L, sefariaUrl, track = () => {} }) {
     panel.removeAttribute("data-open"); panel.setAttribute("aria-hidden", "true"); panel.inert = true;
     delete panel.dataset.alt; delete pBody.dataset.related; pBody.classList.remove("show-he");
     if (activeWord) { activeWord.classList.remove("active"); activeWord = null; }
-    if (opener) { const o = opener; opener = null; o.setAttribute("aria-expanded", "false"); o.focus({ preventScroll: true }); }
+    if (opener) {
+      const o = opener; opener = null; o.setAttribute("aria-expanded", "false");
+      // An opener inside a card that has closed since (My marks, in the Aa card) hands focus to the card's own button.
+      const card = !o.getClientRects().length && o.closest('[role="dialog"][id]');
+      (card && document.querySelector(`[aria-controls="${card.id}"]`) || o).focus({ preventScroll: true });
+    }
   }
   // Sefaria's own markup links to its pages by path; point those at Sefaria, not at this site.
   function fill(token, html) {

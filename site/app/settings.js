@@ -16,7 +16,7 @@ export function applyStored() {
   if (load("trope") === "1" || new URLSearchParams(location.search).get("trope") === "1") html.dataset.trope = "1";
 }
 
-export function initSettings({ host, button, pdfHref = null, trope = true, langs = true, onPresent = null }) {
+export function initSettings({ host, button, pdfHref = null, trope = true, langs = true, onPresent = null, onMarks = null }) {
   const html = document.documentElement;
   host.innerHTML = `
     <div class="row"><span class="label">Text size</span>
@@ -25,6 +25,7 @@ export function initSettings({ host, button, pdfHref = null, trope = true, langs
       <span class="seg" role="group" aria-label="Theme" id="themeSeg"><button type="button" data-theme="auto">Auto</button><button type="button" data-theme="light">Light</button><button type="button" data-theme="dark">Dark</button></span></div>
     ${langs ? `<div class="row"><span class="label">Show</span>
       <span class="seg" role="group" aria-label="Show" id="langSeg"><button type="button" data-lang="he">Hebrew</button><button type="button" data-lang="both">Both</button><button type="button" data-lang="en">English</button></span></div>` : ""}
+    ${onMarks ? `<div class="row"><button type="button" class="marks-btn" id="marksBtn">My marks <span class="count" id="marksCount"></span></button></div>` : ""}
     ${trope ? `<div class="row"><span class="label">Trope colors<br><span class="hint">for chanters: phrases by family</span></span>
       <button type="button" class="switch" id="tropeSw" role="switch" aria-checked="false" aria-label="Trope colors"></button></div>` : ""}
     ${pdfHref ? `<div class="row"><a class="dl" href="${pdfHref}" download><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 4v11m0 0l-4-4m4 4l4-4M5 20h14"/></svg>Download the printed sheet (PDF)</a></div>` : ""}
@@ -58,6 +59,10 @@ export function initSettings({ host, button, pdfHref = null, trope = true, langs
   if (sw) sw.addEventListener("click", () => { if (html.dataset.trope) { delete html.dataset.trope; store("trope", null); } else { html.dataset.trope = "1"; store("trope", "1"); } sync(); });
   const pb = host.querySelector("#presentBtn");
   if (pb) pb.addEventListener("click", () => { close(); onPresent(); });
+  // My marks: the page opens its panel (the card closes first, as for the presenter); the count follows the list.
+  const mb = host.querySelector("#marksBtn");
+  if (mb) mb.addEventListener("click", () => { close(); onMarks(mb); });
+  const setMarksCount = n => { const c = host.querySelector("#marksCount"); if (c) c.textContent = n ? String(n) : ""; };
   sync();
   // A second printed sheet (the Torah's), added once the week's data says there is one.
   // Built node by node: href and label are set as a property and as text, never parsed as markup.
@@ -99,5 +104,5 @@ export function initSettings({ host, button, pdfHref = null, trope = true, langs
     // The page says which edition is showing once it has switched (a failed load stays on JPS 2023).
     return { setPressed: key => seg.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", String(x.dataset.translation === key))) };
   };
-  return { close, addDownload, setTranslations };
+  return { close, addDownload, setTranslations, setMarksCount };
 }

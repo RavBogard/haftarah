@@ -162,6 +162,14 @@ async function main() {
         expect("a teacher highlight's note is in the apparatus", a["hl-notes"] === "1", a["hl-notes"]);
         expect("the verse number's name says Highlighted.", a["hl-name"] === "true", a["hl-name"]);
       }
+      // A reader's marks (spec 5.2): kept on this device, named, counted, listed, carried by the link.
+      expect("no marks to start", a.marks === "0", a.marks);
+      expect("a mark is kept and listed", a["marks-stored"] === "1" && a["marks-listed"] === "1", `${a["marks-stored"]} ${a["marks-listed"]}`);
+      expect("a marked verse is named Marked.", a["marks-name"] === "true", a["marks-name"]);
+      expect("the header button reads Unmark", a["marks-button"] === "Unmark", a["marks-button"]);
+      expect("the Aa card counts the marks", a["marks-count"] === "1", a["marks-count"]);
+      expect("the marks link carries the verse", a["marks-link"] === `${base}/${slug}#m=${flat[1].reading}-${flat[1].chapter}-${flat[1].verse}`, a["marks-link"]);
+      expect("removing clears the mark", a["marks-removed"] === "0", a["marks-removed"]);
       expect("one polite live region for copy status", a.live === "1", a.live);
       expect("Copy link, Copy verse and on Sefaria are 44px targets", Number(a["act-height"]) >= 44, a["act-height"]);
       expect("Show Hebrew hides the English", a["lang-he"] === "none", a["lang-he"]);
@@ -239,6 +247,17 @@ async function main() {
     expect("old link marks its verse", t.target === `haftarah-${lv.chapter}-${lv.verse}`, t.target);
     expect("old link becomes the new address", t.hash === `#haftarah-${lv.chapter}-${lv.verse}`, t.hash);
     expect("a link to a verse not in the reading is ignored and clears the old mark", t["bogus-hash"] === "true", t["bogus-hash"]);
+    // Marks shared in a link: two verses on the page (one bare, meaning the primary reading) and one that is not.
+    const v3 = flat[Math.min(2, flat.length - 1)], v4 = sheet.verses[Math.min(3, sheet.verses.length - 1)];
+    const sharedHash = `#m=${v3.reading}-${v3.chapter}-${v3.verse},${v4.chapter}-${v4.verse},99-99`;
+    const sm = attrs(await dumpDom(browser, `${base}/${slug}?check=1${sharedHash}`, { size: "1440,900" }));
+    console.log(`\nshared marks: /${slug}${sharedHash}`);
+    expect("shared marks: page finished without errors", sm.done === "1" && sm.errors === "0", `${sm.done} ${sm.errors}`);
+    expect("shared marks outline the verses on the page", sm.shared === "2" && sm["shared-strip"] === "shown", `${sm.shared} ${sm["shared-strip"]}`);
+    expect("Add to my marks keeps them", sm["shared-added"] === "2", sm["shared-added"]);
+    expect("the address loses the marks once added", sm["shared-hash"] === "", sm["shared-hash"]);
+    const sn = attrs(await dumpDom(browser, `${base}/${slug}?check=1#m=99-99`, { size: "1440,900" }));
+    expect("a shared mark on no verse shows no strip", sn.done === "1" && sn.errors === "0" && sn.shared === "0" && sn["shared-strip"] === "hidden", `${sn.done} ${sn.errors} ${sn.shared} ${sn["shared-strip"]}`);
     const p = attrs(await dumpDom(browser, `${base}/${slug}?present&check=1`, { size: "1280,720" }));
     const [v1, v2] = flat;
     console.log(`\npresenter 1280x720: /${slug}?present`);

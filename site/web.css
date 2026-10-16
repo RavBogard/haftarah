@@ -228,10 +228,12 @@ sup.fn button::after { content: ""; position: absolute; inset: -.7em -.35em; }
 
 /* load and error states */
 .status { margin: 2rem 0; color: var(--ink-2); font-style: italic; } .status a { color: var(--rubric); }
-/* the update note (offline-client.js): a new build waits for the next launch; never on the shared screen */
-.update { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin: 1rem 0 0; padding: .6rem .9rem; border: .5px solid var(--rule); font-size: .95rem; }
-.update .act { min-height: max(2.75rem, 44px); color: var(--rubric); font-weight: 500; }
-html[data-present] .update { display: none; }
+/* the strips under the masthead: the update note (offline-client.js), a new build waiting for the next
+   launch; and marks shared in the address (sheet.js). Never on the shared screen. */
+.strip { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0 1rem; margin: 1rem 0 0; padding: .6rem .9rem; border: .5px solid var(--rule); font-size: .95rem; }
+.strip .strip-acts { display: flex; flex-wrap: wrap; gap: 0 1rem; }
+.strip .act { min-height: max(2.75rem, 44px); color: var(--rubric); font-weight: 500; }
+html[data-present] .strip { display: none; }
 
 /* end matter */
 .end { border-top: .5px solid var(--rule); margin-top: 2rem; padding-top: 1.25rem; }
@@ -358,6 +360,28 @@ html[data-lang="he"] .text .row .en, html[data-lang="en"] .text .row .he { displ
 /* the tint, and an underline so the words are marked without colour */
 .he .w.hl-w { background: var(--hl); box-shadow: inset 0 -2px 0 var(--rubric); }
 .hl-note { margin: 0 0 .5rem; padding-left: .6rem; border-left: 2px solid var(--rubric); }
+/* a reader's own mark (marks.js): an ochre bar on the right and an underlined number, so the teacher's
+   rubric bar on the left and a link's outline both still show; a mark shared in the address is dashed */
+.row .gut button { -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; touch-action: manipulation; }
+.row.mine { box-shadow: inset -3px 0 0 var(--reg-reference); }
+.row.mine .gut button { text-decoration: underline; text-decoration-color: var(--reg-reference); text-decoration-thickness: 2px; text-underline-offset: .18em; }
+.row.hl.mine { box-shadow: inset 3px 0 0 var(--rubric), inset -3px 0 0 var(--reg-reference); }
+.row.mine.target { box-shadow: inset -3px 0 0 var(--reg-reference), inset 0 0 0 1px var(--rubric); }
+.row.hl.mine.target { box-shadow: inset 3px 0 0 var(--rubric), inset -3px 0 0 var(--reg-reference), inset 0 0 0 1px var(--rubric); }
+.row.mine { padding-right: .6rem; }
+.row.shared { outline: 1px dashed var(--ink-2); outline-offset: -1px; }
+/* My marks, in the side panel */
+.marks { padding-left: 1.2rem; }
+.marks li { margin: .4rem 0; display: flex; flex-wrap: wrap; gap: .4rem .8rem; align-items: center; }
+.marks .go { color: var(--rubric); display: inline-flex; align-items: center; min-height: max(2.75rem, 44px); }
+.marks .en { color: var(--ink-2); flex: 1 1 100%; order: 1; margin-top: -.5rem; }   /* under the reference and Remove, which share a line */
+.marks-acts { display: flex; flex-wrap: wrap; gap: .8rem; }
+.marks .act, .marks-acts .act { min-height: max(2.75rem, 44px); color: var(--rubric); font-weight: 500; }
+.marks .act:hover, .marks-acts .act:hover { text-decoration: underline; }
+.settings .marks-btn { color: var(--rubric); font-weight: 500; min-height: max(2.75rem, 44px); text-align: left; }
+.settings .marks-btn:hover { text-decoration: underline; }
+.settings .marks-btn .count { color: var(--ink-2); font-weight: 400; margin-left: .2em; }
+.settings .marks-btn .count:empty { display: none; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
 /* ---- presenter view (?present): one verse at a time, large, for a shared screen ---- */

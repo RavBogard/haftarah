@@ -11,8 +11,9 @@ export function load(name, storage) {
   try { return storageOf(storage).getItem(key(name)); } catch { return null; }
 }
 
+/** True when written (or removed); false when the storage refused it. */
 export function store(name, value, storage) {
-  try { const s = storageOf(storage); value == null ? s.removeItem(key(name)) : s.setItem(key(name), String(value)); } catch {}
+  try { const s = storageOf(storage); value == null ? s.removeItem(key(name)) : s.setItem(key(name), String(value)); return true; } catch { return false; }
 }
 
 /** Move the legacy keys under the prefix once; a value already under the prefix wins. Returns the names moved. */
