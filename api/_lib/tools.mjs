@@ -350,7 +350,7 @@ export const fetchTexts = defineTool({
   inputSchema: { type: "object", properties: { slug: slugProp, reading: readingProp, force: { type: "boolean" } }, required: ["slug", "reading"] },
   annotations: { idempotentHint: true },
   deadlineMs: LONG_DEADLINE_MS,
-  async handler({ slug, reading, force = false }, ctx) {
+  handler: locked(bySlug, async ({ slug, reading, force = false }, ctx) => {
     await requireSheet(ctx, slug);
     const lines = [];
     const { t, digest } = await withWeek(ctx, slug, NEEDS.texts, async dir => {
@@ -360,7 +360,7 @@ export const fetchTexts = defineTool({
       return { t, digest };
     });
     return { slug, reading, file: t.file, kept: !!t.kept, counts: t.counts || null, sectionFiled: t.sectionFiled || [], notFetched: t.notFetched || null, digest };
-  },
+  }),
 });
 
 export const saveEntries = defineTool({

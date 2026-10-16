@@ -9,7 +9,7 @@ import { SLUG } from "../../site/app/contract.js";
 export const WEEK_FILES = ["sheet.json", "status.json", "candidates.json", "candidates-torah.json", "texts.json", "texts-torah.json", "prior.json", "digest.md", "briefing.md", "sheet.html", "sheet-torah.html", "sheet-trope.html", "sheet.pdf", "sheet-torah.pdf", "sheet-trope.pdf", "words.json", "translations.json", "links.json"];
 const TYPES = { ".json": "application/json", ".md": "text/markdown; charset=utf-8", ".html": "text/html; charset=utf-8", ".pdf": "application/pdf", ".jpg": "image/jpeg", ".png": "image/png", ".txt": "text/plain; charset=utf-8" };
 const BLOB_API_VERSION = "13";   // the x-api-version scripts/publish.mjs sends
-export const contentTypeOf =name => TYPES[extname(name).toLowerCase()] || "application/octet-stream";
+export const contentTypeOf = name => TYPES[extname(name).toLowerCase()] || "application/octet-stream";
 
 /**
  * fetchImpl with `signal` added to every request (joined with the request's own signal when it has one); with no

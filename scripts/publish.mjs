@@ -206,7 +206,11 @@ export async function getBlob({ pathname, token, access = "public", fetchImpl = 
   const headers = { "cache-control": "no-cache" };
   if (access === "private") headers.authorization = `Bearer ${token}`;
   let res;
-  try { res = await fetchImpl(`${origin}/${pathname}?${Date.now()}`, { method: "GET", headers }); }
+  // A private blob is read past the CDN with Vercel's consistent read (`cache=0`, what the SDK's get() sends for
+  // useCache: false): an overwritten blob was measured stale for minutes through the cache, whatever the query.
+  // A public blob has no such read; a fresh query string is the best there is.
+  const query = access === "private" ? "cache=0" : String(Date.now());
+  try { res = await fetchImpl(`${origin}/${pathname}?${query}`, { method: "GET", headers }); }
   catch (err) { throw new Error(`${pathname}: network error: ${err.cause?.code || err.message}`); }
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`${pathname}: Blob answered HTTP ${res.status}`);

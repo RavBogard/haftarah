@@ -612,7 +612,7 @@ test("putBlob sends x-vercel-blob-access private when asked, public by default; 
   assert.equal(blobOrigin(token, "private"), "https://abcdefghijklmnop.private.blob.vercel-storage.com");
   assert.equal(blobOrigin(token, "public"), "https://abcdefghijklmnop.public.blob.vercel-storage.com");
   const got = await getBlob({ pathname: "weeks/x/sheet.json", token, access: "private", fetchImpl: async (url, init) => { seen.push({ url: String(url), headers: init.headers }); return new Response("{\"a\":1}", { status: 200 }); } });
-  assert.ok(seen[2].url.startsWith("https://abcdefghijklmnop.private.blob.vercel-storage.com/weeks/x/sheet.json?"));
+  assert.equal(seen[2].url, "https://abcdefghijklmnop.private.blob.vercel-storage.com/weeks/x/sheet.json?cache=0", "a private read is a consistent read, past the CDN");
   assert.equal(seen[2].headers.authorization, `Bearer ${token}`);
   assert.equal(await got.text(), "{\"a\":1}");
   const missing = await getBlob({ pathname: "weeks/x/none.json", token, access: "private", fetchImpl: async () => new Response("", { status: 404 }) });
