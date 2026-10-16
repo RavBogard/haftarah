@@ -9,7 +9,7 @@ import { buildSite, checkOut, precacheList, buildHash, fillWorker } from "../scr
 test("buildSite copies the site, lib, trope.css, voices, fonts and the mural", async () => {
   const out = await mkdtemp(join(tmpdir(), "site-"));
   const r = await buildSite({ out });
-  for (const f of ["index.html", "sheet.html", "404.html", "web.css", "app/sheet.js", "app/landing.js", "app/settings.js", "app/present.js","app/analytics.js", "app/analytics-config.js", "app/storage.js","app/a11y.js","app/boot-sheet.js", "app/boot-landing.js","app/contract.js", "library.html", "app/library.js", "app/library-view.js","app/library-page.js", "app/boot-library.js", "app/parashot.js", "app/figures.js", "geo/basemap.json", "geo/chronology.json", "lib.js", "trope.css", "voices.json", "mural.png", "fonts/EzraSIL.ttf", "fonts/Literata[opsz,wght].ttf", "fonts/Literata-Italic[opsz,wght].ttf", "fonts/NotoSerifHebrew[wdth,wght].ttf", "fonts/OFL-literata.txt", "sw.js"]) {
+  for (const f of ["index.html", "sheet.html", "404.html", "web.css", "app/sheet.js", "app/landing.js", "app/settings.js", "app/present.js","app/analytics.js", "app/analytics-config.js", "app/storage.js","app/a11y.js","app/boot-sheet.js", "app/boot-landing.js","app/contract.js", "library.html", "app/library.js", "app/library-view.js","app/library-page.js", "app/boot-library.js", "app/parashot.js", "app/figures.js", "geo/basemap.json", "geo/chronology.json", "lib.js", "trope.css", "voices.json", "mural.png", "fonts/EzraSIL.ttf", "fonts/Literata[opsz,wght].ttf", "fonts/Literata-Italic[opsz,wght].ttf", "fonts/NotoSerifHebrew[wdth,wght].ttf", "fonts/OFL-literata.txt", "sw.js", "manifest.webmanifest", "icons/icon-192.png"]) {
     assert.ok((await stat(join(out, f))).isFile(), f);
     assert.ok(r.files.includes(f), `${f} reported`);
   }
@@ -61,7 +61,7 @@ test("buildSite writes the worker with its build hash and precache list; the has
     const sw = await readFile(join(one, "sw.js"), "utf8");
     assert.ok(sw.includes(`const BUILD = "${r.build}"`), "the build hash is written");
     assert.ok(sw.includes(`const PRECACHE = ${JSON.stringify(r.precache)}`), "the precache list is written");
-    for (const p of ["/", "/sheet.html", "/library.html", "/404.html", "/web.css", "/lib.js", "/app/sheet.js", "/fonts/EzraSIL.ttf", "/geo/basemap.json", "/mural.png"]) assert.ok(r.precache.includes(p), p);
+    for (const p of ["/", "/sheet.html", "/library.html", "/404.html", "/web.css", "/lib.js", "/app/sheet.js", "/fonts/EzraSIL.ttf", "/geo/basemap.json", "/mural.png", "/manifest.webmanifest", "/icons/icon-192.png", "/icons/maskable-512.png"]) assert.ok(r.precache.includes(p), p);
     assert.ok(!r.precache.includes("/sw.js"));
     assert.ok(!r.precache.some(p => p.endsWith(".txt")), "no licence text");
     assert.equal((await buildSite({ out: two })).build, r.build, "the same sources give the same build");

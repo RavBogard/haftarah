@@ -2,7 +2,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
-import { dumpDom, parseBrowserVersion, printSignature, sha256 } from "../scripts/chrome.mjs";
+import { writeFile, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { dumpDom, screenshot, parseBrowserVersion, printSignature, sha256 } from "../scripts/chrome.mjs";
 
 // A stand-in for a spawned Chrome: `script(child)` decides what it writes and when it exits.
 function fakeSpawn(script) {
@@ -76,4 +79,18 @@ test("printSignature keeps the stamped <html> tag and the sheet, nothing else", 
   const dom = '<html lang="en" data-pages="2" data-keys="a,b"><head><title>t</title></head><body><p class="review-note">n</p><main id="sheet" aria-label="Haftarah sheet"><section class="page">x</section></main><div id="stage">measuring</div></body></html>';
   assert.equal(printSignature(dom), '<html lang="en" data-pages="2" data-keys="a,b">\n<main id="sheet" aria-label="Haftarah sheet"><section class="page">x</section></main>');
   assert.match(sha256("x"), /^[0-9a-f]{64}$/);
+});
+
+test("screenshot passes the size and output path and resolves to the path once the file exists", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "shot-"));
+  const out = join(dir, "a.png");
+  try {
+    const { spawnImpl, calls } = fakeSpawn(async child => { await writeFile(out, "png"); child.stdout.end(); child.emit("close", 0); });
+    assert.equal(await screenshot("chrome", "file:///x.html", { size: "192,192", out, spawnImpl }), out);
+    assert.ok(calls[0].args.includes("--window-size=192,192"));
+    assert.ok(calls[0].args.includes(`--screenshot=${out}`));
+    assert.equal(calls[0].args.at(-1), "file:///x.html");
+    const none = fakeSpawn(child => { child.stdout.end(); child.emit("close", 0); });
+    await assert.rejects(screenshot("chrome", "file:///y.html", { size: "1,1", out: join(dir, "missing.png"), spawnImpl: none.spawnImpl }), /no screenshot of file:\/\/\/y\.html/);
+  } finally { await rm(dir, { recursive: true, force: true }); }
 });
