@@ -10,8 +10,8 @@
       "template/fonts/NotoSerifHebrew[wdth,wght].ttf": "93caef921360788dc3b0e32136bb26f16bc57717ec482d48fc7fd43820617165",
       "template/fonts/OFL-literata.txt": "8742963604cd89dc81437811a850018fc03b2bfad686d7422c8235967c87614e",
       "template/fonts/OFL-notoserifhebrew.txt": "9b9fe028b5ba74d231659a1bbaf0ed09b11e759d1ca6a070999e16d151616b47",
-      "template/render.js": "57100885c68be51c36550ac2f48dcbbd1f5eac40e18ae909f62e1ac6a8125589",
-      "template/sheet.css": "7653263b73daa2e2a7ff7ab8efe34e3f1e28a295ee1a11a258bde75c8bd264a2",
+      "template/render.js": "a60e6b4cfe16b120c15ccf6cc33d68a2c9639cefac9aa48ccbe7712fa5dc94ad",
+      "template/sheet.css": "e22f9c5e3e8bfc9c26e3e85a4f1743565c0cbb6044de07cca36a55b90e404686",
       "template/sheet.html": "481dee92ba07c1c0def70ee8d2e0b0a8850f4acab764b0eca22b1b07b5797217",
       "template/trope.css": "a49ed10f4a9e392c23b473b1a7ed4766a824666409156c4fb7c836bac49632d1"
     },
@@ -38,7 +38,7 @@
       "isDeadRef": "d2cba2e0c5102edd679dd89c21fb383590709e93ab962c1a7ab7802debd33168",
       "letterFor": "7bb4341134083bd4488275d5f28b8cded461f83c84694a1a6a538bca011b5658",
       "mapRegion": "684cacc3ad24f153257aafd917e29a6a4a4d654eb148155258bcb90e2cadc9b0",
-      "mapSvg": "1f0aacf20041d5a6d92749d90164ac9467fb2f844d1bb8eac2f347f084505f9a",
+      "mapSvg": "31752db84d2ddba01f33997395ba465e6a59f61fe2b393298490adcc0aaae64c",
       "normalizeRefs": "aacc9ae56fc257eabfa063c78461e60693f602dc14ab3a181867a6c38484e1a8",
       "nowrapKeys": "00fa9d64a5d7945ea446ab05f4ba8a24e8370631874ed37c2242ebd4ba1edde9",
       "parashahKey": "21a12bd30a93b243d50947fe1f0684a8119707d68be753a834480d7d1568a7c0",
@@ -53,7 +53,7 @@
       "splitPoetry": "4a635a08399b0feeaa2b4198500fe087627951fdcc902657a94deeb904417edf",
       "stripMarks": "c5c9c69230edb00e4a68b0aa37a2ec89018e9fee9cf6440a6e2bf90c36ec2bce",
       "timelineItems": "cd92751f06004b15226ac856445a34c84f597aad0825f3083b009c45234049e7",
-      "timelineSvg": "6cebd97585d1c66bee2deb9371c4bf88d3b2b71d4ec597f93f2de596980ade25",
+      "timelineSvg": "bbc761f529948d2be195d2b574ac40a9ed0d9fc8f15ee9851f47ca99f86663dc",
       "tropeFamiliesUsed": "ea2136f7de5ad579ec20d1cd75aceba743458d86b8b2d041630bec00d3dcb89a",
       "tropeHtml": "c5203fdc7037f78ccb12825e9232f8fbd235235e93c0db2d124d829d3b3b6bff",
       "tropePhrases": "a3c7a300e566b3f89b5424551f5569141a5271a5b1dde275ce4fd8e24bf3fc99",
@@ -115,10 +115,10 @@
       "torahDom": "f6e5f2cea431f212bfb64a84595533cd970960ffc4324c973b317e849963293d"
     },
     "week-figures": {
-      "html": "91915b6b5c96a3ebe710cabe5d54c2be349d26f049a2b611d70bb0cf4559be16",
-      "trope": "bb3bdbc9859a3027dbe80b435e24aff33bf7c7001223ddc7de6f102438c87db1",
-      "dom": "1b28eaa05c4b1d279fbce049472e9198d4ad9ca5d2f13457a5c0510644a0a49a",
-      "tropeDom": "fb8e05d259c83dc095ccdf52c1bb6eb0b7de4754879e18c972b11c022ca50b8c"
+      "html": "93ec2a9c94b2ab1a42e28b75963ebd146d1884125c48e3b91116b193bb8ec03b",
+      "trope": "4c7c1a278e685ec0e884687ee027123348f6829038268b715e760f7e9d9ca649",
+      "dom": "d8dae3aee4299e139fb728a3626b6f72572d61d84a8bd839b1cce1ca3660f5d3",
+      "tropeDom": "9b2a3607fbc35f85ec552bb2a148ac196c559021cb0e4e7c9ebebaec03b3698c"
     }
   }
 }

@@ -206,7 +206,7 @@ async function main() {
     console.log(`Wrote ${relative(ROOT, b.html)}${logo ? ` (logo: ${logo})` : " (no logo in assets/; typographic wordmark)"}`);
     if (torah) continue;
     if (WANT_TROPE) {
-      await writeFile(tropePath, pageHtml(b.data, { logo, voices, trope: true, ...figOpts },`${title} (chanter’s copy)`), "utf8");
+      await writeFile(tropePath, pageHtml(b.data, { logo, voices, trope: true, ...figOpts }, `${title} (chanter’s copy)`), "utf8");
       console.log(`Wrote ${relative(ROOT, tropePath)}`);
     } else if (existsSync(join(weekDir, "sheet-trope.pdf"))) {
       // A chanter's copy left from an earlier build no longer matches this sheet; say so rather than delete it.

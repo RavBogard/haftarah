@@ -610,21 +610,16 @@
       }
       // A lone verse whose margin notes still run into the apparatus (a page shortened by the figures):
       // its last notes go on to the next page's margin. Only a page that would otherwise overflow.
-      if (placed.overflow > 0 && pageRows.length === 1 && pageRows[0].notes.length) {
+      let rescued = false;
+      if (placed.overflow > 1 && pageRows.length === 1 && pageRows[0].notes.length) {
         const dropped = [];
-        while (placed.overflow > 0 && pageRows[0].notes.length) {
+        while (placed.overflow > 1 && pageRows[0].notes.length) {
           const r = pageRows[0];
           dropped.unshift({ node: r.notes[r.notes.length - 1], h: r.noteH[r.noteH.length - 1] });
           pageRows[0] = withNotes(r, r.notes.slice(0, -1), r.noteH.slice(0, -1));
           placed = renderTextPage(p, pageRows, pageEntries, bodyH, versePage);
         }
-        defer(dropped); deferring = true;
-        // The room the notes gave back takes the verse's next entries, in order, while they fit.
-        while (carry.length && placed.overflow <= 0) {
-          pageEntries.push(carry.shift());
-          placed = renderTextPage(p, pageRows, pageEntries, bodyH, versePage);
-          if (placed.overflow > 0) { carry.unshift(pageEntries.pop()); placed = renderTextPage(p, pageRows, pageEntries, bodyH, versePage); break; }
-        }
+        defer(dropped); deferring = true; rescued = true;
       }
 
       // Rule 4: a gap over half an inch and a row waiting: split the row at a line boundary.
@@ -656,6 +651,15 @@
           unsplitRow(rows[i]);
           budget -= placed.overflow + 2;
           placed = renderTextPage(p, pageRows, pageEntries, bodyH, versePage);
+        }
+      }
+      // After the lone-verse rescue, room the next verse could not use takes the carried entries, in
+      // order, while they fit.
+      if (rescued && placed.gap > GAP_MAX) {
+        while (carry.length && placed.overflow <= 1) {
+          pageEntries.push(carry.shift());
+          placed = renderTextPage(p, pageRows, pageEntries, bodyH, versePage);
+          if (placed.overflow > 1) { carry.unshift(pageEntries.pop()); placed = renderTextPage(p, pageRows, pageEntries, bodyH, versePage); break; }
         }
       }
       // Rule 6: the gap is still over an inch because the next verse neither fits nor splits well (a
@@ -719,6 +723,7 @@
       }
       p.leftover = placed.leftover;
       p.grid = placed.grid;
+      p.notesBelow = placed.notesBelow;   // how far the margin notes run below the verses
     }
     return lastPage;
   }
@@ -781,7 +786,7 @@
     p.page.dataset.cont = "0";
     p.page.dataset.offpage = String(offpage);
     p.page.dataset.leftover = String(Math.round(-overflow));
-    return { overflow, leftover: -overflow, grid, gap };
+    return { overflow, leftover: -overflow, grid, gap, notesBelow: Math.max(0, stacked.bottom - gridBottom) };
   }
 
   // ---- end matter -----------------------------------------------------------
@@ -826,7 +831,10 @@
     const total = blocks.map(b => measure(b.cloneNode(true))).reduce((a, b) => a + b, 0) + 18;
     if (lastTextPage && lastTextPage.leftover > total + 8) {
       const wrap = el("div", "endmatter inline");
-      wrap.style.marginTop = "18pt";
+      // Below the verses, or below the margin notes when they run lower (a page of carried notes only):
+      // leftover is measured from the lower of the two, and the end matter spans the margin column.
+      const below = Math.round(lastTextPage.notesBelow || 0);
+      wrap.style.marginTop = below > 0 ? `calc(18pt + ${below}px)` : "18pt";
       blocks.forEach(b => wrap.append(b));
       lastTextPage.grid.after(wrap);
       const bh = lastTextPage.body.getBoundingClientRect().height;

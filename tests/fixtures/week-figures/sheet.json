@@ -982,7 +982,7 @@
     },
     {
       "id": "hdr",
-      "label": "History of David’s Rise written",
+      "label": "History of David’s Rise",
       "kind": "composition",
       "start": -1000,
       "end": -850,
@@ -993,7 +993,7 @@
     },
     {
       "id": "dtr",
-      "label": "Deuteronomistic History compiled",
+      "label": "Deuteronomists",
       "kind": "composition",
       "start": -650,
       "end": -550,

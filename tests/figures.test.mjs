@@ -153,11 +153,11 @@ test("timelineSvg: a very long label is cut with an ellipsis and stays inside th
   const long = "A very long composition label that goes on and on well past any reasonable width for a timeline row";
   const svg = L.timelineSvg([{ id: "x", label: long, kind: "composition", start: -1000, end: -990, approx: true, works: ["x"] },
     { id: "y", label: long, kind: "event", start: -700, works: ["x"] }], chron);
-  const labels = [...svg.matchAll(/<text class="tl-label[^"]*" x="([\d.]+)" y="[\d.]+" font-size="15" text-anchor="(start|end)">([^<]*)<\/text>/g)];
+  const labels = [...svg.matchAll(/<text class="tl-label[^"]*" x="([\d.]+)" y="[\d.]+" font-size="18" text-anchor="(start|end)">([^<]*)<\/text>/g)];
   assert.equal(labels.length, 2);
   for (const [, x, anchor, text] of labels) {
     assert.ok(text.endsWith("…"), text);
-    const w = 0.56 * 15 * [...text].length, x0 = anchor === "start" ? Number(x) : Number(x) - w;
+    const w = 0.56 * 18 * [...text].length, x0 = anchor === "start" ? Number(x) : Number(x) - w;
     assert.ok(x0 >= 0 && x0 + w <= 1000, `${text} at ${x}`);
   }
   assert.equal(L.timelineSvg([], chron), "");
@@ -215,4 +215,23 @@ test("names and titles are escaped: no markup, no handlers, no styles get throug
     assert.match(svg, /T&quot;&lt;<\/title>/);
     assert.match(svg, /&lt;img onerror=x&gt;&amp;&quot;Q&quot;/);
   }
+});
+
+test("timelineSvg: bars that touch in a row (Saul then David) part by 3 units; every text prints at 18 units (9pt at 7.15in)", () => {
+  const svg = L.timelineSvg(items, chron);
+  const kings = [...svg.matchAll(/<rect class="tl-bar king[^"]*" x="([\d.]+)" y="([\d.]+)" width="([\d.]+)"/g)].map(m => ({ x0: +m[1], y: +m[2], x1: +m[1] + +m[3] }));
+  assert.equal(kings.length, 2);
+  assert.equal(kings[0].y, kings[1].y, "Saul and David share a row");
+  const [a, b] = kings.sort((p, q) => p.x0 - q.x0);
+  assert.ok(Math.abs(b.x0 - a.x1 - 3) < 0.15, `gap ${b.x0 - a.x1}`);
+  const sizes = [...svg.matchAll(/font-size="(\d+)"/g)].map(m => +m[1]);
+  assert.ok(sizes.length > 0 && sizes.every(s => s === 18), sizes.join(","));
+  assert.ok(18 * 7.15 * 72 / 1000 >= 9);
+});
+
+test("mapSvg: place labels and the scale print at 50 units (9pt at the 2.6in page-1 width)", () => {
+  const svg = L.mapSvg(places, [34.5, 31.5, 35.6, 32.1], basemap);
+  const sizes = [...svg.matchAll(/font-size="(\d+)"/g)].map(m => +m[1]);
+  assert.ok(sizes.length >= 5 && sizes.every(s => s === 50), sizes.join(","));
+  assert.ok(50 * 2.6 * 72 / 1000 >= 9);
 });

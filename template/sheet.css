@@ -227,7 +227,7 @@ html, body {
 .fig svg { display: block; width: 100%; height: auto; }
 .fig figcaption { font-size: var(--size-gloss); color: var(--ink-2); line-height: 1.3; margin-top: 3pt; }
 .figures.page2 { margin-bottom: 10pt; }
-.figures.page2 .fig-map { width: 3.2in; }
+.figures.page2 .fig-map { width: 2.6in; }
 .map-sea { fill: var(--map-sea); } .map-land { fill: var(--map-land); stroke: var(--map-coast); stroke-width: 1.5; }
 .map-lake { fill: var(--map-sea); stroke: var(--map-water-line); stroke-width: 1.2; } .map-river { fill: none; stroke: var(--map-water-line); stroke-width: 2; }
 .map-frame { fill: none; stroke: var(--frame); stroke-width: 2; }

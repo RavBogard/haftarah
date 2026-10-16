@@ -7,9 +7,10 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { mkdir, copyFile, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { isolatedEnv } from "./helpers/isolatedEnv.mjs";
 import { findBrowser } from "../scripts/build.mjs";
+import { dumpDom } from "../scripts/chrome.mjs";
 import { parseArgs } from "../scripts/web-check.mjs";
 import { migrate3 } from "../scripts/migrate.mjs";
 import { makeWeekTorah } from "./helpers/makeWeekTorah.mjs";
@@ -52,6 +53,46 @@ test("a long setting sends the figures to page 2 and check passes", { skip, time
     const { stdout } = await run(process.execPath, [join(ROOT, "scripts", "check.mjs"), dir], { env: iso.env, cwd: ROOT, maxBuffer: 1 << 24 });
     assert.match(stdout, /figures: page2/);
     assert.match(stdout, /Check passed\./);
+  } finally { await iso.cleanup(); }
+});
+
+// A probe loaded after render.js waits for the layout, then stamps on <html> every page's inline end
+// matter box and margin-note boxes, and the pairs that meet.
+const PROBE = `(function poll() {
+  if (!document.documentElement.dataset.pages) return setTimeout(poll, 50);
+  const box = n => { const r = n.getBoundingClientRect(); return [r.left, r.top, r.right, r.bottom]; };
+  const meet = (a, b) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
+  const out = { inline: 0, notesOnEndPage: 0, overlaps: [] };
+  document.querySelectorAll("section.page").forEach((pg, i) => {
+    const em = pg.querySelector(".endmatter.inline");
+    if (!em) return;
+    out.inline++;
+    const e = box(em);
+    pg.querySelectorAll(".margin-col .note").forEach(n => {
+      out.notesOnEndPage++;
+      const b = box(n);
+      if (meet(e, b)) out.overlaps.push({ page: i + 1, note: n.querySelector(".k")?.textContent || "", note_box: b.map(Math.round), endmatter: e.map(Math.round) });
+    });
+  });
+  document.documentElement.dataset.probe = JSON.stringify(out);
+})();`;
+
+test("week-figures: no margin note meets the inline end matter", { skip, timeout: 240_000 }, async () => {
+  const iso = await isolatedEnv();
+  try {
+    const dir = join(iso.home, "week-figures-probe");
+    await mkdir(dir);
+    await copyFile(join(ROOT, "tests", "fixtures", "week-figures", "sheet.json"), join(dir, "sheet.json"));
+    await run(process.execPath, [join(ROOT, "scripts", "build.mjs"), dir, "--no-pdf"], { env: iso.env, cwd: ROOT, maxBuffer: 1 << 24 });
+    const html = await readFile(join(dir, "sheet.html"), "utf8");
+    await writeFile(join(dir, "probe.js"), PROBE);
+    await writeFile(join(dir, "probe.html"), html.replace("</head>", '<script src="probe.js" defer></script>\n</head>'));
+    const dom = await dumpDom(findBrowser(), pathToFileURL(join(dir, "probe.html")).href, { env: iso.env });
+    const m = /data-probe="([^"]*)"/.exec(dom);
+    assert.ok(m, "the probe ran");
+    const got = JSON.parse(m[1].replace(/&quot;/g, '"').replace(/&amp;/g, "&"));
+    assert.ok(got.inline >= 1 && got.notesOnEndPage > 0, "the end matter is inline on a page that carries margin notes (the case under test)");
+    assert.deepEqual(got.overlaps, [], JSON.stringify(got.overlaps));
   } finally { await iso.cleanup(); }
 });
 

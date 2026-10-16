@@ -599,9 +599,9 @@
     for (const { p, x, y } of shown) {
       const name = String(p.name == null ? "" : p.name), chars = [...name].length;
       if (p.role === "empire") {
-        const w = 0.56 * 34 * chars + 3 * chars;
-        taken.push([x - w / 2, y - 17, x + w / 2, y + 17]);
-        out.push(`<text class="place-label empire" x="${fig1(x)}" y="${fig1(y + 34 * 0.35)}" text-anchor="middle" font-size="34" letter-spacing="3">${esc(name)}</text>`);
+        const w = 0.56 * 50 * chars + 4 * chars;
+        taken.push([x - w / 2, y - 25, x + w / 2, y + 25]);
+        out.push(`<text class="place-label empire" x="${fig1(x)}" y="${fig1(y + 50 * 0.35)}" text-anchor="middle" font-size="50" letter-spacing="4">${esc(name)}</text>`);
         continue;
       }
       const r = p.role === "scene" ? 9 : 7;
@@ -609,18 +609,23 @@
       const sides = ["r", "l", "t", "b"].includes(p.label) ? [p.label] : ["r", "l", "t", "b"];
       let at = null;
       for (const s of sides) {
-        const c = labelAt(s, x, y, 37, chars), b = c.box;
+        const c = labelAt(s, x, y, 50, chars), b = c.box;
         if (sides.length === 1) { at = c; break; }
         if (b[0] >= 0 && b[1] >= 0 && b[2] <= MAP_VIEW[0] && b[3] <= MAP_VIEW[1] && !taken.some(t => boxesMeet(t, b))) { at = c; break; }
       }
-      if (!at) at = labelAt("r", x, y, 37, chars);
+      if (!at) {
+        // No side is clear (a crowded map): the side whose label covers least of the others, and stays in the frame.
+        const cover = b => taken.reduce((a, t) => a + Math.max(0, Math.min(b[2], t[2]) - Math.max(b[0], t[0])) * Math.max(0, Math.min(b[3], t[3]) - Math.max(b[1], t[1])), 0)
+          + (b[0] < 0 || b[1] < 0 || b[2] > MAP_VIEW[0] || b[3] > MAP_VIEW[1] ? 1e9 : 0);
+        at = ["r", "l", "t", "b"].map(s => labelAt(s, x, y, 50, chars)).reduce((best, c) => (cover(c.box) < cover(best.box) ? c : best));
+      }
       taken.push(at.box);
-      out.push(`<text class="place-label ${p.role} side-${at.side}" x="${fig1(at.x)}" y="${fig1(at.y)}" text-anchor="${at.anchor}" font-size="37">${esc(name)}</text>`);
+      out.push(`<text class="place-label ${p.role} side-${at.side}" x="${fig1(at.x)}" y="${fig1(at.y)}" text-anchor="${at.anchor}" font-size="50">${esc(name)}</text>`);
     }
     const unit = MAP_VIEW[0] / ((frame[2] - frame[0]) * 111.32 * Math.cos((frame[1] + frame[3]) / 2 * Math.PI / 180));
     const steps = [5, 10, 20, 50, 100, 200, 500];
     const km = steps.find(n => n * unit >= 120 && n * unit <= 320) || steps[steps.length - 1];
-    out.push(`<g class="map-scale"><line x1="40" y1="760" x2="${fig1(40 + km * unit)}" y2="760"/><text font-size="30" x="40" y="745">${km} km</text></g>`,
+    out.push(`<g class="map-scale"><line x1="40" y1="760" x2="${fig1(40 + km * unit)}" y2="760"/><text font-size="50" x="40" y="738">${km} km</text></g>`,
       `<rect class="map-frame" width="${MAP_VIEW[0]}" height="${MAP_VIEW[1]}"/></svg>`);
     return out.join("");
   }
@@ -673,7 +678,7 @@
       if (title == null) title = t.title;
       if (desc == null) desc = t.desc;
     }
-    const W = 1000, PAD = 20, ROW = 28, BAR = 18, FONT = 15, TOP = 10, AXIS = 34, PER = 0.56 * FONT;
+    const W = 1000, PAD = 20, ROW = 32, BAR = 22, FONT = 18, TOP = 10, AXIS = 40, PER = 0.56 * FONT;
     const lo0 = Math.min(...list.map(i => i.start)), hi0 = Math.max(...list.map(i => i.end)), pad = (hi0 - lo0) * 0.04;
     const step = hi0 - lo0 + 2 * pad >= 400 ? 100 : 50;
     const lo = Math.floor((lo0 - pad) / step) * step;
@@ -705,6 +710,14 @@
         row.push(s);
       }
       rows.push(...mine);
+    }
+    // Bars that touch in a row (one reign ending the year the next begins) part by 3 units, half from each.
+    for (const row of rows) {
+      const bars = row.filter(s => !s.event).sort((a, b) => a.x0 - b.x0);
+      for (let k = 1; k < bars.length; k++) {
+        const a = bars[k - 1], b = bars[k], g = 3 - (b.x0 - a.x1);
+        if (g > 0 && b.x0 >= a.x1) { a.x1 -= g / 2; b.x0 += g / 2; a.span = [a.x0, a.x1]; b.span = [b.x0, b.x1]; }
+      }
     }
     // A bar's label: inside with its dates, beside it with its dates, inside alone, beside alone, then cut to fit.
     for (const row of rows) {
@@ -751,7 +764,7 @@
     out.push(`<line class="tl-axis" x1="${PAD}" y1="${ay}" x2="${W - PAD}" y2="${ay}"/>`);
     for (let y = lo; y <= hi; y += step) {
       if (y === 0) continue;
-      out.push(`<text class="tl-tick" x="${fig1(X(y))}" y="${ay + 22}" font-size="14" text-anchor="middle">${Math.abs(y)}${y > 0 ? " CE" : ""}</text>`);
+      out.push(`<text class="tl-tick" x="${fig1(X(y))}" y="${ay + 24}" font-size="18" text-anchor="middle">${Math.abs(y)}${y > 0 ? " CE" : ""}</text>`);
     }
     out.push("</svg>");
     return out.join("");
