@@ -120,6 +120,22 @@ test("lint is clean on a clean week except the fixable mark-order lemma", () => 
   assert.equal(lint(d, { voices }).warnings.length, 0);
 });
 
+test("lint warns on a crowded map, a long timeline label and a tall timeline band", () => {
+  const figures = w => w.filter(x => /^(places|timeline)/.test(x.where));
+  const place = i => ({ id: `p${i}`, name: `P${i}`, role: "context", lat: 31, lon: 35, approved: true });
+  const d = week();
+  d.places = Array.from({ length: 12 }, (_, i) => place(i));
+  d.timeline = Array.from({ length: 14 }, (_, i) => ({ id: `t${i}`, chronology: "david" }));
+  assert.deepEqual(figures(lint(d, { voices }).warnings), []);
+  d.places.push(place(12));
+  d.timeline.push({ id: "long", label: "A label that runs past twenty-eight", kind: "event", start: -900, works: ["x"] });
+  assert.deepEqual(figures(lint(d, { voices }).warnings), [
+    { where: "places", msg: "13 places; more than 12 labels crowd the map" },
+    { where: "timeline long", msg: "label is 35 characters; keep it under 28 so it fits its bar" },
+    { where: "timeline", msg: "15 items; more than 14 rows make the band taller than its space" },
+  ]);
+});
+
 test("lint errors name the entry when a lemma or anchor is missing", () => {
   const d = week();
   d.glosses[0].lemma = "שָׁלוֹם";

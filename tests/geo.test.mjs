@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { simplify, clipLine, clipPolygon, buildBasemap, buildGazetteer, normalizeName, lookupPlaces, resolvePlace, bestSite, NE_SHA, OB_SHA } from "../scripts/geo.mjs";
+import { placeProblems, timelineProblems, resolveTimeline, resolvePlaces, loadGeo } from "../scripts/geo.mjs";
 import { makeGeodata } from "../tools/make-geodata.mjs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -135,4 +136,87 @@ test("makeGeodata downloads once into the cache, writes both files, and refuses 
     await assert.rejects(makeGeodata({ fetchImpl, cache: join(dir, "cache"), out: join(dir, "out2"), budget: 10, log: () => {} }), /basemap is \d+ KB; the budget is 0 KB/);
     assert.equal(r.counts.places.ok, 1);
   } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test("resolvePlace refuses a partial or non-numeric coordinate instead of filling it from the gazetteer", () => {
+  const g = { places: [{ slug: "gibeah-1", name: "Gibeah 1", aliases: ["Gibeah"], verses: 45, sites: [{ lon: 35.231, lat: 31.823, votes: 822, where: "Tel el Ful" }], status: "ok" }] };
+  for (const bad of [{ lat: 31.8 }, { lon: 35.2 }, { lat: "31.8", lon: 35.2 }, { lat: 31.8, lon: "35.2", approved: true }])
+    assert.deepEqual(resolvePlace({ id: "gibeah", name: "Gibeah", role: "scene", source: "openbible:gibeah-1", ...bad }, g), { ok: false, reason: "Gibeah: lat and lon must both be numbers" }, JSON.stringify(bad));
+});
+
+test("resolvePlaces (the CLI's resolve): kept only for an approved place with both coordinates; an approved place without one is resolved and loses the flag", () => {
+  const g = { places: [{ slug: "gibeah-1", name: "Gibeah 1", aliases: ["Gibeah"], verses: 45, sites: [{ lon: 35.231, lat: 31.823, votes: 822, where: "Tel el Ful" }], status: "ok" }] };
+  const r = resolvePlaces([
+    { id: "gibeah", name: "Gibeah", role: "scene", source: "openbible:gibeah-1", approved: true },
+    { id: "p", name: "Philistines", role: "empire", lat: 31.75, lon: 34.65, approved: true },
+  ], g);
+  assert.equal(r.refused, 0);
+  assert.deepEqual(r.lines, ["ok Gibeah → 31.823, 35.231 (openbible:gibeah-1)", "kept Philistines (approved)"]);
+  assert.deepEqual(r.places[0], { id: "gibeah", name: "Gibeah", role: "scene", source: "openbible:gibeah-1", lat: 31.823, lon: 35.231 });
+  assert.equal(r.places[1].approved, true);
+  const bad = resolvePlaces([{ id: "x", name: "X", role: "scene", source: "openbible:nowhere" }], g);
+  assert.equal(bad.refused, 1);
+  assert.match(bad.lines[0], /^X: openbible:nowhere is not in the gazetteer/);
+  assert.deepEqual(bad.places, [{ id: "x", name: "X", role: "scene", source: "openbible:nowhere" }], "a refused place is left as it was");
+});
+
+const gaz = { places: [
+  { slug: "gibeah-1", name: "Gibeah 1", aliases: ["Gibeah"], verses: 45, sites: [{ lon: 35.231, lat: 31.823, votes: 822, where: "Tel el Ful" }], status: "ok" },
+  { slug: "ezel", name: "Ezel", aliases: ["Ezel"], verses: 2, sites: [], status: "none" },
+] };
+const chron = { entries: { david: { label: "David", kind: "king", realm: "united", start: -1010, end: -970, approx: true }, qarqar: { label: "Battle of Qarqar", kind: "event", start: -853, end: -853, approx: false } } };
+const biblio = new Map([["McCarter 1980", {}]]);
+
+test("placeProblems: a resolved place passes; a place without a coordinate, with a bad role, a bad id, a duplicate, or a bad region is named", () => {
+  assert.deepEqual(placeProblems([{ id: "gibeah", name: "Gibeah", role: "scene", source: "openbible:gibeah-1", lat: 31.823, lon: 35.231 }], gaz), []);
+  const got = placeProblems([
+    { id: "gibeah", name: "Gibeah", role: "scene", source: "openbible:gibeah-1" },
+    { id: "ezel", name: "Ezel", role: "ground", source: "openbible:ezel" },
+    { id: "Bad Id", name: "X", role: "context", lat: 1, lon: 2, approved: true },
+    { id: "gibeah", name: "Gibeah again", role: "context", lat: 31.8, lon: 35.2, approved: true },
+  ], gaz, { region: "mars" });
+  assert.deepEqual(got, [
+    "Gibeah: has no coordinate yet; run node scripts/geo.mjs resolve weeks/<slug>",
+    "Ezel: role must be scene, context or empire",
+    "Ezel: no coordinate in OpenBible for openbible:ezel; enter lat and lon with approved: true (run node scripts/geo.mjs resolve)",
+    "X: id must be lowercase letters, digits and hyphens",
+    "Gibeah again: duplicate id gibeah",
+    "mapRegion must be land, near-east or [lonMin, latMin, lonMax, latMax]",
+  ]);
+  assert.deepEqual(placeProblems(undefined, gaz), []);
+});
+
+test("timelineProblems and resolveTimeline: table keys fill dates; inline items need kind, start, label and works; kings never carry dates by hand", () => {
+  const items = [
+    { id: "david", chronology: "david" },
+    { id: "flight", label: "David flees", kind: "event", start: -1010, approx: true, works: ["McCarter 1980"] },
+    { id: "hdr", label: "History of David's Rise written", kind: "composition", start: -1000, end: -850, approx: true, works: ["McCarter 1980"] },
+  ];
+  assert.deepEqual(timelineProblems(items, chron, biblio), []);
+  assert.deepEqual(resolveTimeline(items, chron), [
+    { id: "david", label: "David", kind: "king", start: -1010, end: -970, approx: true },
+    { id: "flight", label: "David flees", kind: "event", start: -1010, end: -1010, approx: true, works: ["McCarter 1980"] },
+    { id: "hdr", label: "History of David's Rise written", kind: "composition", start: -1000, end: -850, approx: true, works: ["McCarter 1980"] },
+  ]);
+  assert.deepEqual(timelineProblems([
+    { id: "x", chronology: "nobody" },
+    { id: "saul", label: "Saul", kind: "king", start: -1030, end: -1010 },
+    { id: "e", label: "Something", kind: "event", start: -700, works: ["Nobody 1999"] },
+    { id: "e2", label: "Later", kind: "event", start: -700, end: -800, works: ["McCarter 1980"] },
+    { id: "david", chronology: "david", kind: "prophet" },
+  ], chron, biblio), [
+    "x: nobody is not in data/chronology.json",
+    "Saul: a king cites a chronology key (chronology: \"<id>\"); dates are never entered by hand",
+    "Saul: an event or composition names its works from the bibliography",
+    "Something: work not in the bibliography: Nobody 1999",
+    "Later: end must be a whole year at or after start",
+    "David: kind prophet does not match the table's king",
+  ]);
+});
+
+test("loadGeo on the repo returns the basemap's land, a gazetteer of over 1,000 places, and the chronology table", async () => {
+  const geo = await loadGeo();
+  assert.ok(geo.basemap.land.length > 0);
+  assert.ok(geo.gazetteer.places.length > 1000);
+  assert.equal(geo.chronology.entries.david.label, "David");
 });

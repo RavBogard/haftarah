@@ -208,13 +208,16 @@ function fromRecord(place, record) {
     return refuse(`${place.name}: ${n} candidate site${n === 1 ? "" : "s"} for ${src} (${record.sites.map(s => `${s.where} ${s.votes}`).join(", ")}); pick one and enter lat and lon with approved: true`, record.sites);
   }
   const { lat, lon } = bestSite(record);
-  return { ok: true, place: { ...place, lat, lon } };
+  const { approved, ...rest } = place;   // a coordinate from the gazetteer was not hand-entered, so it carries no approval
+  return { ok: true, place: { ...rest, lat, lon } };
 }
 
+const isNum = n => typeof n === "number" && Number.isFinite(n);
 /** A week's place → { ok: true, place } with lat and lon, or { ok: false, reason, candidates? }; never a guess. */
 export function resolvePlace(place, gazetteer) {
   const bySlug = slug => gazetteer.places.find(p => p.slug === slug);
-  if (typeof place.lat === "number" && typeof place.lon === "number") {
+  if ((place.lat != null || place.lon != null) && !(isNum(place.lat) && isNum(place.lon))) return refuse(`${place.name}: lat and lon must both be numbers`);
+  if (place.lat != null) {
     if (place.approved === true) return { ok: true, place };
     const m = SOURCE.exec(place.source || "");
     const record = m && bySlug(m[1]);
@@ -232,6 +235,87 @@ export function resolvePlace(place, gazetteer) {
   if (!found.length) return refuse(`${place.name}: not found in the gazetteer; try node scripts/geo.mjs lookup "${place.name}"`);
   if (found.length > 1) return refuse(`${place.name}: ${found.length} records match; set source to one of ${found.map(p => `openbible:${p.slug}`).join(", ")}`);
   return fromRecord({ ...place, source: `openbible:${found[0].slug}` }, found[0]);
+}
+
+/** The CLI's resolve over a week's places: the places (a refused one left as it was), a line for each, and the refusals. */
+export function resolvePlaces(places, gazetteer) {
+  const lines = [];
+  let refused = 0;
+  const out = (places || []).map(place => {
+    const r = resolvePlace(place, gazetteer);
+    if (!r.ok) { refused++; lines.push(r.reason); return place; }
+    const handEntered = isNum(place.lat) && isNum(place.lon);
+    if (handEntered && r.place.approved === true) lines.push(`kept ${r.place.name} (approved)`);
+    else lines.push(`ok ${r.place.name} → ${r.place.lat}, ${r.place.lon} (${r.place.source})`);
+    return r.place;
+  });
+  return { places: out, lines, refused };
+}
+
+export const KINDS = ["king", "empire", "prophet", "composition", "event"];
+export const REGION_NAMES = ["land", "near-east"];
+
+/** The gate's problems for a week's places: ids, roles, coordinates, sources; nothing is resolved here. */
+export function placeProblems(places, gazetteer, { region = null } = {}) {
+  const out = [];
+  if (places == null) return out;
+  if (!Array.isArray(places)) return ["places must be a list"];
+  const ids = new Set();
+  for (const p of places) {
+    const name = p && p.name ? p.name : (p && p.id) || "(unnamed place)";
+    if (!p || typeof p !== "object") { out.push("a place is not an object"); continue; }
+    if (!/^[a-z][a-z0-9-]*$/.test(p.id || "")) out.push(`${name}: id must be lowercase letters, digits and hyphens`);
+    else if (ids.has(p.id)) out.push(`${name}: duplicate id ${p.id}`); else ids.add(p.id);
+    if (!p.name) out.push(`${p.id || "(no id)"}: a place needs a name`);
+    if (!ROLES.includes(p.role)) out.push(`${name}: role must be scene, context or empire`);
+    if (p.label != null && !["r", "l", "t", "b"].includes(p.label)) out.push(`${name}: label must be r, l, t or b`);
+    const r = resolvePlace(p, gazetteer);
+    if (!r.ok) out.push(r.reason + (typeof p.lat === "number" ? "" : " (run node scripts/geo.mjs resolve)"));
+    else if (!(typeof p.lat === "number" && typeof p.lon === "number")) out.push(`${name}: has no coordinate yet; run node scripts/geo.mjs resolve weeks/<slug>`);
+  }
+  if (region != null && !(REGION_NAMES.includes(region) || (Array.isArray(region) && region.length === 4 && region.every(Number.isFinite) && region[0] < region[2] && region[1] < region[3])))
+    out.push("mapRegion must be land, near-east or [lonMin, latMin, lonMax, latMax]");
+  return out;
+}
+
+/** Dates filled from the table; an item that cites the table takes its kind and (unless given) its label. */
+export function resolveTimeline(items, chronology) {
+  return (items || []).map(it => {
+    const t = it.chronology && chronology && chronology.entries ? chronology.entries[it.chronology] : null;
+    const r = t ? { id: it.id, label: it.label || t.label, kind: t.kind, start: t.start, end: t.end, approx: !!t.approx }
+      : { id: it.id, label: it.label || "", kind: it.kind, start: it.start, end: it.end == null ? it.start : it.end, approx: !!it.approx };
+    if (it.works) r.works = it.works;
+    return r;
+  });
+}
+
+/** The gate's problems for the timeline: kinds, table keys, inline dates with works from the bibliography. */
+export function timelineProblems(items, chronology, biblio) {
+  const out = [];
+  if (items == null) return out;
+  if (!Array.isArray(items)) return ["timeline must be a list"];
+  const ids = new Set();
+  for (const it of items) {
+    if (!it || typeof it !== "object") { out.push("a timeline item is not an object"); continue; }
+    const name = it.label || chronology?.entries?.[it.chronology]?.label || it.id || "(unnamed item)";   // the label it prints with
+    if (!/^[a-z][a-z0-9-]*$/.test(it.id || "")) out.push(`${name}: id must be lowercase letters, digits and hyphens`);
+    else if (ids.has(it.id)) out.push(`${name}: duplicate id ${it.id}`); else ids.add(it.id);
+    if (it.chronology != null) {
+      if (!chronology) out.push(`${name}: data/chronology.json is missing`);
+      else if (!chronology.entries[it.chronology]) out.push(`${name}: ${it.chronology} is not in data/chronology.json`);
+      else if (it.kind != null && it.kind !== chronology.entries[it.chronology].kind) out.push(`${name}: kind ${it.kind} does not match the table's ${chronology.entries[it.chronology].kind}`);
+      continue;
+    }
+    if (!KINDS.includes(it.kind)) out.push(`${name}: kind must be one of ${KINDS.join(", ")}`);
+    else if (it.kind === "king" || it.kind === "empire" || it.kind === "prophet") out.push(`${name}: a ${it.kind} cites a chronology key (chronology: "<id>"); dates are never entered by hand`);
+    if (!Number.isInteger(it.start)) out.push(`${name}: start must be a whole year (negative for BCE)`);
+    if (it.end != null && !(Number.isInteger(it.end) && it.end >= it.start)) out.push(`${name}: end must be a whole year at or after start`);
+    if (!it.label) out.push(`${it.id || "(no id)"}: an item with its own dates needs a label`);
+    if (!(Array.isArray(it.works) && it.works.length)) out.push(`${name}: an event or composition names its works from the bibliography`);
+    else if (!biblio) out.push(`${name}: the bibliography is missing (needed by its works)`);
+    else for (const k of it.works) if (!biblio.has(k)) out.push(`${name}: work not in the bibliography: ${k}`);
+  }
+  return out;
 }
 
 const exists = p => access(p).then(() => true, () => false);
@@ -266,14 +350,8 @@ async function resolveCli(dir, dryRun) {
   const file = join(resolve(dir), "sheet.json");
   const data = JSON.parse(await readFile(file, "utf8"));
   const places = data.places || [];
-  let refused = 0;
-  const out = places.map(place => {
-    const r = resolvePlace(place, gazetteer);
-    if (!r.ok) { refused++; console.log(r.reason); return place; }
-    if (r.place.approved === true) console.log(`kept ${r.place.name} (approved)`);
-    else console.log(`ok ${r.place.name} → ${r.place.lat}, ${r.place.lon} (${r.place.source})`);
-    return r.place;
-  });
+  const { places: out, lines, refused } = resolvePlaces(places, gazetteer);
+  for (const line of lines) console.log(line);
   if (refused) { console.log(`${refused} place(s) unresolved; nothing written`); return 1; }
   if (!dryRun && places.length) {
     data.places = out;

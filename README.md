@@ -163,7 +163,12 @@ Schema 3 moves the reading into `readings[]` and leaves the week's own fields wh
     }
   ],
   "highlights": [ { "reading": "haftarah", "chapter": 20, "verse": 30, "words": [2, 4], "note": "<html>" } ],   // optional, in either schema; web only
-  "prior": { "slug": "2025-10-25-noach", "hebrewEn": "3 Cheshvan 5786", "cycle": "5786" }   // last year's sheet for this parashah, set by fetch; the web page links it
+  "prior": { "slug": "2025-10-25-noach", "hebrewEn": "3 Cheshvan 5786", "cycle": "5786" },   // last year's sheet for this parashah, set by fetch; the web page links it
+  "places": [ { "id": "gibeah", "name": "Gibeah", "role": "scene", "source": "openbible:gibeah-1", "lat": 31.823, "lon": 35.231 },   // optional; role scene, context or empire; lat/lon filled by geo.mjs resolve, or hand-entered with "approved": true
+              { "id": "philistines", "name": "Philistines", "role": "empire", "lat": 31.75, "lon": 34.65, "approved": true, "label": "l" } ],
+  "mapRegion": "land",                                 // optional: land, near-east, or [lonMin, latMin, lonMax, latMax]; default from the places
+  "timeline": [ { "id": "david", "chronology": "david" },   // kings, empires and prophets cite data/chronology.json
+                { "id": "hdr", "label": "History of David’s Rise written", "kind": "composition", "start": -1000, "end": -850, "approx": true, "works": ["McCarter 1980"] } ]   // events and compositions carry dates and works
 }
 ```
 

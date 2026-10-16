@@ -21,6 +21,7 @@ import { createRequire } from "node:module";
 
 import { lintSheet, formatLint } from "./lint.mjs";
 import { loadCustoms } from "./customs.mjs";
+import { loadGeo, placeProblems, timelineProblems } from "./geo.mjs";
 import { HTML_FILES, PDF_FILES, TROPE_HTML, readingsWithVerses } from "./week-files.mjs";
 
 const HaftarahLib = createRequire(import.meta.url)("../template/lib.js");
@@ -111,8 +112,9 @@ export function fillTemplate(tpl, vars) {
 }
 
 // The citation checks. Status is optional and only "rejected" keeps an item off the page; Daniel
-// approves a sheet by printing it, so nothing here asks whether an item was approved.
-export function gate(data, biblio) {
+// approves a sheet by printing it, so nothing here asks whether an item was approved. The figures
+// (places, timeline) need the geo data and the chronology table; an empty list is no figure.
+export function gate(data, biblio, geo = null) {
   const problems = [];
   const where = e => `${e.chapter ? e.chapter + ":" : ""}${e.verse} ${e.source}`;
   if (!data.haftarah?.incipit?.en) problems.push("incipit.en is empty");
@@ -121,6 +123,10 @@ export function gate(data, biblio) {
     if (!(e.works || []).length) problems.push(`critical entry names no work: ${where(e)}`);
     else if (!biblio) problems.push(`bibliography/${data.haftarah.book}.md is missing (needed by ${where(e)})`);
     else for (const k of e.works) if (!biblio.has(k)) problems.push(`work not in bibliography/${data.haftarah.book}.md: ${k} (${where(e)})`);
+  }
+  if (data.places?.length || data.timeline?.length) {
+    if (!geo) problems.push("data/geo and data/chronology.json are needed for the figures (loadGeo failed)");
+    else problems.push(...placeProblems(data.places, geo.gazetteer, { region: data.mapRegion ?? null }), ...timelineProblems(data.timeline, geo.chronology, biblio));
   }
   return problems;
 }
@@ -147,6 +153,7 @@ async function main() {
   let targets;
   try { targets = readingsToBuild(file, READING); } catch (err) { console.error(`Not built: ${err.message}`); process.exit(1); }
   const multi = HaftarahLib.readings(file).length > 1;
+  const geo = (file.places?.length || file.timeline?.length) ? await loadGeo().catch(() => null) : null;
 
   // The citation gate for every reading built first: nothing is written while any of them fails.
   const builds = [], problems = [];
@@ -156,7 +163,7 @@ async function main() {
     data = t.kind === "torah" ? torahColophonData(data) : haftarahColophonData(data);
     let biblio = null;
     try { biblio = HaftarahLib.parseBibliography(await readFile(join(ROOT, "bibliography", `${data.haftarah.book}.md`), "utf8")); } catch {}
-    problems.push(...gate(data, biblio).map(p => (multi ? `${t.id}: ${p}` : p)));
+    problems.push(...gate(data, biblio, geo).map(p => (multi ? `${t.id}: ${p}` : p)));
     builds.push({ ...t, data });
   }
   if (problems.length) { console.error("Not built; fix these first:\n" + problems.map(x => "  - " + x).join("\n")); process.exit(1); }

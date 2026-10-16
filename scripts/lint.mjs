@@ -119,6 +119,14 @@ export function lint(data, { voices = {} } = {}) {
     for (const para of [].concat(val || []))
       for (const h of godLanguage(para)) warn(`openingNote.${k}`, `God-language “${h.word}”: ${h.snippet}`);
 
+  // ---- the figures: a crowded map, a label too long for its bar, a band taller than its space ----
+  const places = Array.isArray(data.places) ? data.places : [];
+  if (places.length > 12) warn("places", `${places.length} places; more than 12 labels crowd the map`);
+  const timeline = Array.isArray(data.timeline) ? data.timeline : [];
+  for (const it of timeline)
+    if (it && typeof it.label === "string" && it.label.length > 28) warn(`timeline ${it.id}`, `label is ${it.label.length} characters; keep it under 28 so it fits its bar`);
+  if (timeline.length > 14) warn("timeline", `${timeline.length} items; more than 14 rows make the band taller than its space`);
+
   return { errors, warnings, fixes };
 }
 

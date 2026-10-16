@@ -60,6 +60,22 @@ test("gate checks citations on entries with no status", () => {
   assert.ok(gate(d, biblio).some(x => /no Sefaria ref.*18 Rashi/.test(x)));
 });
 
+test("gate: figures need the geo data; a resolved place and a table-cited king pass; an unresolved place or a work outside the bibliography is named", () => {
+  const d = structuredClone(fixture);
+  d.places = [{ id: "gibeah", name: "Gibeah", role: "scene", source: "openbible:gibeah-1", lat: 31.823, lon: 35.231 }];
+  d.timeline = [{ id: "david", chronology: "david" }];
+  assert.deepEqual(gate(d, biblio, null), ["data/geo and data/chronology.json are needed for the figures (loadGeo failed)"]);
+  const geo = { gazetteer: { places: [{ slug: "gibeah-1", name: "Gibeah 1", aliases: ["Gibeah"], verses: 45, sites: [{ lon: 35.231, lat: 31.823, votes: 822, where: "Tel el Ful" }], status: "ok" }] },
+    chronology: { entries: { david: { label: "David", kind: "king", realm: "united", start: -1010, end: -970, approx: true } } } };
+  assert.deepEqual(gate(d, biblio, geo), []);
+  d.places.push({ id: "nob", name: "Nob", role: "context", source: "openbible:nob" });
+  d.timeline.push({ id: "e", label: "A thing", kind: "event", start: -1000, works: ["Nobody 2000"] });
+  const got = gate(d, biblio, geo);
+  assert.ok(got.some(p => /^Nob: openbible:nob is not in the gazetteer/.test(p)), got.join("\n"));
+  assert.ok(got.includes("A thing: work not in the bibliography: Nobody 2000"));
+  assert.deepEqual(gate({ ...fixture, places: [], timeline: [] }, biblio, null), [], "empty lists are no figures");
+});
+
 import { fillTemplate } from "../scripts/build.mjs";
 
 test("fillTemplate leaves dollar patterns in the data alone", () => {
