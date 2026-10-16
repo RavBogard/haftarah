@@ -8,7 +8,7 @@ web
 
 ## Stack
 
-delegated: static HTML + CSS rendered to a letter-size PDF with headless Chrome/Edge, driven by a dependency-free Node script; the same data also drives a static web page (site/, plain HTML/CSS/ES modules, no framework) deployed by Vercel, with week data in a public Vercel Blob store. Chosen because the weekly run happens inside Claude Cowork on the rabbi's own machine (Windows today), where Node 24 and Edge/Chrome are present and nothing else should need installing. Fonts are self-hosted in the repo so the PDF renders identically on any machine.
+delegated: static HTML + CSS rendered to a letter-size PDF with headless Chrome/Edge, driven by a dependency-free Node script; the same data also drives a static web page (site/, plain HTML/CSS/ES modules, no framework) deployed by Vercel, with week data in a public Vercel Blob store. The weekly run can also drive a remote MCP server on the same Vercel project (`api/`, the repo's only dependencies), so a cloud session needs no local files. Chosen because the weekly run happens inside Claude Cowork on the rabbi's own machine (Windows today), where Node 24 and Edge/Chrome are present and nothing else should need installing. Fonts are self-hosted in the repo so the PDF renders identically on any machine.
 
 ## Users
 

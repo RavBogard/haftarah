@@ -1,6 +1,6 @@
 # Weekly haftarah sheet: runbook v6
 
-One sheet a week for Torah from Scratch at Central Reform Congregation. The template never changes during a weekly run; only `weeks/<slug>/sheet.json` does. `README.md` documents every field of that file. Read `PRODUCT.md` once per session. This file is the one home of the standing rules; the Cowork skill only points here and carries the drop-box credentials.
+One sheet a week for Torah from Scratch at Central Reform Congregation. The template never changes during a weekly run; only `weeks/<slug>/sheet.json` does. `README.md` documents every field of that file. Read `PRODUCT.md` once per session. This file is the one home of the standing rules; the plugin's skill points here; the credentials live in the server's environment, never in a skill.
 
 ## Standing rules
 
@@ -14,9 +14,28 @@ One sheet a week for Torah from Scratch at Central Reform Congregation. The temp
 - When Daniel turns something down, set `status: "rejected"` rather than deleting it.
 - Grunt work (pulling and translating texts, drafting entries, uploads) goes to subagents; the main conversation keeps the briefing, Daniel's picks and the rulings.
 
-## 0. Where to work
+## 0a. From the connector (the usual way)
 
-Work in a cloud session. Clone `https://github.com/RavBogard/haftarah` read-only. Node 18+ and the preinstalled Chromium are all it needs; `pdftoppm` and `qpdf`, when present, improve previews and PDF size.
+The haftarah connector (the plugin's MCP server; install steps in README's "The MCP server") replaces the clone: it holds the week in a private store, the credentials and the browser, so nothing is cloned or installed and the sections below are not run by hand. The tools, in the run's order:
+
+1. `get_calendar`: the coming Shabbat (or a date), the haftarah and why, Hebcal's aliyot, and `weeks`, the weeks the store holds with their status. `find_past_sheets` finds last year's sheet and any earlier week.
+2. `start_week`, then `fetch_texts` once per reading, then read the digest it returns. The Torah's texts come after Daniel's pick (`start_week` again with `torahPick` or `torahRef`).
+3. The briefing (step 3 below), then `save_briefing`.
+4. `get_texts` for the subagents' drafting; `get_sheet` for the version, counts and lint; `save_entries`, `update_sheet`, `set_status` and `add_bibliography_work` to write. Every write quotes the week's version; on `version_conflict`, read again and resend.
+5. `build_sheet` makes the PDFs and runs the layout check; `get_page_image` shows a page.
+6. `deliver_week`, only on Daniel's "ship it" (`dryRun` first if anything looks unusual).
+
+**The Wednesday pre-fetch.** A cron starts the coming Shabbat's week and fetches its texts on Wednesday night (St. Louis), so on Thursday `get_calendar`'s `weeks` already shows it and the digest is waiting; go straight to the briefing.
+
+**The draft link.** `build_sheet` returns a 24-hour link to each PDF. Daniel opens it and prints it; that is his approval. Show him, in chat and in full, everything Claude wrote before you hand over the link, as the standing rules say. Look at the pages yourself with `get_page_image`.
+
+**Delivery.** `deliver_week` runs only when Daniel says "ship it" (or "deliver", "send it") after he has printed. Never on your own judgment, never because a build passed.
+
+The CLI sections below are the fallback, and the reference for what each tool does: each tool wraps the script its section names.
+
+## 0b. From Claude Code (the fallback)
+
+Use this when the connector is down. Work in a cloud session or on Daniel's machine. Clone `https://github.com/RavBogard/haftarah` read-only. Node 18+ and the preinstalled Chromium are all it needs; `pdftoppm` and `qpdf`, when present, improve previews and PDF size.
 
 - **Do not run `npm install`.** The repo has no dependencies.
 - **Do not change the template or scripts in the cloud copy.** If you find a bug, open a GitHub issue on RavBogard/haftarah with the GitHub connector (title, what happened, the week, the fix you'd suggest) and mention the issue number in the delivery line.
@@ -109,9 +128,11 @@ NODE_USE_ENV_PROXY=1 node scripts/deliver.mjs weeks/<slug>
 
 `NODE_USE_ENV_PROXY=1` matters in a cloud session: Node's built-in fetch ignores the sandbox's HTTPS proxy without it, and uploads hang.
 
-`deliver.mjs` sends the files byte-exact through the drop box (a Google Apps Script web app in Daniel's account; setup in `tools/dropbox/SETUP.md`). The URL and token come from the Cowork skill, which writes them to `~/.haftarah-dropbox.json`; never print the token.
+`deliver.mjs` sends the files byte-exact through the drop box (a Google Apps Script web app in Daniel's account; setup in `tools/dropbox/SETUP.md`). The URL and token come from `HAFTARAH_DROPBOX_URL` and `HAFTARAH_DROPBOX_TOKEN` or from `~/.haftarah-dropbox.json`; never print the token.
 
-After Drive, the same command puts the week on the web: `scripts/publish.mjs` uploads the cleaned `sheet.json` (rejected items and statuses removed) and the PDF to the site's Blob store and updates the index, and the page is live at `https://haftarah.centralreform.org/<slug>` within a minute. The site redeploys only when its own files change, and an installed iPad then shows "This site has been updated. The new version opens the next time you launch it." until its next launch; a week republished after a reader has opened it reaches that reader on their next launch, not mid-session. The Blob token comes from the Cowork skill, which writes it to `~/.haftarah-web.json`; never print it. Without a token the step says `Web: skipped` and the Drive delivery still counts; `--no-web` skips it on purpose. Re-delivering a week republishes it; if the web step alone fails after Drive succeeded, retry just that with `node scripts/publish.mjs weeks/<slug>`.
+The server delivers the same way: `deliver_week` runs the same `deliver.mjs` and `publish.mjs`, with the credentials in Vercel's environment instead of those files. A week delivered from the connector shows `delivered` in `get_calendar`'s `weeks`.
+
+After Drive, the same command puts the week on the web: `scripts/publish.mjs` uploads the cleaned `sheet.json` (rejected items and statuses removed) and the PDF to the site's Blob store and updates the index, and the page is live at `https://haftarah.centralreform.org/<slug>` within a minute. The site redeploys only when its own files change, and an installed iPad then shows "This site has been updated. The new version opens the next time you launch it." until its next launch; a week republished after a reader has opened it reaches that reader on their next launch, not mid-session. The Blob token comes from `HAFTARAH_BLOB_TOKEN` or from `~/.haftarah-web.json`; never print it. Without a token the step says `Web: skipped` and the Drive delivery still counts; `--no-web` skips it on purpose. Re-delivering a week republishes it; if the web step alone fails after Drive succeeded, retry just that with `node scripts/publish.mjs weeks/<slug>`.
 
 Before uploading, publish builds the page's three side files in the week folder: `words.json` (STEP's word analysis, aligned to the sheet's Hebrew; the first run on a machine downloads the week's TAHOT file and TBESH into `~/.haftarah-cache/`, not all of STEP's files), `translations.json` (JPS 1985, Koren and Metsudah where Sefaria has them) and `links.json` (what Sefaria links to each verse). Each prints one line per reading; words names any word it could not analyse, and any verse with a tag inside a word. A verse STEP has no rows for stops the publish (check the Hebrew numbering). A Sefaria failure on the translations or the links does not: the line `side: translations not built: <reason>` (or links) says so, the week goes up without that tool, and a later `node scripts/publish.mjs weeks/<slug>` adds it. A verse Sefaria did not answer for on the related links is tolerated and named (`Sefaria did not answer for 20:19 (first: <reason>)`); the page says so on that verse. `--dry-run` lists the side files but builds none of them. `--no-side` rebuilds nothing but still uploads the side files the folder already has; `node scripts/publish.mjs --side <slug>` adds them to a week published without them. The side files never go to Drive.
 

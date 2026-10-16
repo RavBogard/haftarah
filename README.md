@@ -34,6 +34,10 @@ scripts/
   web-build.mjs             assembles site/dist for Vercel
   publish.mjs               puts a week on the web (Blob store + index)
   web-check.mjs             headless check of the built site at desktop and phone widths; --serve to look
+  pack-engine.mjs           template/ -> dist/engine/, the engine as a package (see "The engine package")
+api/                        the MCP server: four Vercel functions over api/_lib/, the only folder with dependencies (api/package.json)
+plugin/                     the Claude plugin: the connector and the one-page skill
+.claude-plugin/marketplace.json   the marketplace entry that makes the plugin installable from this repo
 tools/dropbox/
   Code.gs, SETUP.md         the Google Apps Script drop box deliver.mjs posts to; one-time setup
 tools/make-icons.mjs        renders site/icons/ from assets/logo.png with headless Chrome; run once, commit the PNGs
@@ -61,14 +65,15 @@ weeks/
     sheet.pdf               the sheet Daniel reviews and prints
     sheet-torah.pdf         the Torah sheet, when the week has a Torah selection
     words.json, translations.json, links.json   the web page's side files, written at publish (never on Drive)
+    status.json             the server's status and version for a week in the working store; never on Drive
     sheet-trope.pdf         the chanter's copy (optional)
     preview/                page images
-RUNBOOK.md                  the weekly runbook Claude follows in Cowork (the Cowork skill points here)
+RUNBOOK.md                  the weekly runbook: the connector's run first, the CLI as the fallback (the plugin's skill points here)
 ```
 
 ## Weekly use
 
-Requirements: Node 18+ and Chrome or Edge. Nothing to install; do not run `npm install`.
+Requirements: Node 18+ and Chrome or Edge. Nothing to install; do not run `npm install`. This is the CLI. The usual way to make a week is the connector (see "The MCP server"); the scripts below are its fallback and the reference for what each tool does.
 
 ```
 node scripts/fetch.mjs --date 2026-10-17 --known <slug,slug>   # 1. the calendar, the haftarah, Hebcal's aliyot, last year's sheet (prior.json); --no-texts skips texts
@@ -293,3 +298,73 @@ The week page is built for studying together. Every verse has an address, `/<slu
 **The library.** The landing has four doors over one list: by week (newest first; a week with a Torah reading shows both refs), by parashah (54 cells in Torah order in five book bands, a dot per year held, empty cells muted, this week ringed), by book (the Torah books, and the haftarah books Joshua to Malachi with the chapters covered), and special Shabbatot. Short addresses lead to the permanent page: `/noach` (the latest Noach sheet; `/vayakhel` also finds a combined Vayakhel-Pekudei week), `/5787/noach`, `/torah/genesis`, `/prophets/isaiah`, `/special/shuva`. `vercel.json` sends exactly these to `library.html` (an allow-list made from `site/app/parashot.js`; a test holds the two together; anything else is the 404 page), which resolves them from `index.json`. A week with a Torah reading shows it first under its own heading, then the haftarah; both PDFs are linked, and "Last time" links last year's sheet. `node scripts/publish.mjs --reindex` rebuilds `index.json` from the store's weeks (each row with `parashahKeys`, `tags`, `cycle`, `readings` and `pdfTorah`, the last only where the store holds `sheet-torah.pdf`), keeping when each was first published; a listing with no weeks never replaces an index that had some. `--reindex --from weeks` refreshes the index rows of already-published weeks from a local folder; a local week not yet in the index is skipped and named (deliver publishes it).
 
 **Offline and installed.** The site is an installable app. A service worker (`site/sw.js`, a module worker, its logic in `site/app/offline.js`; every page registers it with `updateViaCache: "none"`) keeps the pages, the stylesheet, the scripts, the fonts and the mural in a cache named for the build and answers every page load from it, so a page open across a deploy keeps its own build whole until the next launch (an unknown address tries the network for three seconds, then the cached not-found page; a PDF download is left to the browser) (`scripts/web-build.mjs` writes the hash of every shipped file and the list to precache into the worker, so the cache changes exactly when a file does), keeps the week files it has served (`sheet.json` and the side files, the last sixty, in `haftarah-data`) and serves them at once while fetching a fresh copy behind them, asks the network first for the index, hurried to the copy it holds after three seconds when it holds one (the slow answer still lands in the cache behind it, and with nothing held it waits for the network), and keeps the last hundred answers from Sefaria (`haftarah-sefaria`) the same way. A sheet opened on a first visit is asked for again once the worker takes control, so it is cached too. A sheet a reader has opened once opens again with no network; a week republished after that shows its new text on the reader's next launch. A new build never interrupts a page: it installs and waits (the worker never calls `skipWaiting`), the page says "This site has been updated. The new version opens the next time you launch it.", and the next launch uses it; a first install shows no note, and the presenter never shows it. PDFs are never cached. `site/manifest.webmanifest` and the icons in `site/icons/` (192, 512, a maskable 512 and the 180 apple-touch icon, rendered once from the mural by `node tools/make-icons.mjs`, which needs Chrome) make the site installable; iPad and iPhone Safari readers, outside the installed app, see a two-step Add to Home Screen card once on the week page and the landing ("Sheets you open from the Home Screen stay readable without a connection, and marks made there are kept.": iOS keeps a Home Screen app's storage apart from Safari's), dismissed for good with Not now. A reader can mark verses for themselves (press and hold a verse number, or Mark this verse in its header; the button's label, Mark this verse or Unmark, carries its state); the marks stay on the device under `haftarah:v1:marks:<slug>`, list under My marks in the Aa card and the side panel, and travel only as a link (`/<slug>#m=haftarah-54-3,haftarah-54-9`, a fragment no server sees; a bare `54-9` means the primary reading) or as text. A browser that refuses to store a mark says "This mark could not be saved on this device." The policy allows `worker-src 'self'` and `manifest-src 'self'`. `npm run web-check` registers the worker against its own server and asserts the precache, the cached week file, the update note, the marks and the card; so that Chrome's virtual clock does not run ahead of the worker, the check holds it with small real requests to `/sw.js?wait=N` while the worker settles (check mode only).
+
+## The MCP server
+
+The weekly run has a remote MCP server, and it is the usual way to make a week (spec 5.11). It is `api/`: four Vercel functions over `api/_lib/` on the same project as the site (`api/mcp.mjs` the tools, `api/oauth.mjs` sign-in, `api/draft.mjs` the draft links, `api/prefetch.mjs` the cron), at `https://haftarah.vercel.app/api/mcp` until `haftarah.centralreform.org` has its CNAME. `api/` is the only folder with dependencies (`api/package.json`: `@sparticuz/chromium` 153.0.0, a headless-shell pack, driven by `playwright-core` 1.63.0). The engine, the scripts and the site stay dependency-free and never import from it. The server renders the PDF, the layout check's DOM dump and the page images with that one browser over one reused page; the CLI keeps spawning the local Chrome or Edge. On a preview, a five-page week built in about 8 seconds and printed the same page count as the local build. The server needs Node 20.3 or later (it uses `AbortSignal.any`); Vercel runs 24. The CLI's floor under "Weekly use" is unchanged.
+
+A week lives in a private Blob store (`haftarah-working`) under `weeks/<slug>/`: the working files (`sheet.json` with its rejected entries, the candidates and texts files, `prior.json`, `digest.md`, `briefing.md`, the HTML and PDFs, the page images) and `status.json` (`drafting`, `built` or `delivered`, with a version that every write must quote). Each tool call pulls the week into `/tmp`, works there and pushes it back. Drive stays the mirror, and the public store gets only what `deliver_week` publishes, through the same `deliver.mjs` and `publish.mjs` the CLI uses. The server refuses to put a credential in any tool result.
+
+The fourteen tools, in the order a week uses them:
+
+| Tool | What it does |
+|---|---|
+| `get_calendar` | The coming Shabbat or a given date: parashah, haftarah (and why, on a special Shabbat), Hebcal's aliyot, next week, and the weeks the store already holds, with their status |
+| `find_past_sheets` | Earlier weeks in the public library by parashah, book or overlapping ref, joined with the store's status |
+| `start_week` | Starts a week: the haftarah verse-aligned, the Torah selection when a pick is given, last year's sheet and its carried entries, the candidates |
+| `fetch_texts` | One reading's texts from Sefaria into the store, then `digest.md`; one reading per call |
+| `get_texts` | A filtered, paged slice of those texts, for drafting |
+| `get_sheet` | The working sheet by parts, with its version, status, entry counts against the cap and the lint |
+| `save_briefing` | Stores the briefing, the numbered issues and Daniel's picks as `briefing.md` |
+| `save_entries` | Adds or updates entries and glosses and adds glossary items; every entry passes the citation gate; needs the current version |
+| `update_sheet` | The week's own fields: opening note, glossary, next week, credits, highlights, places, map region, timeline, a reading's incipit |
+| `set_status` | Marks entries or glosses rejected, or clears the mark |
+| `add_bibliography_work` | Adds a work to a book's bibliography as an overlay in the store, verified by a publisher or WorldCat URL |
+| `build_sheet` | The gate and lint, then the PDFs, the layout check and the page images; returns 24-hour links to the PDFs |
+| `get_page_image` | One page of a built sheet as an image (an image rides better alone than beside a build report) |
+| `deliver_week` | Drive and the public site, only on Daniel's "ship it"; `dryRun` lists what would go where |
+
+**Sign-in.** Google, for the owner only. The server is its own OAuth 2.1 authorization server and keeps no database: every client, request, code and token is a signed record (HMAC, keyed by `HAFTARAH_AUTH_SECRET`). Claude registers itself, the browser goes to Google, and a Google identity whose verified email is not in `HAFTARAH_OWNER_EMAILS` is refused. Access tokens last an hour and refresh tokens 30 days. To sign everyone out, rotate `HAFTARAH_AUTH_SECRET`: every record signed with the old key stops verifying.
+
+**The Wednesday cron.** `vercel.json` runs `api/prefetch.mjs` at 03:00 and 04:00 UTC on Thursday, which is Wednesday night in St. Louis in both daylight and standard time. It starts the coming Shabbat's week and fetches the texts of each reading, so the digest is waiting on Thursday. A week already in the store is left alone, so the second run does nothing unless the first failed. Vercel sends `CRON_SECRET` as a bearer token, and the function refuses anything else.
+
+**The draft links.** `build_sheet` returns a signed link to each PDF, good for 24 hours, served by `api/draft.mjs` from the private store. Daniel opens one and prints it; that is the approval.
+
+### Environment
+
+All of these are set in the Vercel project. A value is never written in the repo.
+
+| Variable | What it is | Who sets it |
+|---|---|---|
+| `PUBLIC_BASE_URL` | The server's canonical origin, `https://haftarah.vercel.app` (also the default); the plugin's URL and the Google redirect hang from it | Daniel, in Vercel |
+| `PUBLIC_ALTERNATE_ORIGINS` | Other origins the server answers as, comma-separated: `https://haftarah.centralreform.org` | Daniel, in Vercel |
+| `HAFTARAH_WORKING_READ_WRITE_TOKEN` | The private working store's token; refused if it is the public store's | Vercel, when the store was connected to the project |
+| `BLOB_READ_WRITE_TOKEN` | The public store's token (`HAFTARAH_BLOB_TOKEN` is read when it is absent); used only by `deliver_week` | Vercel, from the public store |
+| `HAFTARAH_DROPBOX_URL`, `HAFTARAH_DROPBOX_TOKEN` | The Drive drop box (see "Delivery to Drive"); both or neither | Daniel, in Vercel |
+| `HAFTARAH_AUTH_SECRET` | The key that signs every OAuth record, at least 32 characters; a shorter one counts as unset | Daniel, in Vercel |
+| `CRON_SECRET` | The bearer token Vercel sends the cron | Daniel, in Vercel |
+| `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET` | The Google OAuth client that signs the owner in; until both are set no one can sign in | Daniel, from the Google console (below) |
+| `HAFTARAH_OWNER_EMAILS` | The Google addresses allowed in, comma-separated | Daniel, in Vercel |
+| `HAFTARAH_CUSTOMS` | The customs file to use; default `crc` | Optional |
+| `HAFTARAH_CACHE`, `HAFTARAH_WORK` | Where the word-data cache and the week's working copy go; on Vercel they default to folders under `/tmp` | Optional |
+
+### Installing the plugin
+
+The plugin (`plugin/`) carries the connector (`plugin/.mcp.json`, pointing at `https://haftarah.vercel.app/api/mcp`) and one skill, `haftarah-sheet`: the standing rules and the run in tool order. In Claude Code:
+
+    /plugin marketplace add RavBogard/haftarah
+    /plugin install haftarah@haftarah
+
+On claude.ai, open Customize, then Plugins, and add the same repository. The first use opens Google's sign-in; sign in with an address in `HAFTARAH_OWNER_EMAILS`. Then ask for "this week's haftarah sheet". When the CNAME for `haftarah.centralreform.org` exists, the connector's URL changes in `plugin/.mcp.json`, one line.
+
+### The Google console
+
+In Google Cloud, create an OAuth client of type Web application. Its authorized redirect URI is `https://haftarah.vercel.app/api/auth/google/callback`; add `https://haftarah.centralreform.org/api/auth/google/callback` once the CNAME exists. Put the client's ID and secret in the Vercel project as `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET` and redeploy.
+
+### The local fallback
+
+If the connector is down, nothing is lost: RUNBOOK.md's CLI sections (0b to 7) make the same week from Claude Code with the scripts above, on a machine with Chrome or Edge.
+
+## The engine package
+
+`node scripts/pack-engine.mjs` copies the engine from `template/` into `dist/engine/` (git-ignored; the script writes only under `dist/` and refuses any other output folder). The folder holds `lib.js`, `render.js`, `sheet.html`, `sheet.css`, `trope.css`, `voices.json` and `fonts/`, each byte for byte as in `template/`, with a `package.json` (`@haftarah/engine`, dependency-free, versioned from the repo's own `package.json`, now 2.0.0), a README and `MANIFEST.json` (the sha256 of every file, text with line endings folded to LF). `--out` and `--version` override the folder and the version. The B'nei Mitzvah portal installs it with `npm install <path to dist/engine>`, or a tarball made from it with `npm pack`, and builds its sheets from it. A test holds the package equal to `template/` and builds a sheet from the package that prints exactly what the repo prints, so the print golden's guarantee covers the portal too.
