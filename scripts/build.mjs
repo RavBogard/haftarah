@@ -144,7 +144,7 @@ export function figuresGate(file, biblio, geo = null, geoError = null) {
  * One book's bibliography: bibliography/<book>.md under `root`, with `overlay[book]` (markdown, more
  * lines in the same form) added over it, the overlay's keys winning. null when neither exists.
  */
-async function bookBibliography(book, root = ROOT, overlay = null) {
+export async function bookBibliography(book, root = ROOT, overlay = null) {
   let map = null;
   try { map = HaftarahLib.parseBibliography(await readFile(join(root, "bibliography", `${book}.md`), "utf8")); } catch {}
   const extra = overlay && typeof overlay[book] === "string" ? HaftarahLib.parseBibliography(overlay[book]) : null;

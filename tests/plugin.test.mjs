@@ -38,7 +38,21 @@ test("the server's instructions carry the rules that must hold without the skill
   for (const must of ["deliver_week", "explicit", "Never invent a citation", "approves by printing", "Sefaria", "rejected", "before you hand him the draft links", "expectedVersion", "version_conflict"]) assert.ok(INSTRUCTIONS.includes(must), must);
 });
 
-test("the skill carries its own drafting brief, equal to the repo file", () => {
-  assert.equal(read("plugin/skills/haftarah-sheet/draft-entries.md"), read("docs/prompts/draft-entries.md"));
+// The connector edition of the drafting prompt: every rule line of the repo's prompt (below its ---) that names no
+// path, no script, no clone and no -- flag is in the plugin's copy word for word, so the rules cannot drift; the
+// lines about the clone's files are the tools' instead.
+const mentionsClone = line => /`[^`]*\/[^`]*`|\b[\w-]+\.(md|json|mjs)\b|node scripts\/|\bclone\b|(^|\s|`)--[a-z]/i.test(line);
+test("the skill's drafting brief keeps every rule line of the repo prompt verbatim and swaps the clone's files for the connector's tools", () => {
+  const lf = s => s.replace(/\r\n/g, "\n");   // a Windows checkout may carry CRLF
+  const repo = lf(read("docs/prompts/draft-entries.md")), plugin = lf(read("plugin/skills/haftarah-sheet/draft-entries.md"));
+  assert.ok(repo.includes("\n---\n"));
+  const body = repo.slice(repo.indexOf("\n---\n") + 5).split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const rules = body.filter(l => !mentionsClone(l));
+  assert.ok(rules.length >= 18, `${rules.length} rule lines`);
+  const lines = new Set(plugin.split(/\r?\n/).map(l => l.trim()));
+  for (const l of rules) assert.ok(lines.has(l), `the plugin copy keeps: ${l}`);
+  assert.ok(body.filter(mentionsClone).length >= 5, "the clone lines are found, so the filter is not vacuous");
+  for (const never of ["clone]", "node scripts/", "--fix", "weeks/", "RUNBOOK.md", "README.md", "bibliography/", "draft_entries.json"]) assert.ok(!plugin.includes(never), `the plugin copy never says ${never}`);
+  for (const must of ["get_sheet", "get_texts", "save_entries", "`bibliography`", "`entrySchema`"]) assert.ok(plugin.includes(must), must);
   assert.ok(!read("plugin/skills/haftarah-sheet/SKILL.md").includes("docs/prompts/draft-entries.md"));
 });

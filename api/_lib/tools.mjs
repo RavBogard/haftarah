@@ -8,7 +8,7 @@ import { createRequire } from "node:module";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { getJSON, leyningUrl, nextWeekFor, weekSlug, nextShabbat, fetchWeek, fetchTextsFor, withEntryIds } from "../../scripts/fetch.mjs";
 import { writeDigest } from "../../scripts/digest.mjs";
-import { weekBibliography, buildWeek, BuildRefused } from "../../scripts/build.mjs";
+import { weekBibliography, bookBibliography, buildWeek, BuildRefused } from "../../scripts/build.mjs";
 import { checkWeek } from "../../scripts/check.mjs";
 import { deliver } from "../../scripts/deliver.mjs";
 import { publish } from "../../scripts/publish.mjs";
@@ -20,7 +20,7 @@ import { defaultHaftarahFor } from "../../scripts/rites.mjs";
 import { lintSheet, entryCounts, loadVoices, loadBasemap } from "../../scripts/lint.mjs";
 import { loadCustoms } from "../../scripts/customs.mjs";
 import { parashahKeysOf } from "../../site/app/parashot.js";
-import { pullWeek, pushWeek, readJson, writeJson, readStatus, writeStatus } from "./store.mjs";
+import { pullWeek, pushWeek, readJson, writeJson, readStatus, writeStatus, withSignal } from "./store.mjs";
 import { sliceTexts } from "./texts.mjs";
 import { SLUG, SLUG_SOURCE, PDF_FILES } from "../../site/app/contract.js";
 const L = createRequire(import.meta.url)("../../template/lib.js");
@@ -64,16 +64,46 @@ export const SCRIPTS = { buildWeek, checkWeek, deliver, publish };
 export function toolCtx({ store, config, fetchImpl = globalThis.fetch, now = () => new Date(), log = () => {}, root = ROOT, workDir = null, browser = null, launcher = null, scripts = SCRIPTS }) {
   return { store, config, fetchImpl, now, log, root: root || ROOT, workDir: workDir || join(tmpdir(), "haftarah-weeks"), browser, launcher, scripts: { ...SCRIPTS, ...(scripts || {}) } };
 }
-export const defineTool = def => ({ annotations: {}, ...def, inputSchema: { additionalProperties: false, ...def.inputSchema } });
+/** How long a call may run before the transport answers it as timed out (api/_lib/mcp.mjs); the long tools get more. */
+export const DEFAULT_DEADLINE_MS = 90_000;
+export const LONG_DEADLINE_MS = 240_000;
+export const defineTool = def => ({ annotations: {}, deadlineMs: DEFAULT_DEADLINE_MS, ...def, inputSchema: { additionalProperties: false, ...def.inputSchema } });
+
+// ---- one write at a time per week ----
+// Two calls that write one week, inside one instance, run one after the other: each write tool reads the status,
+// checks expectedVersion and writes, and two of those interleaved would both pass the check. A chain of promises per
+// key; the lock does not span two function instances (the skill's one-save-at-a-time rule covers that).
+const LOCKS = new Map();
+export async function withLock(key, fn, signal = null) {
+  const prev = LOCKS.get(key) || Promise.resolve();
+  let release;
+  const mine = new Promise(resolve => { release = resolve; });
+  const tail = prev.then(() => mine);
+  LOCKS.set(key, tail);
+  try {
+    await prev;
+    // A call whose deadline passed while it waited has been answered already; it must not write after that.
+    if (signal?.aborted) throw new Error("the call's deadline passed while it waited for an earlier write to this week; nothing was written");
+    return await fn();
+  } finally {
+    release();
+    if (LOCKS.get(key) === tail) LOCKS.delete(key);
+  }
+}
+/** A handler run under the lock of its week (keyOf names the key from the input). */
+const locked = (keyOf, handler) => (input, ctx) => withLock(keyOf(input), () => handler(input, ctx), ctx?.signal);
+const bySlug = input => `week:${input.slug}`;
 
 // ---- shared helpers ----
-const get = ctx => url => getJSON(url, { fetchImpl: ctx.fetchImpl });
+// Every upstream request carries the call's deadline (ctx.signal, set by the transport; none from the CLI or a test).
+const get = ctx => url => getJSON(url, { fetchImpl: ctx.fetchImpl, signal: ctx.signal || null });
+const net = ctx => withSignal(ctx.fetchImpl, ctx.signal);
 const customsOf = ctx => loadCustoms(ctx.config.customs);
 // What each tool pulls from the store: only what its script reads, never every page image of every earlier build.
 export const NEEDS = {
   texts: ["sheet.json", "candidates.json", "candidates-torah.json", "texts.json", "texts-torah.json", "prior.json"],
   build: ["sheet.json"],
-  deliver: ["sheet.json", "candidates.json", "candidates-torah.json", "texts.json", "texts-torah.json", "prior.json", "digest.md", "briefing.md", PDF_FILES.haftarah, PDF_FILES.torah, "words.json", "translations.json", "links.json"],
+  deliver: ["sheet.json", "candidates.json", "candidates-torah.json", "texts.json", "texts-torah.json", "prior.json", "digest.md", "briefing.md", PDF_FILES.haftarah, PDF_FILES.torah],
 };
 /** A fresh folder of its own under workDir (two calls in one warm instance never share one), removed when fn ends. */
 async function withRoot(ctx, fn) {
@@ -110,7 +140,11 @@ export const getCalendar = defineTool({
     const slugs = [...new Set((await ctx.store.list("weeks/")).map(b => b.pathname.split("/")[1]).filter(s => SLUG.test(s || "") && (s.startsWith(d) || s.startsWith(next))))].sort().reverse();
     const weeks = [];
     for (const slug of slugs) { const st = await readStatus(ctx.store, slug); weeks.push({ slug, status: st?.status || null, version: st?.version || null }); }
-    return { shabbat: { civil: d, hebrewEn: `${conv.hd} ${conv.hm} ${conv.hy}` }, parashah: { en: name, he: item.name?.he || "", ref: item.summary || "" }, haftarah: { ref: item.haftara || null, special, defaultHaftarah: special && dflt !== item.haftara ? dflt : null }, aliyot: aliyotLines(leyningOf(item)), nextWeek: await nextWeekFor(d, customs, g), slug: weekSlug(d, name, special), weeks, customsToConfirm: customs.toConfirm || [] };
+    const shabbat = { civil: d, hebrewEn: `${conv.hd} ${conv.hm} ${conv.hy}` };
+    const parashah = { en: name, he: item.name?.he || "", ref: item.summary || "" };
+    const haftarah = { ref: item.haftara || null, special, defaultHaftarah: special && dflt !== item.haftara ? dflt : null };
+    const nextWeek = await nextWeekFor(d, customs, g);
+    return { shabbat, parashah, haftarah, aliyot: aliyotLines(leyningOf(item)), nextWeek, slug: weekSlug(d, name, special), weeks, customsToConfirm: customs.toConfirm || [] };
   },
 });
 
@@ -128,15 +162,70 @@ export const findPastSheets = defineTool({
     // status.json read only for the rows returned; a row whose slug is not a week slug has none.
     const statusOf = async slug => { try { return (await readStatus(ctx.store, slug))?.status || null; } catch { return null; } };
     const out = [];
-    for (const r of rows) out.push({ slug: r.slug, civil: r.civil, hebrewEn: r.hebrewEn, parashah: r.parashah, special: r.special || null, readings: r.readings || [{ id: "haftarah", kind: "haftarah", ref: r.ref, book: r.book }], page: `${ctx.config.site}/${r.slug}`, pdf: `${ctx.config.site}/data/${r.pdf}`, pdfTorah: r.pdfTorah ? `${ctx.config.site}/data/${r.pdfTorah}` : null, status: await statusOf(r.slug) });
+    const site = ctx.config.site;
+    for (const r of rows) {
+      const readings = r.readings || [{ id: "haftarah", kind: "haftarah", ref: r.ref, book: r.book }];
+      const pdfTorah = r.pdfTorah ? `${site}/data/${r.pdfTorah}` : null;
+      out.push({ slug: r.slug, civil: r.civil, hebrewEn: r.hebrewEn, parashah: r.parashah, special: r.special || null, readings, page: `${site}/${r.slug}`, pdf: `${site}/data/${r.pdf}`, pdfTorah, status: await statusOf(r.slug) });
+    }
     return out;
   },
 });
 
-const PARTS = ["meta", "verses", "commentary", "glosses", "glossary", "openingNote", "nextWeek", "figures", "briefing"];
+/** What an entry, a gloss and a glossary item look like, and what save_entries refuses: the drafter's schema without a clone. */
+export const ENTRY_SCHEMA = {
+  entry: {
+    id: "\"e-\" and eight hex digits, given by save_entries to a new entry; send it back to update that entry",
+    chapter: "the chapter; on every entry when the reading spans chapters",
+    verse: "the verse commented on", verseEnd: "optional: the last verse when the comment spans several",
+    register: "traditional | modern | critical | reference",
+    source: "the voice, e.g. Rashi; for a critical entry a short descriptive title",
+    lemma: "the words commented on", lemmaLang: "optional: \"he\" when the lemma is Hebrew",
+    text: "HTML; <i> for transliterated Hebrew",
+    sourceRef: "the Sefaria ref of the text quoted or adapted",
+    translation: "the published English by name (with \", adapted\" when changed), or \"claude\" for a translation made for this sheet",
+    kind: "optional: \"abridged\" whenever the text was cut",
+    works: "critical only: keys from get_sheet's bibliography part",
+    cites: "critical only: the short citation printed in the tail, e.g. McCarter, <i>I Samuel</i>",
+    order: "optional: the order within the verse",
+    status: "never sent here: set_status marks an entry rejected",
+  },
+  registers: {
+    traditional: "classical (red square): Talmud, midrash, Targum and the medieval commentators, by Sefaria ref",
+    modern: "modern (blue circle): e.g. Malbim, Steinsaltz, by Sefaria ref",
+    critical: "what historians say (teal triangle): 60–120 words, no sourceRef needed, works only from the bibliography",
+    reference: "reference (ochre diamond): a Sefaria reference work, by ref",
+  },
+  needsSourceRef: ["traditional", "modern", "reference"],
+  kinds: ["abridged"],
+  gloss: { type: "\"gloss\" (marks it a margin gloss)", chapter: "as for an entry", verse: "the verse", lemma: "one Hebrew word copied from the verse's he", en: "the exact JPS English words to key", text: "15–30 words, HTML", id: "\"g-\" and eight hex digits, given by save_entries" },
+  glossaryItem: { term: "the name or place in English (the key: the same term again updates it)", he: "the Hebrew", text: "one or two sentences" },
+  saveEntriesRefuses: [
+    "an entry outside the critical register with no sourceRef",
+    "a sourceRef that does not resolve on Sefaria (one Sefaria cannot be reached for is saved with a refUnverified warning)",
+    "a critical entry that names no works, or a key not in the bibliography for the week's books",
+    "an id that is not in the reading (the whole call is refused: an update needs an existing id)",
+    "an expectedVersion that is not the week's current version (version_conflict: read again and resend)",
+  ],
+};
+
+/** The bibliography a historians entry may cite, per book of the week's readings: the repo's file with the store's overlay merged over it. */
+async function bibliographyView(ctx, sheet) {
+  const { overlay } = await biblioFor(ctx, sheet);
+  const books = new Map();
+  for (const r of L.readings(sheet).filter(x => x.book)) books.set(r.book, [...(books.get(r.book) || []), r.id]);
+  const out = [];
+  for (const [book, readings] of books) {
+    const map = (await bookBibliography(book, ctx.root, overlay)) || new Map();
+    out.push({ book, readings, works: [...map].map(([key, w]) => ({ key, citation: w.citation })) });
+  }
+  return out;
+}
+
+const PARTS = ["meta", "verses", "commentary", "glosses", "glossary", "openingNote", "nextWeek", "figures", "briefing", "bibliography", "entrySchema"];
 export const getSheet = defineTool({
   name: "get_sheet",
-  description: "A week's working sheet, by parts (default meta, openingNote and nextWeek), with its version for the next save, its status, the entry counts by reading and register against the cap, and the current lint errors and warnings.",
+  description: "A week's working sheet, by parts (default meta, openingNote and nextWeek), with its version for the next save, its status, the entry counts by reading and register against the cap, and the current lint errors and warnings. The bibliography part lists, per book, the works a historians entry may cite (key and citation); entrySchema describes an entry, a gloss and a glossary item and what save_entries refuses.",
   inputSchema: { type: "object", properties: { slug: slugProp, parts: { type: "array", items: { type: "string", enum: PARTS } } }, required: ["slug"] },
   annotations: { readOnlyHint: true },
   async handler({ slug, parts = ["meta", "openingNote", "nextWeek"] }, ctx) {
@@ -154,6 +243,8 @@ export const getSheet = defineTool({
     if (parts.includes("nextWeek")) out.nextWeek = sheet.nextWeek || null;
     if (parts.includes("figures")) out.figures = { places: sheet.places || [], mapRegion: sheet.mapRegion || null, timeline: sheet.timeline || [], highlights: sheet.highlights || [] };
     if (parts.includes("briefing")) out.briefing = (await ctx.store.get(`weeks/${slug}/briefing.md`))?.toString("utf8") || null;
+    if (parts.includes("bibliography")) out.bibliography = await bibliographyView(ctx, sheet);
+    if (parts.includes("entrySchema")) out.entrySchema = ENTRY_SCHEMA;
     return out;
   },
 });
@@ -176,13 +267,13 @@ export const saveBriefing = defineTool({
   description: "Store the briefing as given to Daniel, with the numbered issues it raised and his picks, as the week's briefing.md (delivered with the week).",
   inputSchema: { type: "object", properties: { slug: slugProp, markdown: { type: "string" }, issues: { type: "array", items: { type: "string" } }, picks: { type: "array", items: { type: "string" } } }, required: ["slug", "markdown"] },
   annotations: { idempotentHint: true },
-  async handler({ slug, markdown, issues = [], picks = [] }, ctx) {
+  handler: locked(bySlug, async ({ slug, markdown, issues = [], picks = [] }, ctx) => {
     await requireSheet(ctx, slug);
     const md = [markdown.trimEnd(), issues.length ? `## Issues\n\n${issues.map((x, i) => `${i + 1}. ${x}`).join("\n")}` : null, picks.length ? `## Picks\n\n${picks.map(x => `- ${x}`).join("\n")}` : null].filter(Boolean).join("\n\n") + "\n";
     await ctx.store.put(`weeks/${slug}/briefing.md`, Buffer.from(md, "utf8"), "text/markdown; charset=utf-8");
     const status = await writeStatus(ctx.store, slug, {}, ctx.now);
     return { slug, version: status.version, bytes: Buffer.byteLength(md) };
-  },
+  }),
 });
 
 // ---- the writing tools ----
@@ -204,41 +295,66 @@ async function saveSheet(ctx, slug, sheet, statusPatch = {}) {
 
 export const startWeek = defineTool({
   name: "start_week",
-  description: "Start a week in the working store for a Shabbat: the haftarah (Hebcal's, or the ref given) verse-aligned in Hebrew and English, the Torah selection when a pick is given, last year's sheet and its carried entries, the candidates Sefaria links to. Refuses a week already in the store unless force (start over) or a Torah pick (add the Torah reading to the kept week).",
+  description: "Start a week in the working store for a Shabbat: the haftarah (Hebcal's, or the ref given) verse-aligned in Hebrew and English, the Torah selection when a pick is given, last year's sheet and its carried entries, the candidates Sefaria links to. Refuses a week already in the store unless force (start over) or a Torah pick (add the Torah reading to the kept week); a haftarahRef on a kept week needs force. A new pick removes the Torah's texts and the digest, and force removes every texts file, so fetch_texts fetches the new range.",
   inputSchema: { type: "object", properties: { date: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" }, haftarahRef: { type: "string" }, torahPick: { type: "string", pattern: "^(aliyah:(\\d(-\\d)?|M)|triennial|full)$" }, torahRef: { type: "string" }, noTorah: { type: "boolean" }, carry: { type: "boolean" }, force: { type: "boolean" } }, required: ["date"] },
   annotations: {},
-  async handler({ date, haftarahRef = null, torahPick = null, torahRef = null, noTorah = false, carry = true, force = false }, ctx) {
+  deadlineMs: LONG_DEADLINE_MS,
+  async handler(input, ctx) {
+    const { date } = input;
     const customs = await customsOf(ctx);
     const item = ((await get(ctx)(leyningUrl(date, customs))).items || [])[0];
     if (!item) throw new Error(`Hebcal has no reading for ${date}; is it a Shabbat?`);
     const slug = weekSlug(date, item.name?.en || "", item.reason?.haftara || null);
-    const existing = await readStatus(ctx.store, slug);
-    if (existing && !force && !torahPick && !torahRef) throw new Error(`${slug} is already in the store (version ${existing.version}); pass force to start over, or torahPick/torahRef to add the Torah reading`);
-    const lines = [];
-    // The store is the week: a fresh folder, nothing left over from an earlier call in this instance, removed after.
-    const r = await withRoot(ctx, async root => {
-      const dir = join(root, slug);
-      if (existing && !force) await pullWeek(ctx.store, slug, dir, ["sheet.json"]);   // fetchWeek merges the Torah reading into the kept sheet
-      const out = await fetchWeek({ date, outRoot: root, force, haftarahRef, wantTexts: false, carry, noTorah, torahRef, torahPick, customs, fetchImpl: ctx.fetchImpl, log: m => lines.push(m), site: ctx.config.site });
-      await pushWeek(ctx.store, slug, dir, ["sheet.json", "candidates.json", "candidates-torah.json", "prior.json"]);
-      return out;
-    });
-    // A kept week whose sheet gained the Torah reading: a new version, and back to drafting if it was built or delivered.
-    const status = force || !existing ? await writeStatus(ctx.store, slug, { status: "drafting", built: null, delivered: null }, ctx.now) : await writeStatus(ctx.store, slug, existing.status !== "drafting" ? { status: "drafting" } : {}, ctx.now);
-    return { slug, status: status.status, version: status.version, readings: r.readings, aliyot: r.leyning ? aliyotLines(r.leyning) : [], lastTime: r.prior?.slug ? { slug: r.prior.slug, hebrewEn: r.prior.hebrewEn, source: r.prior.source } : null, carried: r.carried, nextWeek: r.nextWeek, notes: lines.filter(l => l.startsWith("  ") || l.startsWith("customs/") || l.startsWith("Torah")) };
+    return withLock(`week:${slug}`, () => startIn(slug, input, customs, ctx), ctx.signal);
   },
 });
+
+// Texts fetched for a reading that start_week replaces: deleted so the next fetch_texts fetches the new range, and
+// digest.md with them so fetch_texts rebuilds it from what is left.
+const STALE_ON_FORCE = ["texts.json", "texts-torah.json", "digest.md"];
+const STALE_ON_TORAH = ["texts-torah.json", "digest.md"];
+
+async function startIn(slug, { date, haftarahRef = null, torahPick = null, torahRef = null, noTorah = false, carry = true, force = false }, customs, ctx) {
+  const existing = await readStatus(ctx.store, slug);
+  if (existing && !force && haftarahRef) throw new Error(`${slug} is already in the store (version ${existing.version}), and haftarahRef needs force: force replaces the haftarah and starts the week over`);
+  if (existing && !force && !torahPick && !torahRef) throw new Error(`${slug} is already in the store (version ${existing.version}); pass force to start over, or torahPick/torahRef to add the Torah reading`);
+  const stale = !existing ? [] : force ? STALE_ON_FORCE : STALE_ON_TORAH;
+  const lines = [];
+  // The store is the week: a fresh folder, nothing left over from an earlier call in this instance, removed after.
+  const r = await withRoot(ctx, async root => {
+    const dir = join(root, slug);
+    if (existing && !force) await pullWeek(ctx.store, slug, dir, ["sheet.json"]);   // fetchWeek merges the Torah reading into the kept sheet
+    // Before the new fetch, so a texts file of the old range is never served or delivered with the new one.
+    if (stale.length) {
+      await ctx.store.del(stale.map(f => `weeks/${slug}/${f}`));
+      for (const f of stale) await rm(join(dir, f), { force: true });
+    }
+    const opts = { date, outRoot: root, force, haftarahRef, wantTexts: false, carry, noTorah, torahRef, torahPick, customs };
+    const out = await fetchWeek({ ...opts, fetchImpl: net(ctx), log: m => lines.push(m), site: ctx.config.site });
+    await pushWeek(ctx.store, slug, dir, ["sheet.json", "candidates.json", "candidates-torah.json", "prior.json"]);
+    return out;
+  });
+  // A kept week whose sheet gained the Torah reading: a new version, and back to drafting if it was built or delivered.
+  const patch = force || !existing ? { status: "drafting", built: null, delivered: null } : existing.status !== "drafting" ? { status: "drafting" } : {};
+  const status = await writeStatus(ctx.store, slug, patch, ctx.now);
+  const lastTime = r.prior?.slug ? { slug: r.prior.slug, hebrewEn: r.prior.hebrewEn, source: r.prior.source } : null;
+  const notes = lines.filter(l => l.startsWith("  ") || l.startsWith("customs/") || l.startsWith("Torah"));
+  if (stale.length) notes.push(`removed ${stale.join(", ")}: run fetch_texts again for ${force ? "each reading" : "the torah"}`);
+  const aliyot = r.leyning ? aliyotLines(r.leyning) : [];
+  return { slug, status: status.status, version: status.version, readings: r.readings, aliyot, lastTime, carried: r.carried, nextWeek: r.nextWeek, notes };
+}
 
 export const fetchTexts = defineTool({
   name: "fetch_texts",
   description: "Gather one reading's texts from Sefaria (the core commentators on the range and the linked Talmud, midrash, liturgy, Targum and Zohar) into the store and refresh digest.md. One reading per call, so each call ends well inside the client's time limit. A texts file already present is kept unless force. Returns the whole digest.",
   inputSchema: { type: "object", properties: { slug: slugProp, reading: readingProp, force: { type: "boolean" } }, required: ["slug", "reading"] },
   annotations: { idempotentHint: true },
+  deadlineMs: LONG_DEADLINE_MS,
   async handler({ slug, reading, force = false }, ctx) {
     await requireSheet(ctx, slug);
     const lines = [];
     const { t, digest } = await withWeek(ctx, slug, NEEDS.texts, async dir => {
-      const t = await fetchTextsFor(dir, reading, { fetchImpl: ctx.fetchImpl, log: m => lines.push(m), force });
+      const t = await fetchTextsFor(dir, reading, { fetchImpl: net(ctx), log: m => lines.push(m), force });
       const digest = await writeDigest(dir);
       await pushWeek(ctx.store, slug, dir, [t.file, "digest.md"]);
       return { t, digest };
@@ -252,7 +368,7 @@ export const saveEntries = defineTool({
   description: "Add or update commentary entries and margin glosses in one reading (upsert by id; a new entry gets its id), add glossary items, remove entries by id. An entry sent without an id is always added (sending the same entry again adds a second one with a -2 id); send the id to update. Each entry passes the citation gate (a Sefaria ref outside the critical register, works from the bibliography for historians) and its ref is checked against Sefaria; the valid are saved, the rest refused and named. Lint runs on the result. Needs the week's current version.",
   inputSchema: { type: "object", properties: { slug: slugProp, expectedVersion: { type: "integer" }, reading: readingProp, entries: { type: "array", items: { type: "object" } }, glossary: { type: "array", items: { type: "object" } }, remove: { type: "array", items: { type: "string" } } }, required: ["slug", "expectedVersion", "reading"] },
   annotations: {},
-  async handler({ slug, expectedVersion, reading, entries = [], glossary = [], remove = [] }, ctx) {
+  handler: locked(bySlug, async ({ slug, expectedVersion, reading, entries = [], glossary = [], remove = [] }, ctx) => {
     const sheet = await requireSheet(ctx, slug);
     const status = (await readStatus(ctx.store, slug)) || { version: 0 };
     const c = conflict(status, expectedVersion); if (c) return c;
@@ -263,7 +379,9 @@ export const saveEntries = defineTool({
     const r = readingIn(up.sheet, reading);
     const itemOf = id => [...(r.commentary || []), ...(r.glosses || [])].find(x => x.id === id);
     // Sefaria is asked only about the refs of entries the gate passed.
-    const refs = await verifyRefs(up.touched.filter(id => !(gateProblems.get(id) || []).length).map(id => (r.commentary || []).find(e => e.id === id)?.sourceRef).filter(Boolean), { fetchImpl: ctx.fetchImpl });
+    const passed = up.touched.filter(id => !(gateProblems.get(id) || []).length);
+    const toAsk = passed.map(id => (r.commentary || []).find(e => e.id === id)?.sourceRef).filter(Boolean);
+    const refs = await verifyRefs(toAsk, { fetchImpl: net(ctx) });
     const results = [], refused = new Set();
     for (const id of up.touched) {
       const e = itemOf(id);
@@ -282,7 +400,7 @@ export const saveEntries = defineTool({
     const lint = lintView(await sheetLint(ctx, withIds, customs));
     const st = await saveSheet(ctx, slug, withIds);
     return { slug, version: st.version, status: st.status, results, counts: countsView(withIds, customs), lint };
-  },
+  }),
 });
 
 export const updateSheet = defineTool({
@@ -290,7 +408,7 @@ export const updateSheet = defineTool({
   description: "Change the week's own fields: openingNote (merged), glossary, nextWeek (null to drop it), credits, highlights, places, mapRegion, timeline, and a reading's incipit (patch.readings.<id>.incipit). Lists replace, objects merge. Lint runs on the result. Needs the week's current version.",
   inputSchema: { type: "object", properties: { slug: slugProp, expectedVersion: { type: "integer" }, patch: { type: "object" } }, required: ["slug", "expectedVersion", "patch"] },
   annotations: { idempotentHint: true },
-  async handler({ slug, expectedVersion, patch }, ctx) {
+  handler: locked(bySlug, async ({ slug, expectedVersion, patch }, ctx) => {
     const sheet = await requireSheet(ctx, slug);
     const status = (await readStatus(ctx.store, slug)) || { version: 0 };
     const c = conflict(status, expectedVersion); if (c) return c;
@@ -299,7 +417,7 @@ export const updateSheet = defineTool({
     const lint = lintView(await sheetLint(ctx, p.sheet, customs));
     const st = await saveSheet(ctx, slug, p.sheet);
     return { slug, version: st.version, status: st.status, changed: p.changed, lint };
-  },
+  }),
 });
 
 export const setStatus = defineTool({
@@ -307,14 +425,14 @@ export const setStatus = defineTool({
   description: "Mark entries or glosses rejected (they stay in the working sheet and never print or publish), or clear the mark with null. Reject, don't delete. Needs the week's current version.",
   inputSchema: { type: "object", properties: { slug: slugProp, expectedVersion: { type: "integer" }, ids: { type: "array", items: { type: "string" } }, status: { type: "string", enum: ["rejected"] } }, required: ["slug", "expectedVersion", "ids"] },
   annotations: { idempotentHint: true },
-  async handler({ slug, expectedVersion, ids, status = null }, ctx) {
+  handler: locked(bySlug, async ({ slug, expectedVersion, ids, status = null }, ctx) => {
     const sheet = await requireSheet(ctx, slug);
     const cur = (await readStatus(ctx.store, slug)) || { version: 0 };
     const c = conflict(cur, expectedVersion); if (c) return c;
     const r = setStatuses(sheet, ids, status);
     const st = await saveSheet(ctx, slug, r.sheet);
     return { slug, version: st.version, status: st.status, changed: r.changed, counts: countsView(r.sheet, await customsOf(ctx)) };
-  },
+  }),
 });
 
 /**
@@ -334,7 +452,8 @@ export const addBibliographyWork = defineTool({
   description: "Add a work to the bibliography a historians entry may cite, as an overlay line in the store (bibliography/<book>.md there; merged into the repo's file by hand later). The citation is verified by a publisher or WorldCat URL. The same key again replaces the line.",
   inputSchema: { type: "object", properties: { book: { type: "string" }, key: { type: "string" }, citation: { type: "string" }, verifiedBy: { type: "string", pattern: "^https://" } }, required: ["book", "key", "citation", "verifiedBy"] },
   annotations: {},
-  async handler({ book, key, citation, verifiedBy }, ctx) {
+  // The overlay is read, changed and written whole: one call per book at a time.
+  handler: locked(input => `bibliography:${String(input.book).toLowerCase()}`, async ({ book, key, citation, verifiedBy }, ctx) => {
     if (/[|\n]/.test(key) || /\n/.test(citation)) throw new Error("key cannot contain | or a line break; citation cannot contain a line break");
     if (/^[\s-]/.test(key)) throw new Error("key cannot start with a space or -");
     const known = await knownBooks(ctx);
@@ -352,7 +471,7 @@ export const addBibliographyWork = defineTool({
     let repo = ""; if (kb.file) try { repo = await readFile(join(ctx.root, "bibliography", kb.file), "utf8"); } catch {}   // by its real name: a case-sensitive filesystem has no isaiah.md
     const merged = new Map([...L.parseBibliography(repo), ...L.parseBibliography(md)]);
     return { book, key: key.trim(), line, replaced, merged: merged.size };
-  },
+  }),
 });
 
 // ---- building and delivering ----
@@ -365,10 +484,11 @@ export const MAX_IMAGE_BASE64 = 1_500_000;
 
 export const buildSheet = defineTool({
   name: "build_sheet",
-  description: "Build the week's printed sheets: the citation gate and lint, then every reading's HTML and PDF with the pinned browser, the layout check (two renders, the gap and divine-name invariants), and page images. Returns the report, a 24-hour link to each PDF for Daniel to open and print, and the page image names for get_page_image. Status becomes built when every reading's sheet built and passed its check in this call (a build of one reading of a two-reading week leaves it drafting). Daniel approves by printing; show him in full everything Claude wrote before this.",
+  description: "Build the week's printed sheets: the citation gate and lint, then every reading's HTML and PDF with the pinned browser, the layout check (two renders, the gap and divine-name invariants), and page images. Returns the report, a 24-hour link to each PDF for Daniel to open and print, and the page image names for get_page_image. Status becomes built when every reading's sheet built and passed its check in this call (a build of one reading of a two-reading week leaves it drafting). Daniel approves by printing; show him in full everything Claude wrote before you hand him the draft links.",
   inputSchema: { type: "object", properties: { slug: slugProp, reading: readingProp, trope: { type: "boolean", description: "Also the haftarah's chanter's copy (sheet-trope.pdf)" } }, required: ["slug"] },
   annotations: {},
-  async handler({ slug, reading = null, trope = false }, ctx) {
+  deadlineMs: LONG_DEADLINE_MS,
+  handler: locked(bySlug, async ({ slug, reading = null, trope = false }, ctx) => {
     // The version before anything is read: an edit that lands during the minutes-long build must not be marked built.
     const v0 = (await readStatus(ctx.store, slug))?.version || 0;
     const sheet = await requireSheet(ctx, slug);
@@ -380,7 +500,7 @@ export const buildSheet = defineTool({
       try { return await buildIn(dir, { slug, reading, trope, sheet, v0, launcher, browserFailure }, ctx); }
       finally { await launcher?.close?.(); }   // one browser for the whole build, closed whatever happened
     });
-  },
+  }),
 });
 
 async function buildIn(dir, { slug, reading, trope, sheet, v0, launcher, browserFailure }, ctx) {
@@ -412,7 +532,10 @@ async function buildIn(dir, { slug, reading, trope, sheet, v0, launcher, browser
       }
       pages[b.kind] = images;   // a rebuilt reading's earlier images no longer show this sheet
       const view = L.readingView(sheet, b.id);
-      readings.push({ id: b.id, kind: b.kind, ref: view.haftarah.ref, pages: b.pages, bytes: b.bytes, pdfUrl: b.pdf ? draftUrl(ctx.config.site, ctx.config.authSecret, slug, PDF_FILES[b.kind], ctx.now) : null, check: c ? checkView(c) : notChecked(!launcher ? "no browser" : check?.failure || "no PDF"), images, ...(imageError ? { imageError } : {}), entries: entryCounts(L.readings(sheet).find(r => r.id === b.id) || {}) });
+      const pdfUrl = b.pdf ? draftUrl(ctx.config.site, ctx.config.authSecret, slug, PDF_FILES[b.kind], ctx.now) : null;
+      const checked = c ? checkView(c) : notChecked(!launcher ? "no browser" : check?.failure || "no PDF");
+      const entries = entryCounts(L.readings(sheet).find(r => r.id === b.id) || {});
+      readings.push({ id: b.id, kind: b.kind, ref: view.haftarah.ref, pages: b.pages, bytes: b.bytes, pdfUrl, check: checked, images, ...(imageError ? { imageError } : {}), entries });
     }
     let tropeOut = null;   // the chanter's copy: its own check, and it gates built when asked for
     if (built.trope) {
@@ -422,8 +545,11 @@ async function buildIn(dir, { slug, reading, trope, sheet, v0, launcher, browser
     }
     await pushWeek(ctx.store, slug, dir, push);
     const every = L.readings(sheet).filter(r => (r.verses || []).length).every(r => readings.some(x => x.id === r.id));
-    const allGood = !!launcher && every && readings.length > 0 && readings.every(r => r.pdfUrl && r.check.ok) && (!tropeOut || (tropeOut.pdfUrl && tropeOut.check.ok));
-    const report = { gate: [], lint: { errors: [], warnings: built.warnings.map(w => `${w.where}: ${w.msg}`) }, browser, readings, ...(tropeOut ? { trope: tropeOut } : {}) };
+    const readingsGood = readings.length > 0 && readings.every(r => r.pdfUrl && r.check.ok);
+    const tropeGood = !tropeOut || (tropeOut.pdfUrl && tropeOut.check.ok);
+    const allGood = !!launcher && every && readingsGood && tropeGood;
+    const lint = { errors: [], warnings: built.warnings.map(w => `${w.where}: ${w.msg}`) };
+    const report = { gate: [], lint, browser, readings, ...(tropeOut ? { trope: tropeOut } : {}) };
     const cur = await readStatus(ctx.store, slug);
     // Changed while building: the status the edit left stands, and these PDFs are of the older sheet.
     if ((cur?.version || 0) !== v0) return { slug, version: cur?.version || 0, status: cur?.status || "drafting", note: `the sheet changed during the build (version ${v0} became ${cur?.version || 0}); build again`, ...report };
@@ -454,7 +580,8 @@ export const deliverWeek = defineTool({
   description: "DELIVER THE WEEK. Only on Daniel's explicit go-ahead (\"ship it\", \"deliver\", \"send it\") after he has printed the sheet; never on your own judgment. Sends the PDFs and the working files to Drive through the drop box, then publishes the week to the public site (sheet.json, PDFs, the side files, the index). dryRun lists what would go where and changes nothing. Refuses a week that is not built.",
   inputSchema: { type: "object", properties: { slug: slugProp, dryRun: { type: "boolean" }, only: { type: "string", enum: ["public", "working"] }, web: { type: "boolean", description: "Also publish to the site (default true)" } }, required: ["slug"] },
   annotations: { destructiveHint: true },
-  async handler({ slug, dryRun = false, only = undefined, web = true }, ctx) {
+  deadlineMs: LONG_DEADLINE_MS,
+  handler: locked(bySlug, async ({ slug, dryRun = false, only = undefined, web = true }, ctx) => {
     await requireSheet(ctx, slug);
     const st = await readStatus(ctx.store, slug);
     if (!dryRun && st?.status !== "built") throw new Error(`${slug} is ${st?.status || "unstarted"}; build_sheet first (a sheet edited after its build must be built again)`);
@@ -463,20 +590,31 @@ export const deliverWeek = defineTool({
     const lines = [], log = m => lines.push(String(m));
     const customs = await customsOf(ctx);
     const webConfig = web ? { token: ctx.config.publicToken } : null;
+    const fetchImpl = net(ctx);
     try {
       await withWeek(ctx, slug, NEEDS.deliver, async dir => {
-        await ctx.scripts.deliver(dir, { only, dryRun, config: ctx.config.dropbox, log, fetchImpl: ctx.fetchImpl, webConfig, publishImpl: ctx.scripts.publish, side: true, cache: ctx.config.cacheDir, customs });
-        if (dryRun && web) await ctx.scripts.publish(dir, { dryRun: true, log, side: true, customs });
+        const opts = { only, dryRun, config: ctx.config.dropbox, log, fetchImpl, webConfig, publishImpl: ctx.scripts.publish, side: true, cache: ctx.config.cacheDir, customs };
+        await ctx.scripts.deliver(dir, opts);
+        if (dryRun && web) await ctx.scripts.publish(dir, { dryRun: true, log, fetchImpl, side: true, customs });
       });
     } catch (err) {
       // Part of it may already be done (Drive, say, and not the site): the lines say which, so nothing is hidden or sent twice blind.
-      const out = textResult({ slug, status: st?.status || "drafting", delivered: false, error: errText(err), lines, note: "the lines above the error went through; the week stays as it was" });
+      const note = "the lines above the error went through; the week stays as it was";
+      const out = textResult({ slug, status: st?.status || "drafting", delivered: false, error: errText(err), lines, note });
       return { ...out, isError: true };
     }
     if (dryRun) return { slug, dryRun: true, status: st?.status || "drafting", lines };
+    // Which parts went: all of Drive (both folders) unless `only` narrowed it, and the site unless web is off.
+    const delivered = { drive: !only, web: !!web };
+    const page = web ? `${ctx.config.site}/${slug}` : null;
+    if (!delivered.drive || !delivered.web) {
+      // A partial run leaves the week built: get_calendar says delivered only after Drive and the site both have it.
+      const missing = [!delivered.drive ? `the ${only === "public" ? "working" : "public"} Drive folder` : null, !delivered.web ? "the site" : null].filter(Boolean);
+      return { slug, status: st.status, version: st.version, delivered, lines, page, note: `a partial delivery: ${missing.join(" and ")} not sent; the week stays built` };
+    }
     const done = await writeStatus(ctx.store, slug, { status: "delivered", delivered: stamp(ctx) }, ctx.now);
-    return { slug, status: done.status, version: done.version, lines, page: web ? `${ctx.config.site}/${slug}` : null };
-  },
+    return { slug, status: done.status, version: done.version, delivered, lines, page };
+  }),
 });
 
 export const TOOLS = [getCalendar, findPastSheets, startWeek, fetchTexts, getTexts, getSheet, saveBriefing, saveEntries, updateSheet, setStatus, buildSheet, getPageImage, deliverWeek, addBibliographyWork];

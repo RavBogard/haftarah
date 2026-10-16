@@ -16,7 +16,7 @@ One sheet a week for Torah from Scratch at Central Reform Congregation. The temp
 
 ## 0a. From the connector (the usual way)
 
-The haftarah connector (the plugin's MCP server; install steps in README's "The MCP server") replaces the clone: it holds the week in a private store, the credentials and the browser, so nothing is cloned or installed and the sections below are not run by hand. The tools, in the run's order:
+The haftarah connector (the plugin's MCP server; install steps in README's "The MCP server") replaces the clone: it holds the week in a private store, the credentials and the browser, so nothing is cloned or installed and the sections below are not run by hand. Remove the old `haftarah-sheet` skill uploaded to claude.ai (Customize › Skills; Daniel's step) before using the plugin: it says to clone the repo. In Claude Code the repo's skill for the CLI path is `haftarah-cli`. The tools, in the run's order:
 
 1. `get_calendar`: the coming Shabbat (or a date), the haftarah and why, Hebcal's aliyot, and `weeks`, the weeks the store holds with their status. `find_past_sheets` finds last year's sheet and any earlier week.
 2. `start_week`, then `fetch_texts` once per reading, then read the digest it returns. The Torah's texts come after Daniel's pick (`start_week` again with `torahPick` or `torahRef`).

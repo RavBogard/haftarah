@@ -79,13 +79,15 @@ export async function withRetry(fn, { delays = [1500, 4000], sleepImpl = wait, r
   }
 }
 
-/** GET JSON; a network error, a 5xx or a 429 (too many requests) is retried, any other 4xx is not. */
-export async function getJSON(url, { fetchImpl = globalThis.fetch, sleepImpl = wait } = {}) {
+/** GET JSON; a network error, a 5xx or a 429 (too many requests) is retried, any other 4xx is not. A `signal`
+ * (the server's deadline; the CLI passes none) goes to fetch, and once it has fired nothing is retried. */
+export async function getJSON(url, { fetchImpl = globalThis.fetch, sleepImpl = wait, signal = null } = {}) {
+  const init = signal ? { headers: HEADERS, signal } : { headers: HEADERS };
   return withRetry(async () => {
-    const res = await fetchImpl(url, { headers: HEADERS });
+    const res = await fetchImpl(url, init);
     if (!res.ok) { const e = new Error(`${res.status} ${res.statusText} for ${url}`); e.status = res.status; throw e; }
     return res.json();
-  }, { sleepImpl, retryable: e => e.status === 429 || !(e.status >= 400 && e.status < 500) });
+  }, { sleepImpl, retryable: e => !signal?.aborted && (e.status === 429 || !(e.status >= 400 && e.status < 500)) });
 }
 
 /** Hebcal's leyning item for one date, on the customs' calendar (Diaspora: i=off). */

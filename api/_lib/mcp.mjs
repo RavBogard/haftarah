@@ -2,8 +2,9 @@
 // and is answered in one JSON response (the spec lets a server answer JSON instead of an event stream; with
 // no sessions there is nothing to stream). No dependency: the four methods Claude uses are a page of code.
 import { readLimitedBody, json } from "./http.mjs";
-import { validateInput } from "./tools.mjs";
+import { validateInput, DEFAULT_DEADLINE_MS } from "./tools.mjs";
 import { assertNoSecrets } from "./env.mjs";
+import { storeWithSignal } from "./store.mjs";
 
 export const SUPPORTED_VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26"];
 export const DEFAULT_VERSION = "2025-06-18";
@@ -25,16 +26,36 @@ function finish(wrapped, ctx) {
   return wrapped;
 }
 
-/** A tool's answer as MCP content: a validation problem or a throw as an error result, else the value. */
+const TIMED_OUT = Symbol("timed out");
+const seconds = ms => `${Math.round(ms / 100) / 10} s`;
+
+/**
+ * A tool's answer as MCP content: a validation problem, a throw or the deadline as an error result, else the value.
+ * Each call gets its deadline (the tool's deadlineMs, else DEFAULT_DEADLINE_MS) as ctx.signal, which the tools hand
+ * to every upstream request, and the store bound to it. When the deadline passes the call is answered at once with
+ * an error result; the handler's work may go on until the function ends (whatever ignores the signal), but nothing
+ * more from it is reported for this call.
+ */
 async function callTool(tool, p, ctx) {
   const input = p.arguments && typeof p.arguments === "object" && !Array.isArray(p.arguments) ? p.arguments : {};
   const problems = validateInput(tool.inputSchema, input);
   if (problems.length) return errorResult(problems.join("; "));
+  const deadlineMs = Number(tool.deadlineMs) > 0 ? Number(tool.deadlineMs) : DEFAULT_DEADLINE_MS;
+  // An AbortController on a ref'd timer, not AbortSignal.timeout: that one's timer is unref'd, and a call whose
+  // only pending work is a stalled request must still be answered.
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(new DOMException(`${tool.name} timed out`, "TimeoutError")), deadlineMs);
+  const signal = ac.signal;
+  const callCtx = { ...(ctx || {}), signal, store: storeWithSignal(ctx && ctx.store, signal) };
+  const late = new Promise(resolve => signal.addEventListener("abort", () => resolve(TIMED_OUT), { once: true }));
   let result;
-  try { result = await tool.handler(input, ctx); }
-  catch (err) { return errorResult(err && err.message ? err.message : String(err)); }
+  try { result = await Promise.race([Promise.resolve().then(() => tool.handler(input, callCtx)), late]); }
+  catch (err) { return errorResult(signal.aborted ? timedOut(tool, deadlineMs) : err && err.message ? err.message : String(err)); }
+  finally { clearTimeout(timer); }
+  if (result === TIMED_OUT) return errorResult(timedOut(tool, deadlineMs));
   return result && typeof result === "object" && Array.isArray(result.content) ? result : textResult(result);
 }
+const timedOut = (tool, ms) => `${tool.name} timed out after ${seconds(ms)}; nothing more is reported for this call`;
 
 async function route(msg, { tools, instructions, serverInfo, ctx }) {
   if (!msg || typeof msg !== "object" || msg.jsonrpc !== "2.0" || typeof msg.method !== "string") return rpcError(msg?.id, -32600, "Invalid Request");
@@ -64,9 +85,10 @@ export async function handleMcp(request, opts) {
   try { raw = await readLimitedBody(request, MAX_BODY); } catch { return json({ error: "request_too_large" }, 413); }
   let body;
   try { body = JSON.parse(raw); } catch { return json(rpcError(null, -32700, "Parse error"), 400); }
-  if (Array.isArray(body) && !body.length) return json(rpcError(null, -32600, "Invalid Request"));
-  const messages = Array.isArray(body) ? body : [body];
-  const answers = (await Promise.all(messages.map(m => dispatch(m, opts)))).filter(Boolean);
-  if (!answers.length) return new Response(null, { status: 202, headers: { "cache-control": "no-store" } });
-  return json(Array.isArray(body) ? answers : answers[0]);
+  // The 2025-06-18 protocol removed JSON-RPC batching; one request per POST also keeps one bearer from starting
+  // a dozen builds at once.
+  if (Array.isArray(body)) return json(rpcError(null, -32600, "batches are not accepted; send one request at a time"));
+  const answer = await dispatch(body, opts);
+  if (!answer) return new Response(null, { status: 202, headers: { "cache-control": "no-store" } });
+  return json(answer);
 }

@@ -93,11 +93,14 @@ export async function vercelLauncher() {
   const pack = (await import("@sparticuz/chromium")).default;
   const path = await pack.executablePath();
   const { chromium } = await import("playwright-core");
-  // The record is what build.mjs logs and spawns with; on Vercel nothing spawns it (printImpl and dumpDomImpl
-  // replace the spawns), but its flags stay right for it: chromeFlags sets headless and the profile, and a
-  // function has no /dev/shm.
-  const extraArgs = [...pack.args.filter(a => !a.startsWith("--headless") && !a.startsWith("--user-data-dir") && !a.startsWith("--window-size")), "--no-sandbox", "--disable-dev-shm-usage"];
-  return playwrightLauncher({ chromium, executablePath: path, args: pack.args, record: browserRecord(path, extraArgs) });
+  // A function has no /dev/shm and no sandbox, so the browser Playwright launches gets both flags on top of the
+  // pack's. The record is what build.mjs logs and spawns with; on Vercel nothing spawns it (printImpl and
+  // dumpDomImpl replace the spawns), but it carries the same flags, less those chromeFlags sets itself
+  // (headless, the profile, the window size).
+  const extras = ["--no-sandbox", "--disable-dev-shm-usage"];
+  const launchArgs = [...new Set([...pack.args, ...extras])];
+  const recordArgs = [...new Set([...pack.args.filter(a => !a.startsWith("--headless") && !a.startsWith("--user-data-dir") && !a.startsWith("--window-size")), ...extras])];
+  return playwrightLauncher({ chromium, executablePath: path, args: launchArgs, record: browserRecord(path, recordArgs) });
 }
 
 /** This machine's Chrome or Edge, for a build driven from Claude Code: the PDFs and the check as the scripts spawn

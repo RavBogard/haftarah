@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm, writeFile, readFile, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { MemoryStore, BlobStore, WEEK_FILES, contentTypeOf, pullWeek, pushWeek, readJson, writeJson, readStatus, writeStatus, listWeeks, weekPrefix } from "../api/_lib/store.mjs";
+import { MemoryStore, BlobStore, WEEK_FILES, contentTypeOf, pullWeek, pushWeek, readJson, writeJson, readStatus, writeStatus, listWeeks, weekPrefix, withSignal, storeWithSignal } from "../api/_lib/store.mjs";
 
 const WORKING = "vercel_blob_rw_URJlaSwtVImD5fOT_s3cret";
 
@@ -42,6 +42,37 @@ test("BlobStore puts privately, reads from the private origin with the bearer, a
   assert.equal(seen[1].headers.authorization, `Bearer ${WORKING}`);
   assert.equal(await s.get("weeks/x/none.json"), null);
   assert.deepEqual((await s.list("weeks/x/")).map(b => b.pathname), ["weeks/x/sheet.json"]);
+});
+
+test("del removes paths: MemoryStore from its map, BlobStore through Blob's delete API by the private URLs; a missing path is no error", async () => {
+  const m = new MemoryStore();
+  await m.put("weeks/x/texts.json", "{}"); await m.put("weeks/x/sheet.json", "{}");
+  await m.del(["weeks/x/texts.json", "weeks/x/none.json"]);
+  assert.deepEqual((await m.list("weeks/x/")).map(b => b.pathname), ["weeks/x/sheet.json"]);
+  const seen = [];
+  const s = new BlobStore({ token: WORKING, fetchImpl: async (url, init = {}) => { seen.push({ url: String(url), init }); return new Response("{}", { status: 200 }); } });
+  await s.del(["weeks/x/texts.json", "weeks/x/digest.md"]);
+  assert.equal(seen.length, 1); assert.equal(seen[0].url, "https://vercel.com/api/blob/delete"); assert.equal(seen[0].init.method, "POST");
+  assert.deepEqual(JSON.parse(seen[0].init.body), { urls: ["https://urjlaswtvimd5fot.private.blob.vercel-storage.com/weeks/x/texts.json", "https://urjlaswtvimd5fot.private.blob.vercel-storage.com/weeks/x/digest.md"] });
+  await s.del([]); assert.equal(seen.length, 1, "nothing to delete asks nothing");
+  const failing = new BlobStore({ token: WORKING, fetchImpl: async () => new Response("", { status: 500 }) });
+  await assert.rejects(failing.del("weeks/x/a.json"), err => /HTTP 500/.test(err.message) && !err.message.includes("s3cret"));
+});
+
+test("BlobStore.withSignal binds the call's deadline to every request; withSignal joins a request's own signal", async () => {
+  const signals = [];
+  const s = new BlobStore({ token: WORKING, fetchImpl: async (url, init = {}) => { signals.push(init.signal); return new Response("", { status: 404 }); } });
+  const ac = new AbortController();
+  const bound = s.withSignal(ac.signal);
+  await bound.get("weeks/x/sheet.json");
+  assert.equal(signals[0], ac.signal);
+  await s.get("weeks/x/sheet.json");
+  assert.equal(signals[1], undefined, "the unbound store is unchanged");
+  const own = new AbortController();
+  const f = withSignal(async (url, init) => init.signal, ac.signal);
+  const joined = await f("x", { signal: own.signal });
+  assert.equal(joined.aborted, false); ac.abort(); assert.equal(joined.aborted, true);
+  const m = new MemoryStore(); assert.equal(storeWithSignal(m, ac.signal), m);
 });
 
 test("pullWeek and pushWeek move a week's files between the store and a folder; contentTypeOf knows the kinds", async () => {

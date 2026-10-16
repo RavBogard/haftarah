@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { TOOLS, toolCtx, validateInput } from "../api/_lib/tools.mjs";
+import { TOOLS, toolCtx, validateInput, withLock } from "../api/_lib/tools.mjs";
 import { MemoryStore, writeJson, writeStatus, readJson, readStatus } from "../api/_lib/store.mjs";
 import { configFrom } from "../api/_lib/env.mjs";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -260,6 +260,118 @@ test("start_week: a Torah pick added to a built week sends it back to drafting",
     await writeStatus(store, "2026-10-17-noach", { status: "built", built: "x" });
     const t = await call("start_week", { date: "2026-10-17", torahPick: "aliyah:1" }, ctx);
     assert.equal(t.status, "drafting"); assert.equal(t.version, 3);
+  } finally { await rm(workDir, { recursive: true, force: true }); }
+});
+
+// I1 of the final review: a replaced reading never keeps the texts of the range it replaced.
+const weekNet = () => {
+  const passage = (book, ch, from, to) => ({ book, sections: [ch, from], toSections: [ch, to], versions: [{ languageFamilyName: "hebrew", text: Array.from({ length: to - from + 1 }, (_, i) => `עברית ${i}`) }, { languageFamilyName: "english", text: Array.from({ length: to - from + 1 }, (_, i) => `English ${i}`) }] });
+  return net({ "https://www.sefaria.org/api/v3/texts/Isaiah": () => passage("Isaiah", 54, 1, 3), "https://www.sefaria.org/api/v3/texts/Genesis": () => passage("Genesis", 6, 9, 11), "https://www.sefaria.org/api/links/": () => [] });
+};
+const W = "weeks/2026-10-17-noach/";
+const oldTexts = async store => { for (const f of ["texts.json", "texts-torah.json"]) await writeJson(store, W + f, { ref: "the old range", commentaries: {}, linked: {} }); await store.put(W + "digest.md", Buffer.from("# old digest")); };
+const has = async (store, f) => !!(await store.get(W + f));
+
+test("start_week with a new Torah pick on a kept week removes texts-torah.json and digest.md, keeps the haftarah's texts, and the next fetch_texts fetches the new range", async () => {
+  const { ctx, store, workDir } = await ctxWith(new MemoryStore(), { fetchImpl: weekNet() });
+  try {
+    await call("start_week", { date: "2026-10-17", torahPick: "aliyah:1" }, ctx);
+    await oldTexts(store);
+    const r = await call("start_week", { date: "2026-10-17", torahPick: "aliyah:M" }, ctx);
+    assert.equal(await has(store, "texts-torah.json"), false); assert.equal(await has(store, "digest.md"), false);
+    assert.equal(await has(store, "texts.json"), true, "the haftarah did not change");
+    assert.ok(r.notes.some(n => /removed texts-torah\.json, digest\.md: run fetch_texts again for the torah/.test(n)), r.notes.join("\n"));
+    const t = await call("fetch_texts", { slug: "2026-10-17-noach", reading: "torah" }, ctx);
+    assert.equal(t.kept, false, "fetched for the new range, not kept from the old");
+    assert.notEqual((await readJson(store, W + "texts-torah.json")).ref, "the old range");
+  } finally { await rm(workDir, { recursive: true, force: true }); }
+});
+
+test("start_week with force removes both texts files and digest.md before the new fetch", async () => {
+  const { ctx, store, workDir } = await ctxWith(new MemoryStore(), { fetchImpl: weekNet() });
+  try {
+    await call("start_week", { date: "2026-10-17" }, ctx);
+    await oldTexts(store);
+    const r = await call("start_week", { date: "2026-10-17", force: true, haftarahRef: "Isaiah 54:1-3" }, ctx);
+    for (const f of ["texts.json", "texts-torah.json", "digest.md"]) assert.equal(await has(store, f), false, f);
+    assert.ok(await has(store, "sheet.json"));
+    assert.ok(r.notes.some(n => /run fetch_texts again for each reading/.test(n)));
+    const t = await call("fetch_texts", { slug: "2026-10-17-noach", reading: "haftarah" }, ctx);
+    assert.equal(t.kept, false);
+  } finally { await rm(workDir, { recursive: true, force: true }); }
+});
+
+test("start_week on a kept week with haftarahRef and no force is refused, saying force replaces the haftarah; nothing is removed", async () => {
+  const { ctx, store, workDir } = await ctxWith(new MemoryStore(), { fetchImpl: weekNet() });
+  try {
+    await call("start_week", { date: "2026-10-17" }, ctx);
+    await oldTexts(store);
+    await assert.rejects(call("start_week", { date: "2026-10-17", haftarahRef: "Isaiah 54:1-10", torahPick: "aliyah:1" }, ctx), /haftarahRef needs force: force replaces the haftarah/);
+    await assert.rejects(call("start_week", { date: "2026-10-17", haftarahRef: "Isaiah 54:1-10" }, ctx), /force replaces the haftarah/);
+    assert.equal(await has(store, "texts.json"), true); assert.equal((await readStatus(store, "2026-10-17-noach")).version, 1);
+  } finally { await rm(workDir, { recursive: true, force: true }); }
+});
+
+// I2 of the final review: two writes to one week inside one instance run one after the other.
+test("two concurrent save_entries with the same expectedVersion end as one save and one version_conflict, and the retry keeps both", async () => {
+  const v = torahWeek.readings.find(r => r.id === "haftarah").verses[0];
+  const tv = torahWeek.readings.find(r => r.id === "torah").verses[0];
+  const { ctx, store, workDir } = await ctxWith(new MemoryStore(), { fetchImpl: net({ "https://www.sefaria.org/api/v3/texts/": () => ({ versions: [{}] }) }) });
+  try {
+    await writeJson(store, "weeks/2026-10-17-noach/sheet.json", torahWeek);
+    await writeStatus(store, "2026-10-17-noach", { status: "drafting" });
+    const text = "<p>A comment of some length that says something true about the verse and its words.</p>";
+    const entry = (x, src) => ({ verse: x.verse, chapter: x.chapter, register: "traditional", source: src, lemma: "x", text, sourceRef: `${src} on ${x.book} ${x.chapter}:${x.verse}:1` });
+    const h = { slug: "2026-10-17-noach", expectedVersion: 1, reading: "haftarah", entries: [entry(v, "Radak")] };
+    const t = { slug: "2026-10-17-noach", expectedVersion: 1, reading: "torah", entries: [entry(tv, "Ramban")] };
+    const [a, b] = await Promise.all([call("save_entries", h, ctx), call("save_entries", t, ctx)]);
+    assert.equal(a.version, 2); assert.equal(b.error, "version_conflict"); assert.equal(b.version, 2);
+    const retry = await call("save_entries", { ...t, expectedVersion: 2 }, ctx);
+    assert.equal(retry.version, 3);
+    const saved = await readJson(store, "weeks/2026-10-17-noach/sheet.json");
+    const n = id => saved.readings.find(x => x.id === id).commentary.length, n0 = id => torahWeek.readings.find(x => x.id === id).commentary.length;
+    assert.equal(n("haftarah"), n0("haftarah") + 1); assert.equal(n("torah"), n0("torah") + 1);
+  } finally { await rm(workDir, { recursive: true, force: true }); }
+});
+
+test("withLock: one key runs in order, two keys run side by side, a throw releases the lock, and a call whose deadline passed while waiting writes nothing", async () => {
+  const order = [];
+  const step = (k, ms) => withLock(k, async () => { order.push(`${k}+`); await new Promise(r => setTimeout(r, ms)); order.push(`${k}-`); });
+  await Promise.all([step("a", 30), step("a", 1), step("b", 1)]);
+  assert.deepEqual(order.filter(x => x.startsWith("a")), ["a+", "a-", "a+", "a-"]);
+  assert.ok(order.indexOf("b-") < order.lastIndexOf("a-"), "b did not wait for a");
+  await assert.rejects(withLock("c", async () => { throw new Error("boom"); }), /boom/);
+  assert.equal(await withLock("c", async () => "free"), "free");
+  const ac = new AbortController();
+  const slow = withLock("d", () => new Promise(r => setTimeout(r, 30)));
+  let ran = false;
+  const late = withLock("d", async () => { ran = true; }, ac.signal);
+  ac.abort();
+  await slow;
+  await assert.rejects(late, /deadline passed while it waited/); assert.equal(ran, false);
+});
+
+// I4 of the final review: the drafter needs no clone for the bibliography or the schema.
+test("get_sheet's bibliography part lists each book's works with the store's overlay merged; entrySchema describes entries, glosses, glossary items and the refusals", async () => {
+  const { ctx, store, workDir } = await ctxWith();
+  try {
+    await writeJson(store, "weeks/2026-10-17-noach/sheet.json", torahWeek);
+    await writeStatus(store, "2026-10-17-noach", { status: "drafting" });
+    await store.put("bibliography/i samuel.md", Buffer.from("# I Samuel (overlay)\n\n- key: Overlay 2030 | A. Author, *A Book* (Press, 2030) | verified: https://example.org\n"));
+    const r = await call("get_sheet", { slug: "2026-10-17-noach", parts: ["bibliography", "entrySchema"] }, ctx);
+    assert.equal(r.meta, undefined);
+    const samuel = r.bibliography.find(b => b.book === "I Samuel");
+    assert.deepEqual(samuel.readings, ["haftarah"]);
+    assert.ok(samuel.works.length > 3, "the repo's I Samuel works");
+    assert.deepEqual(samuel.works.find(w => w.key === "Overlay 2030"), { key: "Overlay 2030", citation: "A. Author, *A Book* (Press, 2030)" });
+    assert.ok(samuel.works.every(w => typeof w.key === "string" && typeof w.citation === "string" && w.citation.length));
+    assert.ok(r.bibliography.some(b => b.book === "Genesis" && b.readings[0] === "torah"), "every reading's book is listed, with or without works");
+    const s = r.entrySchema;
+    for (const f of ["register", "source", "lemma", "text", "sourceRef", "translation", "kind", "works", "cites", "chapter", "verse"]) assert.ok(s.entry[f], f);
+    assert.deepEqual(Object.keys(s.registers), ["traditional", "modern", "critical", "reference"]);
+    assert.deepEqual(s.needsSourceRef, ["traditional", "modern", "reference"]);
+    assert.ok(s.gloss.lemma && s.gloss.en && s.glossaryItem.term);
+    assert.ok(s.saveEntriesRefuses.some(x => /bibliography/.test(x)) && s.saveEntriesRefuses.some(x => /version_conflict/.test(x)));
   } finally { await rm(workDir, { recursive: true, force: true }); }
 });
 

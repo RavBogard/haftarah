@@ -90,6 +90,7 @@ test("deliver_week refuses a week whose status is not built; dryRun lists the pl
     assert.equal(dry.dryRun, true); assert.ok(Array.isArray(dry.lines)); assert.equal((await readStatus(store, "2026-10-17-noach")).status, "built");
     const r = await call("deliver_week", { slug: "2026-10-17-noach" }, ctx);
     assert.equal(r.status, "delivered"); assert.equal(r.page, "https://haftarah.test/2026-10-17-noach");
+    assert.deepEqual(r.delivered, { drive: true, web: true });
     assert.ok(r.lines.some(l => l.startsWith("public")) && r.lines.some(l => l.startsWith("web")));
     assert.deepEqual(seen.config, { url: "https://script.google.com/macros/s/x/exec", token: "dsecret" });
     assert.equal(seen.webConfig.token, "vercel_blob_rw_wOGdAqvPmTFjKrmY_p"); assert.equal(seen.cache, config.cacheDir); assert.equal(seen.side, true);
@@ -97,6 +98,24 @@ test("deliver_week refuses a week whose status is not built; dryRun lists the pl
     const noWeb = await ctxWith({ config: configFrom({ PUBLIC_BASE_URL: "https://haftarah.test", HAFTARAH_AUTH_SECRET: "s".repeat(40) }) });
     await assert.rejects(call("deliver_week", { slug: "2026-10-17-noach", dryRun: true }, noWeb.ctx), /drop box is not configured/);
     await rm(noWeb.workDir, { recursive: true, force: true });
+  } finally { await rm(workDir, { recursive: true, force: true }); }
+});
+
+test("deliver_week: a partial run (only one Drive folder, or web off) leaves the week built and says which parts went", async () => {
+  const { ctx, store, workDir } = await ctxWith();
+  try {
+    await call("build_sheet", { slug: "2026-10-17-noach" }, ctx);
+    const v = (await readStatus(store, "2026-10-17-noach")).version;
+    const working = await call("deliver_week", { slug: "2026-10-17-noach", only: "working" }, ctx);
+    assert.equal(working.status, "built"); assert.deepEqual(working.delivered, { drive: false, web: true });
+    assert.match(working.note, /the public Drive folder not sent; the week stays built/);
+    const noWeb = await call("deliver_week", { slug: "2026-10-17-noach", web: false }, ctx);
+    assert.equal(noWeb.status, "built"); assert.deepEqual(noWeb.delivered, { drive: true, web: false }); assert.equal(noWeb.page, null);
+    assert.match(noWeb.note, /the site not sent/);
+    const st = await readStatus(store, "2026-10-17-noach");
+    assert.equal(st.status, "built"); assert.equal(st.delivered, null); assert.equal(st.version, v, "a partial run writes no status");
+    const full = await call("deliver_week", { slug: "2026-10-17-noach" }, ctx);
+    assert.equal(full.status, "delivered"); assert.deepEqual(full.delivered, { drive: true, web: true });
   } finally { await rm(workDir, { recursive: true, force: true }); }
 });
 

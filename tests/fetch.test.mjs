@@ -43,6 +43,17 @@ test("getJSON retries a 429 like a network error, with the same backoff", async 
   assert.deepEqual(waits, [1500]);
 });
 
+test("getJSON: no signal (the CLI) sends no signal key; a signal goes to fetch, and once it has fired nothing is retried", async () => {
+  const inits = [];
+  await getJSON("https://example.test/s", { fetchImpl: async (url, init) => { inits.push(init); return new Response("{}", { status: 200 }); } });
+  assert.deepEqual(Object.keys(inits[0]), ["headers"]);
+  const ac = new AbortController();
+  let calls = 0;
+  const aborting = async (url, init) => { calls++; assert.equal(init.signal, ac.signal); ac.abort(); throw new DOMException("aborted", "AbortError"); };
+  await assert.rejects(getJSON("https://example.test/t", { fetchImpl: aborting, sleepImpl: async () => {}, signal: ac.signal }), /aborted/);
+  assert.equal(calls, 1);
+});
+
 test("getJSON and withRetry: fetchImpl throwing once (a network error) then answering is retried to success", async () => {
   let calls = 0;
   const waits = [];
