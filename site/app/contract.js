@@ -19,6 +19,17 @@ export const SIDE_FILES = { words: "words.json", translations: "translations.jso
 /** The map's land and water and the chronology, copied into the site by web-build, fetched only for a week with figures. */
 export const GEO_URLS = { basemap: "/geo/basemap.json", chronology: "/geo/chronology.json" };
 
+/** The offline app (spec 5.10): the worker, the manifest and the three caches the worker owns. */
+export const SW_URL = "/sw.js";
+export const MANIFEST_URL = "/manifest.webmanifest";
+export const CACHE_PREFIX = "haftarah-";
+/** The precached shell: one cache per build, the old one dropped when the new worker activates. */
+export const shellCache = build => `${CACHE_PREFIX}shell-${build}`;
+/** Week files and the index (stale while revalidated), and Sefaria's answers (cached on view), both bounded. */
+export const DATA_CACHE = `${CACHE_PREFIX}data`;
+export const SEFARIA_CACHE = `${CACHE_PREFIX}sefaria`;
+export const SEFARIA_ORIGIN = "https://www.sefaria.org";
+
 /** The week slug in a page path, case-folded, one trailing slash allowed; null for any other path. */
 export function slugFromPath(pathname) {
   const m = new RegExp(`^/(${SLUG_SOURCE})/?$`, "i").exec(pathname || "");

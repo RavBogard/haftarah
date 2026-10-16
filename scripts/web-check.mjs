@@ -22,7 +22,7 @@ import { createRequire } from "node:module";
 const L = createRequire(import.meta.url)("../template/lib.js");
 
 const ROOT = resolve(fileURLToPath(new URL("..", import.meta.url)));
-const MIME = { ".html": "text/html; charset=utf-8", ".css": "text/css", ".js": "text/javascript", ".json": "application/json", ".png": "image/png", ".ttf": "font/ttf", ".pdf": "application/pdf", ".txt": "text/plain" };
+const MIME = { ".html": "text/html; charset=utf-8", ".css": "text/css", ".js": "text/javascript", ".json": "application/json", ".png": "image/png", ".ttf": "font/ttf", ".pdf": "application/pdf", ".txt": "text/plain", ".webmanifest": "application/manifest+json", ".svg": "image/svg+xml" };
 
 /** The Content-Security-Policy vercel.json sends with the pages, or null. */
 export async function sitePolicy() {

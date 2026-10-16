@@ -67,3 +67,15 @@ test("GEO_URLS: the basemap and the chronology, served under /geo/ (web-build co
   assert.deepEqual(Object.keys(GEO_URLS).sort(), ["basemap", "chronology"]);
   for (const u of Object.values(GEO_URLS)) assert.match(u, /^\/geo\/[a-z]+\.json$/);
 });
+
+import { SW_URL, MANIFEST_URL, CACHE_PREFIX, shellCache, DATA_CACHE, SEFARIA_CACHE, SEFARIA_ORIGIN } from "../site/app/contract.js";
+test("the offline app's names: the worker, the manifest, the caches under one prefix, Sefaria's origin as the CSP names it", () => {
+  assert.equal(SW_URL, "/sw.js");
+  assert.equal(MANIFEST_URL, "/manifest.webmanifest");
+  assert.equal(shellCache("abc"), "haftarah-shell-abc");
+  for (const name of [DATA_CACHE, SEFARIA_CACHE, shellCache("x")]) assert.ok(name.startsWith(CACHE_PREFIX), name);
+  assert.notEqual(DATA_CACHE, SEFARIA_CACHE);
+  const v = JSON.parse(readFileSync(join(ROOT, "vercel.json"), "utf8"));
+  const csp = v.headers.flatMap(h => h.headers).find(x => x.key === "Content-Security-Policy").value;
+  assert.ok(csp.includes(`connect-src 'self' ${SEFARIA_ORIGIN}`), csp);
+});
