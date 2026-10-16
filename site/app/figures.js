@@ -3,7 +3,8 @@
 import { GEO_URLS } from "./contract.js";
 
 const CREDIT_MAP = "Map: Natural Earth (public domain); places: OpenBible.info Bible Geocoding Data (CC BY 4.0).";
-const CREDIT_DATES = "Dates rounded, after Galil (1996) and The Jewish Study Bible (2014).";
+export const TIMELINE_SCROLL = "Timeline, scrolls sideways";
+const CREDIT_DATES ="Dates rounded, after Galil (1996) and The Jewish Study Bible (2014).";
 
 export function hasFigures(data) {
   return (Array.isArray(data.places) && data.places.length > 0) || (Array.isArray(data.timeline) && data.timeline.length > 0);
@@ -29,14 +30,16 @@ export async function renderFigures({ data, L, fetchImpl = fetch, doc = document
   const [basemap, chronology] = await Promise.all([need.basemap ? get(GEO_URLS.basemap) : null, need.chronology ? get(GEO_URLS.chronology) : null]);
   const region = data.mapRegion || null;
   const text = L.figureText(places, items, chronology, region);
-  const figure = (cls, svg, t) => {
+  const figure = (cls, svg, t, wrap = s => s) => {
     if (!t || !svg) return null;
     const f = doc.createElement("figure"); f.className = `fig ${cls}`;
-    f.innerHTML = svg + `<figcaption>${L.escapeHtml(t.caption)}</figcaption>`;
+    f.innerHTML = wrap(svg) + `<figcaption>${L.escapeHtml(t.caption)}</figcaption>`;
     return f;
   };
   const map = places.length && text.map ? figure("fig-map", L.mapSvg(places, region, basemap, { id: "map", title: text.map.title, desc: text.map.desc }), text.map) : null;
-  const timeline = items.length && text.timeline ? figure("fig-timeline", L.timelineSvg(items, chronology, { id: "timeline", title: text.timeline.title, desc: text.timeline.desc }), text.timeline) : null;
+  // On a narrow screen the timeline keeps a readable width and scrolls sideways inside this region (web.css).
+  const scroller = svg => `<div class="fig-scroll" tabindex="0" role="region" aria-label="${TIMELINE_SCROLL}">${svg}</div>`;
+  const timeline = items.length && text.timeline ? figure("fig-timeline", L.timelineSvg(items, chronology, { id: "timeline", title: text.timeline.title, desc: text.timeline.desc }), text.timeline, scroller) : null;
   // The footer credits what is drawn: a map with no place inside its box draws nothing and credits nothing.
   return { map, timeline, text, credit: figureCredit({ places: map ? places : [], timeline: timeline ? items : [] }) };
 }

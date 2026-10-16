@@ -187,20 +187,9 @@ export async function run() {
   $("footAttr").textContent = `Hebrew: ${prov.he}. English: ${prov.en}. Sources from Sefaria. Calendar and readings: Hebcal (CC BY 4.0).`;
   // While a week carries word analysis, the footer credits its source (spec 8); the file itself names the credit.
   if (data.side && data.side.words) $("footAttr").textContent += ` ${data.side.words === "oshb" ? "Word analysis: Open Scriptures Hebrew Bible morphology (CC BY 4.0); Westminster Leningrad Codex (public domain)." : "Word analysis: STEPBible TAHOT and TBESH, data created by www.STEPBible.org based on work at Tyndale House Cambridge (CC BY 4.0), trimmed and aligned for this site."}`;
-  // The map beside the setting and the timeline under the opening note (spec 5.8); a failed fetch shows no figure.
+  // The figures (spec 5.8) are fetched now and inserted once the verses exist: the text never waits on the geo files.
   figuresSeen = { status: "" };
-  if (hasFigures(data)) {
-    const figs = await renderFigures({ data, L }).catch(err => { console.warn(err.message); return { failed: err.message }; });
-    if (figs.failed) figuresSeen = { status: `failed: ${figs.failed}` };
-    else {
-      const opening = front.querySelector(".opening");
-      if (figs.map || figs.timeline) opening.classList.add("with-figures");
-      if (figs.map) { opening.classList.add("with-map"); opening.append(figs.map); }   // after .setting, or after the calendar paragraphs
-      if (figs.timeline) opening.after(figs.timeline);
-      if (figs.credit) $("footAttr").textContent += " " + figs.credit;
-      figuresSeen = { status: [figs.map && "map", figs.timeline && "timeline"].filter(Boolean).join(",") };
-    }
-  }
+  const figuresPending = hasFigures(data) ? renderFigures({ data, L }).catch(err => { console.warn(err.message); return { failed: err.message }; }) : null;
   for (const id of ["reading", "end", "foot"]) $(id).hidden = false;
   // Shown only while a provider is switched on, and only after Daniel approves the wording (spec 5.3).
   if (analytics.provider !== "none") $("foot").insertAdjacentHTML("beforeend", `<span class="privacy">We count visits and which sources are opened; nothing identifies you. Opening a source or a word asks Sefaria for it.</span>`);
@@ -381,6 +370,21 @@ export async function run() {
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { if (location.hash) goToHash(); });   // the font swap moves the layout; land on the verse again
   addEventListener("hashchange", () => goToHash());
 
+  // The figures, once fetched: the map beside the setting, the timeline under the opening note, the credit in
+  // the footer; a failed fetch shows no figure. They land above the verses, so a reader already scrolled keeps
+  // the same verse in view and a verse link lands on its verse again.
+  const figuresReady = !figuresPending ? Promise.resolve() : figuresPending.then(figs => {
+    if (figs.failed) { figuresSeen = { status: `failed: ${figs.failed}` }; return; }
+    const opening = front.querySelector(".opening"), before = front.getBoundingClientRect().height;
+    if (figs.map || figs.timeline) opening.classList.add("with-figures");
+    if (figs.map) { opening.classList.add("with-map"); opening.append(figs.map); }   // after .setting, or after the calendar paragraphs
+    if (figs.timeline) opening.after(figs.timeline);
+    if (figs.credit) $("footAttr").textContent += " " + figs.credit;
+    figuresSeen = { status: [figs.map && "map", figs.timeline && "timeline"].filter(Boolean).join(",") };
+    if (!(location.hash && goToHash()) && scrollY > 0) scrollBy(0, front.getBoundingClientRect().height - before);
+    sync();
+  });
+
   // verse number: jump to its commentary (the rail when wide, the fold below the verse otherwise)
   for (const r of rows) gutButton(r).addEventListener("click", () => {
     if (wide.matches) { railPause = Date.now() + 1500; railTo(r.app); r.app.classList.add("current"); }
@@ -410,7 +414,7 @@ export async function run() {
   document.body.append(copyStatus);
   rail.addEventListener("click", onAct); text.addEventListener("click", onAct);
 
-  const api = { rows, model, sync, goToHash, slug, side: data.side || null, closeAll: () => { panel.close(); settings.close(); } };
+  const api = { rows, model, sync, goToHash, slug, figuresReady, side: data.side || null, closeAll: () => { panel.close(); settings.close(); } };
   api.sources = new Set(parts.flatMap(p => (p.reading.commentary || []).filter(e => e && e.status !== "rejected").map(e => e.source).filter(Boolean)));
   window.HaftarahPage = api;
   const panel = initPanel({ page: api, L, sefariaUrl, track });
@@ -507,6 +511,7 @@ async function runPresentCheck() {
 
 async function runCheck(api, L) {
   const h = document.documentElement, rows = api.rows;
+  await api.figuresReady;   // the figures land above the verses: measure the settled page
   const wide = matchMedia("(min-width: 1100px)").matches;
   h.dataset.checkVerses = String(rows.length);
   h.dataset.checkKeys = api.model.sequence.join(",");
@@ -573,7 +578,10 @@ async function runCheck(api, L) {
   h.dataset.checkFigDesc = (document.querySelector("#front .map-svg desc") || {}).textContent || "";
   const footText = document.getElementById("footAttr").textContent;
   h.dataset.checkFigCredit = [/OpenBible/.test(footText) && "map", /Galil/.test(footText) && "dates"].filter(Boolean).join(",");
-  h.dataset.checkFigLabelled = String([...document.querySelectorAll("#front .fig-svg")].every(s => s.getAttribute("role") === "img"
+  const scroller = document.querySelector("#front .fig-timeline > .fig-scroll");
+  h.dataset.checkFigScroll = scroller ? [scroller.getAttribute("role"), scroller.getAttribute("tabindex"), scroller.getAttribute("aria-label")].join("|") : "none";
+  h.dataset.checkFigScrolls = scroller ? String(scroller.scrollWidth > scroller.clientWidth + 1) : "none";
+  h.dataset.checkFigLabelled =String([...document.querySelectorAll("#front .fig-svg")].every(s => s.getAttribute("role") === "img"
     && (s.getAttribute("aria-labelledby") || "").split(" ").every(id => id && document.getElementById(id) && s.contains(document.getElementById(id)))));
   const priorLink = document.querySelector("#front a.prior");
   h.dataset.checkPrior = priorLink ? priorLink.getAttribute("href") : "";

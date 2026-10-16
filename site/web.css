@@ -111,12 +111,20 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .opening p { margin: 0 0 .85rem; text-wrap: pretty; hyphens: auto; }
 .opening .setting { border-top: .5px solid var(--rule); padding-top: .85rem; margin-top: 1rem; }
 /* the figures (spec 5.8): the same SVG as the print, from lib.js; the labels keep their font-size attributes */
-.opening.with-figures { max-width: 60rem; }
+.opening.with-map { max-width: 60rem; }   /* a timeline-only week keeps the opening's measure: the timeline sits outside it */
 .opening .fig-map { max-width: 24rem; margin-top: 1rem; }
 @media (min-width: 52rem) {
+  /* Two columns: the text in the first, one row per paragraph; the map in the second, from the first row down
+     through every row the text uses (the opening holds at most a few paragraphs; 20 rows is a ceiling, and the
+     gap between rows is 0 so the unused ones take no room). */
   .opening.with-map { display: grid; grid-template-columns: minmax(0, 38em) minmax(16rem, 24rem); gap: 0 2rem; align-items: start; }
   .opening.with-map > p, .opening.with-map > .setting { grid-column: 1; }
   .opening.with-map .fig-map { grid-column: 2; grid-row: 1 / span 20; margin-top: .25rem; }
+}
+/* Below the two-column width the timeline keeps a readable size and scrolls sideways; above it the wrapper is inert. */
+@media (max-width: 51.99rem) {
+  .fig-scroll { overflow-x: auto; }
+  .fig-scroll svg { min-width: 40rem; }
 }
 .fig { margin: 0; }
 .fig-timeline { max-width: 60rem; margin: 1.25rem 0 0; }

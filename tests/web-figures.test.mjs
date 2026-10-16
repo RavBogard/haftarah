@@ -40,7 +40,8 @@ test("renderFigures: a week with both draws a labelled map and timeline, fetchin
   assert.match(r.map.innerHTML, /<figcaption>Places in this reading/);
   assert.equal((r.map.innerHTML.match(/<circle class="place /g) || []).length, week.places.filter(p => p.role !== "empire").length);
   assert.equal(r.timeline.className, "fig fig-timeline");
-  assert.match(r.timeline.innerHTML, /aria-labelledby="timeline-title timeline-desc"/);
+  assert.match(r.timeline.innerHTML, /^<div class="fig-scroll" tabindex="0" role="region" aria-label="Timeline, scrolls sideways"><svg [^>]*aria-labelledby="timeline-title timeline-desc"[\s\S]*<\/svg><\/div><figcaption>/);
+  assert.doesNotMatch(r.map.innerHTML, /fig-scroll/);
   assert.match(r.timeline.innerHTML, /<figcaption>Dates BCE/);
   assert.equal(r.credit, figureCredit(week));
 });

@@ -173,6 +173,11 @@ async function main() {
         expect("every place is on the map", Number(a["fig-places"]) === (raw.places || []).filter(p => p.role !== "empire").length, a["fig-places"]);
         if (raw.places?.length) expect("the map is described", /^Map of /.test(a["fig-desc"] || ""), a["fig-desc"]);
         expect("the figures are labelled images", a["fig-labelled"] === "true", a["fig-labelled"]);
+        if (raw.timeline?.length) {
+          expect("the timeline sits in a named, focusable scroll region", a["fig-scroll"] === "region|0|Timeline, scrolls sideways", a["fig-scroll"]);
+          const narrow = Number(a.width) < 832;   // the 52rem breakpoint, on the measured viewport
+          expect(narrow ? "the timeline scrolls sideways on a phone" : "the timeline fits without scrolling on a desktop", a["fig-scrolls"] === String(narrow), `${a["fig-scrolls"]} at ${a.width}px`);
+        }
         const credit = [raw.places?.length && "map", raw.timeline?.length && "dates"].filter(Boolean).join(",");
         expect(credit === "map,dates" ? "the footer credits the map and the dates" : `the footer credits the ${credit === "map" ? "map" : "dates"}`, a["fig-credit"] === credit, a["fig-credit"]);
       } else expect("a week without figures shows none", a.figures === "" && Number(a["fig-places"]) === 0 && a["fig-credit"] === "", `${a.figures} / ${a["fig-places"]} / ${a["fig-credit"]}`);

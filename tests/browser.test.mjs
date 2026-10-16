@@ -11,7 +11,9 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { isolatedEnv } from "./helpers/isolatedEnv.mjs";
 import { findBrowser } from "../scripts/build.mjs";
 import { dumpDom } from "../scripts/chrome.mjs";
-import { parseArgs } from "../scripts/web-check.mjs";
+import { parseArgs, serveSite } from "../scripts/web-check.mjs";
+import { buildSite } from "../scripts/web-build.mjs";
+import { rm } from "node:fs/promises";
 import { migrate3 } from "../scripts/migrate.mjs";
 import { makeWeekTorah } from "./helpers/makeWeekTorah.mjs";
 
@@ -109,10 +111,34 @@ test("web-check passes on week-figures (the figures path)", { skip, timeout: 300
   const iso = await isolatedEnv();
   try {
     const { stdout } = await run(process.execPath, [join(ROOT, "scripts", "web-check.mjs"), join(ROOT, "tests", "fixtures", "week-figures"), "--out", join(iso.home, "dist")], { env: iso.env, cwd: ROOT, maxBuffer: 1 << 24 });
-    for (const line of ["the figures are drawn", "every place is on the map", "the map is described", "the figures are labelled images", "the footer credits the map and the dates"])
+    for (const line of ["the figures are drawn", "every place is on the map", "the map is described", "the figures are labelled images", "the footer credits the map and the dates",
+      "the timeline sits in a named, focusable scroll region", "the timeline scrolls sideways on a phone", "the timeline fits without scrolling on a desktop"])
       assert.match(stdout, new RegExp(`ok {2,}${line}`));
     assert.match(stdout, /All web checks passed\./);
   } finally { await iso.cleanup(); }
+});
+
+test("week-figures with the geo files missing: the verses render, no figure, and the check says why", { skip, timeout: 240_000 }, async () => {
+  const iso = await isolatedEnv();
+  let server = null;
+  try {
+    const { out: dist } = await buildSite({ out: join(iso.home, "dist") });
+    await rm(join(dist, "geo"), { recursive: true, force: true });   // every /geo/ request is now a 404
+    const week = join(ROOT, "tests", "fixtures", "week-figures");
+    const raw = JSON.parse(await readFile(join(week, "sheet.json"), "utf8"));
+    const served = await serveSite({ dist, week, raw });
+    server = served.server;
+    const dom = await dumpDom(findBrowser(), `${served.base}/${served.slug}?check=1`, { size: "1440,900", env: iso.env });
+    const html = (dom.match(/<html[^>]*>/) || [""])[0];
+    const attr = name => ((html.match(new RegExp(`\\sdata-check-${name}="([^"]*)"`)) || [])[1]);
+    assert.equal(attr("done"), "1");
+    assert.equal(attr("errors"), "0");
+    assert.ok(Number(attr("verses")) > 0, `verses: ${attr("verses")}`);
+    assert.match(attr("figures") || "", /^failed: \/geo\/[a-z]+\.json: HTTP 404/);
+    assert.equal(attr("fig-places"), "0");
+    assert.equal(attr("fig-credit"), "");
+    assert.doesNotMatch(dom, /<figure class="fig /);
+  } finally { if (server) server.close(); await iso.cleanup(); }
 });
 
 test("web-check passes on a timeline-only copy of week-figures (no map, no basemap fetched)", { skip, timeout: 300_000 }, async () => {
