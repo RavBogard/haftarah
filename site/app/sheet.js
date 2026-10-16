@@ -9,9 +9,11 @@ export { slugFromPath, dataUrl };
 import { initRoving, focusables } from "./a11y.js";
 import { createAnalytics } from "./analytics.js";
 import { initPresent, isPresent } from "./present.js";
+import { hasFigures, renderFigures } from "./figures.js";
 
 const DRIVE = "https://drive.google.com/drive/folders/1TbSmoeBaCSLciL_-_HSCuKWkJMSZvGwd";
 const errorsSeen = [];   // filled in check mode (?check=1) by the error listeners in run()
+let figuresSeen = { status: "" };   // what run() drew of the figures, read by runCheck
 
 export function rangeLabel(book, a, z) {
   const head = `${book} ${a.chapter}:${a.verse}`;
@@ -185,6 +187,20 @@ export async function run() {
   $("footAttr").textContent = `Hebrew: ${prov.he}. English: ${prov.en}. Sources from Sefaria. Calendar and readings: Hebcal (CC BY 4.0).`;
   // While a week carries word analysis, the footer credits its source (spec 8); the file itself names the credit.
   if (data.side && data.side.words) $("footAttr").textContent += ` ${data.side.words === "oshb" ? "Word analysis: Open Scriptures Hebrew Bible morphology (CC BY 4.0); Westminster Leningrad Codex (public domain)." : "Word analysis: STEPBible TAHOT and TBESH, data created by www.STEPBible.org based on work at Tyndale House Cambridge (CC BY 4.0), trimmed and aligned for this site."}`;
+  // The map beside the setting and the timeline under the opening note (spec 5.8); a failed fetch shows no figure.
+  figuresSeen = { status: "" };
+  if (hasFigures(data)) {
+    const figs = await renderFigures({ data, L }).catch(err => { console.warn(err.message); return { failed: err.message }; });
+    if (figs.failed) figuresSeen = { status: `failed: ${figs.failed}` };
+    else {
+      const opening = front.querySelector(".opening");
+      if (figs.map || figs.timeline) opening.classList.add("with-figures");
+      if (figs.map) { opening.classList.add("with-map"); opening.append(figs.map); }   // after .setting, or after the calendar paragraphs
+      if (figs.timeline) opening.after(figs.timeline);
+      if (figs.credit) $("footAttr").textContent += " " + figs.credit;
+      figuresSeen = { status: [figs.map && "map", figs.timeline && "timeline"].filter(Boolean).join(",") };
+    }
+  }
   for (const id of ["reading", "end", "foot"]) $(id).hidden = false;
   // Shown only while a provider is switched on, and only after Daniel approves the wording (spec 5.3).
   if (analytics.provider !== "none") $("foot").insertAdjacentHTML("beforeend", `<span class="privacy">We count visits and which sources are opened; nothing identifies you. Opening a source or a word asks Sefaria for it.</span>`);
@@ -551,6 +567,14 @@ async function runCheck(api, L) {
   // Two readings: a heading each; the hero's PDF links and its Last time link.
   h.dataset.checkHeads = String(document.querySelectorAll("#text .reading-head").length);
   h.dataset.checkPdfs = String(document.querySelectorAll("#front a.pdf").length);
+  // The figures: what was drawn, the places on the map, the map's description, the footer's credit, the labelling.
+  h.dataset.checkFigures = figuresSeen.status;
+  h.dataset.checkFigPlaces = String(document.querySelectorAll("#front .place").length);
+  h.dataset.checkFigDesc = (document.querySelector("#front .map-svg desc") || {}).textContent || "";
+  const footText = document.getElementById("footAttr").textContent;
+  h.dataset.checkFigCredit = [/OpenBible/.test(footText) && "map", /Galil/.test(footText) && "dates"].filter(Boolean).join(",");
+  h.dataset.checkFigLabelled = String([...document.querySelectorAll("#front .fig-svg")].every(s => s.getAttribute("role") === "img"
+    && (s.getAttribute("aria-labelledby") || "").split(" ").every(id => id && document.getElementById(id) && s.contains(document.getElementById(id)))));
   const priorLink = document.querySelector("#front a.prior");
   h.dataset.checkPrior = priorLink ? priorLink.getAttribute("href") : "";
   h.dataset.checkSide = JSON.stringify(api.side ? Object.keys(api.side).sort() : []);

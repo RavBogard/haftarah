@@ -30,6 +30,7 @@ export async function buildSite({ out = join(ROOT, "site", "dist") } = {}) {
   await rm(out, { recursive: true, force: true });
   await mkdir(join(out, "app"), { recursive: true });
   await mkdir(join(out, "fonts"), { recursive: true });
+  await mkdir(join(out, "geo"), { recursive: true });
   const files = [];
   const site = join(ROOT, "site");
   for (const name of await readdir(site)) {
@@ -38,7 +39,7 @@ export async function buildSite({ out = join(ROOT, "site", "dist") } = {}) {
     await cp(src, join(out, name), { recursive: true });
     files.push(...await listFiles(join(out, name), out));
   }
-  for (const [from, to] of [["template/lib.js", "lib.js"], ["template/trope.css", "trope.css"], ["template/voices.json", "voices.json"], ["assets/logo.png", "mural.png"]]) {
+  for (const [from, to] of [["template/lib.js", "lib.js"], ["template/trope.css", "trope.css"], ["template/voices.json", "voices.json"], ["assets/logo.png", "mural.png"], ["data/geo/basemap.json", "geo/basemap.json"], ["data/chronology.json", "geo/chronology.json"]]) {
     await copyFile(join(ROOT, from), join(out, to));
     files.push(to);
   }

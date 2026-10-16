@@ -16,6 +16,8 @@ export const indexUrl = () => `/data/${INDEX_PATH}`;
 export const PDF_FILES = { haftarah: "sheet.pdf", torah: "sheet-torah.pdf" };
 /** The side files publish writes beside sheet.json, fetched by the page only when first needed (spec 4.7). */
 export const SIDE_FILES = { words: "words.json", translations: "translations.json", links: "links.json" };
+/** The map's land and water and the chronology, copied into the site by web-build, fetched only for a week with figures. */
+export const GEO_URLS = { basemap: "/geo/basemap.json", chronology: "/geo/chronology.json" };
 
 /** The week slug in a page path, case-folded, one trailing slash allowed; null for any other path. */
 export function slugFromPath(pathname) {

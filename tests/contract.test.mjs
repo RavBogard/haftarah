@@ -61,3 +61,9 @@ import { SIDE_FILES } from "../site/app/contract.js";
 test("SIDE_FILES names the three side files", () => {
   assert.deepEqual(SIDE_FILES, { words: "words.json", translations: "translations.json", links: "links.json" });
 });
+
+import { GEO_URLS } from "../site/app/contract.js";
+test("GEO_URLS: the basemap and the chronology, served under /geo/ (web-build copies them)", () => {
+  assert.deepEqual(Object.keys(GEO_URLS).sort(), ["basemap", "chronology"]);
+  for (const u of Object.values(GEO_URLS)) assert.match(u, /^\/geo\/[a-z]+\.json$/);
+});

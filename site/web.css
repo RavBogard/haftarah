@@ -14,6 +14,7 @@
   --serif: "Literata", Georgia, serif;
   --hebrew: "Ezra SIL", "Noto Serif Hebrew", "SBL Hebrew", serif;
   --mast-h: 2.75rem;
+  --map-land: #f1efe9; --map-sea: #e3eaf4; --map-water-line: #1d4f9c; --map-coast: #8c8c8c;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
@@ -21,6 +22,7 @@
   --rubric: #e0616b;
   --reg-traditional: #e0616b; --reg-modern: #86aaea; --reg-critical: #5ec4b9; --reg-reference: #d7b05c;
   --legend-unused: #5c5852; --hover: rgba(255,255,255,.08); --wash: rgba(255,255,255,.05); --focus: #86aaea;
+  --map-land: #262421; --map-sea: #1a2230; --map-water-line: #86aaea; --map-coast: #6b665e;
   color-scheme: dark;
 } }
 :root[data-theme="dark"] {
@@ -28,6 +30,7 @@
   --rubric: #e0616b;
   --reg-traditional: #e0616b; --reg-modern: #86aaea; --reg-critical: #5ec4b9; --reg-reference: #d7b05c;
   --legend-unused: #5c5852; --hover: rgba(255,255,255,.08); --wash: rgba(255,255,255,.05); --focus: #86aaea;
+  --map-land: #262421; --map-sea: #1a2230; --map-water-line: #86aaea; --map-coast: #6b665e;
   color-scheme: dark;
 }
 /* Trope colors are light pastels; on a dark page the words on them go dark. */
@@ -107,6 +110,32 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .opening { max-width: 38em; margin-top: 1.75rem; }
 .opening p { margin: 0 0 .85rem; text-wrap: pretty; hyphens: auto; }
 .opening .setting { border-top: .5px solid var(--rule); padding-top: .85rem; margin-top: 1rem; }
+/* the figures (spec 5.8): the same SVG as the print, from lib.js; the labels keep their font-size attributes */
+.opening.with-figures { max-width: 60rem; }
+.opening .fig-map { max-width: 24rem; margin-top: 1rem; }
+@media (min-width: 52rem) {
+  .opening.with-map { display: grid; grid-template-columns: minmax(0, 38em) minmax(16rem, 24rem); gap: 0 2rem; align-items: start; }
+  .opening.with-map > p, .opening.with-map > .setting { grid-column: 1; }
+  .opening.with-map .fig-map { grid-column: 2; grid-row: 1 / span 20; margin-top: .25rem; }
+}
+.fig { margin: 0; }
+.fig-timeline { max-width: 60rem; margin: 1.25rem 0 0; }
+.fig svg { display: block; width: 100%; height: auto; }
+.fig figcaption { font-size: .85rem; color: var(--ink-2); line-height: 1.35; margin-top: .35rem; }
+.map-sea { fill: var(--map-sea); } .map-land { fill: var(--map-land); stroke: var(--map-coast); stroke-width: 1.5; }
+.map-lake { fill: var(--map-sea); stroke: var(--map-water-line); stroke-width: 1.2; } .map-river { fill: none; stroke: var(--map-water-line); stroke-width: 2; }
+.map-frame { fill: none; stroke: var(--frame); stroke-width: 2; }
+.place.scene { fill: var(--rubric); } .place.context { fill: var(--paper); stroke: var(--ink-2); stroke-width: 2.5; }
+.place-label { font-family: var(--serif); fill: var(--ink); }
+.place-label.scene { font-weight: 600; fill: var(--rubric); } .place-label.context { fill: var(--ink-2); } .place-label.empire { fill: var(--reg-reference); font-style: italic; }
+.map-scale line { stroke: var(--ink); stroke-width: 3; } .map-scale text { fill: var(--ink-2); font-family: var(--serif); }
+.tl-axis { stroke: var(--ink); stroke-width: 1.5; } .tl-tick { fill: var(--ink-2); font-family: var(--serif); }
+.tl-bar { stroke-width: 1.5; } .tl-bar.king { fill: var(--ink); stroke: var(--ink); } .tl-bar.prophet { fill: var(--reg-modern); stroke: var(--reg-modern); }
+.tl-bar.empire { fill: var(--reg-reference); stroke: var(--reg-reference); } .tl-bar.composition { fill: var(--reg-critical); stroke: var(--reg-critical); }
+.tl-bar.other { fill: var(--ink-2); stroke: var(--ink-2); }
+.tl-bar.approx { fill-opacity: .55; stroke-dasharray: 4 3; } .tl-event { fill: var(--rubric); } .tl-event.approx { fill: var(--paper); stroke: var(--rubric); stroke-width: 2; }
+.tl-label { fill: var(--ink); font-family: var(--serif); } .tl-label.inside { fill: var(--paper); }
+.tl-bar.approx + .tl-label.inside { fill: var(--ink); }
 .legend { margin-top: 1.1rem; font-size: .88rem; color: var(--ink-2); display: flex; flex-wrap: wrap; gap: .35rem 1.5rem; line-height: 1.5; }
 .legend span.reg { color: var(--reg); } .legend span.reg.unused, .legend > span.unused { color: var(--legend-unused); }
 .legend .k { color: var(--rubric); font-style: italic; margin-right: .4em; }

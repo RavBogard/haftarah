@@ -168,6 +168,14 @@ async function main() {
       expect("the verse number has a 44px hit area", Number(a["verse-hit"]) >= 44, a["verse-hit"]);
       expect(order.length > 1 ? "a heading per reading" : "no reading heading on a one-reading week", a.heads === String(order.length > 1 ? order.length : 0), a.heads);
       expect("a PDF link per reading", Number(a.pdfs) === order.length, a.pdfs);
+      if (raw.places?.length || raw.timeline?.length) {
+        expect("the figures are drawn", a.figures === [raw.places?.length && "map", raw.timeline?.length && "timeline"].filter(Boolean).join(","), a.figures);
+        expect("every place is on the map", Number(a["fig-places"]) === (raw.places || []).filter(p => p.role !== "empire").length, a["fig-places"]);
+        if (raw.places?.length) expect("the map is described", /^Map of /.test(a["fig-desc"] || ""), a["fig-desc"]);
+        expect("the figures are labelled images", a["fig-labelled"] === "true", a["fig-labelled"]);
+        const credit = [raw.places?.length && "map", raw.timeline?.length && "dates"].filter(Boolean).join(",");
+        expect(credit === "map,dates" ? "the footer credits the map and the dates" : `the footer credits the ${credit === "map" ? "map" : "dates"}`, a["fig-credit"] === credit, a["fig-credit"]);
+      } else expect("a week without figures shows none", a.figures === "" && Number(a["fig-places"]) === 0 && a["fig-credit"] === "", `${a.figures} / ${a["fig-places"]} / ${a["fig-credit"]}`);
       expect(raw.prior ? "the Last time link goes to last year's sheet" : "no Last time link without a prior", (a.prior || "") === (raw.prior ? `/${raw.prior.slug}` : ""), a.prior);
       expect("the page saw the side manifest", a.side === JSON.stringify(side ? Object.keys(side).sort() : []), a.side);
       if (side && side.words) {

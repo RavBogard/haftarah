@@ -100,6 +100,32 @@ test("web-check passes at desktop and phone widths",{ skip, timeout: 300_000 }, 
   const iso = await isolatedEnv();
   try {
     const { stdout } = await run(process.execPath, [join(ROOT, "scripts", "web-check.mjs"), "--out", join(iso.home, "dist")], { env: iso.env, cwd: ROOT, maxBuffer: 1 << 24 });
+    assert.match(stdout, /ok {2,}a week without figures shows none/);
+    assert.match(stdout, /All web checks passed\./);
+  } finally { await iso.cleanup(); }
+});
+
+test("web-check passes on week-figures (the figures path)", { skip, timeout: 300_000 }, async () => {
+  const iso = await isolatedEnv();
+  try {
+    const { stdout } = await run(process.execPath, [join(ROOT, "scripts", "web-check.mjs"), join(ROOT, "tests", "fixtures", "week-figures"), "--out", join(iso.home, "dist")], { env: iso.env, cwd: ROOT, maxBuffer: 1 << 24 });
+    for (const line of ["the figures are drawn", "every place is on the map", "the map is described", "the figures are labelled images", "the footer credits the map and the dates"])
+      assert.match(stdout, new RegExp(`ok {2,}${line}`));
+    assert.match(stdout, /All web checks passed\./);
+  } finally { await iso.cleanup(); }
+});
+
+test("web-check passes on a timeline-only copy of week-figures (no map, no basemap fetched)", { skip, timeout: 300_000 }, async () => {
+  const iso = await isolatedEnv();
+  try {
+    const dir = join(iso.home, "week-figures-timeline");
+    await mkdir(dir);
+    const week = JSON.parse(await readFile(join(ROOT, "tests", "fixtures", "week-figures", "sheet.json"), "utf8"));
+    delete week.places; delete week.mapRegion;
+    await writeFile(join(dir, "sheet.json"), JSON.stringify(week, null, 2));
+    const { stdout } = await run(process.execPath, [join(ROOT, "scripts", "web-check.mjs"), dir, "--out", join(iso.home, "dist")], { env: iso.env, cwd: ROOT, maxBuffer: 1 << 24 });
+    assert.match(stdout, /ok {2,}the figures are drawn/);
+    assert.match(stdout, /ok {2,}the footer credits the dates/);
     assert.match(stdout, /All web checks passed\./);
   } finally { await iso.cleanup(); }
 });
