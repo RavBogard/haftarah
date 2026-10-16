@@ -282,7 +282,7 @@ export async function run() {
     // A verse with nothing gets a div: a <details> without a summary shows the browser's own "Details".
     const app = el(count ? "details" : "div", "vapp"); app.dataset.verse = cv;
     app.innerHTML = (count ? `<summary><span class="count">${count}</span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></summary>` : "") +
-      `<p class="vh"><span>${cv}</span><span class="acts"><button type="button" class="act" data-act="link">Copy link</button><button type="button" class="act" data-act="copy">Copy verse</button><button type="button" class="act" data-act="mark" aria-pressed="${marked}">${marked ? UNMARK : MARK}</button>${data.side && data.side.links ? `<button type="button" class="act" data-act="related">Everything on this verse</button>` : ""}<a href="${esc(sefariaUrl(v.ref))}" target="_blank" rel="noopener">on Sefaria</a></span></p>` +
+      `<p class="vh"><span>${cv}</span><span class="acts"><button type="button" class="act" data-act="link">Copy link</button><button type="button" class="act" data-act="copy">Copy verse</button><button type="button" class="act" data-act="mark">${marked ? UNMARK : MARK}</button>${data.side && data.side.links ? `<button type="button" class="act" data-act="related">Everything on this verse</button>` : ""}<a href="${esc(sefariaUrl(v.ref))}" target="_blank" rel="noopener">on Sefaria</a></span></p>` +
       hlNotes.map(h => `<p class="hl-note">${L.divineName(h.note).html}</p>`).join("") +
       v.keys.map(k => `<p class="note ${k.kind}">${noteHtml(k, L)}</p>`).join("") +
       v.entries.map(e => `<p class="entry reg-${e.register}">${entryHtml(e)}</p>`).join("");
@@ -404,15 +404,24 @@ export async function run() {
   // Mark this verse is the keyboard path. A finger that moves is scrolling, not holding.
   for (const r of rows) {
     const b = gutButton(r);
-    let timer = 0, x0 = 0, y0 = 0, touch = false;
+    let timer = 0, unswallow = 0, x0 = 0, y0 = 0, touch = false;
     const stop = () => { clearTimeout(timer); timer = 0; };
+    // A hold that ends without a click (iOS) must not eat a later tap or Enter on this number.
+    const release = () => { clearTimeout(unswallow); r.swallowClick = false; };
     b.addEventListener("pointerdown", e => {
-      r.swallowClick = false; stop();   // a hold that ended without a click (iOS) must not eat the next tap
+      release(); stop();
       if (e.button !== 0) return;
       touch = e.pointerType === "touch"; x0 = e.clientX; y0 = e.clientY;
-      timer = setTimeout(() => { timer = 0; r.swallowClick = true; api.marks.toggle(r.row.id); }, 500);
+      timer = setTimeout(() => {
+        timer = 0; r.swallowClick = true; api.marks.toggle(r.row.id);
+      }, 500);
     });
-    for (const t of ["pointerup", "pointerleave", "pointercancel"]) b.addEventListener(t, stop);
+    b.addEventListener("blur", release);
+    b.addEventListener("keydown", release);
+    // Once the finger lifts, the click (if one comes) follows at once: 400 ms later the flag is gone either way.
+    // Timed from the lift, not from the mark, so a hold longer than the mark still swallows its click.
+    const lifted = () => { stop(); if (r.swallowClick) { clearTimeout(unswallow); unswallow = setTimeout(release, 400); } };
+    for (const t of ["pointerup", "pointerleave", "pointercancel"]) b.addEventListener(t, lifted);
     b.addEventListener("pointermove", e => { if (timer && Math.hypot(e.clientX - x0, e.clientY - y0) > 10) stop(); });
     b.addEventListener("contextmenu", e => { if (touch) e.preventDefault(); });   // a mouse keeps its menu
   }
@@ -456,7 +465,7 @@ export async function run() {
     if (on && !sr) { const s = el("span", "sr mark-sr"); s.textContent = " Marked."; gb.append(s); }
     if (!on && sr) sr.remove();
     const mb = r.app.querySelector('.act[data-act="mark"]');
-    mb.textContent = on ? UNMARK : MARK; mb.setAttribute("aria-pressed", String(on));
+    mb.textContent = on ? UNMARK : MARK;   // the label carries the state (no aria-pressed: it would read "Unmark, pressed")
   }
   const marksPanelOpen = () => $("panel").hasAttribute("data-open") && $("panelKind").textContent === MY_MARKS;
   function renderMarks() {
@@ -469,8 +478,8 @@ export async function run() {
   function saveMarks(next) {
     marks = next;
     const ok = writeMarks(slug, marks);
-    // Ask once, on the first mark of the session, that the browser keep this site's storage.
-    if (!askedPersist) { askedPersist = true; try { navigator.storage?.persist?.().catch(() => {}); } catch {} }
+    // Ask once, on the first mark written in the session, that the browser keep this site's storage.
+    if (!askedPersist && ok && marks.length) { askedPersist = true; try { navigator.storage?.persist?.().catch(() => {}); } catch {} }
     renderMarks();   // a refused write keeps the mark on the page for this visit, and says so
     if (!ok) copyStatus.textContent = MARKS_UNSAVED;
     return ok;

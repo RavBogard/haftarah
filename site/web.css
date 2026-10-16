@@ -369,7 +369,7 @@ html[data-lang="he"] .text .row .en, html[data-lang="en"] .text .row .he { displ
 .row.mine.target { box-shadow: inset -3px 0 0 var(--reg-reference), inset 0 0 0 1px var(--rubric); }
 .row.hl.mine.target { box-shadow: inset 3px 0 0 var(--rubric), inset -3px 0 0 var(--reg-reference), inset 0 0 0 1px var(--rubric); }
 .row.mine { padding-right: .6rem; }
-.row.shared { outline: 1px dashed var(--ink-2); outline-offset: -1px; }
+.row.shared { outline: 1px dashed var(--ink-2); outline-offset: -1px; padding-left: .6rem; padding-right: .6rem; }
 /* My marks, in the side panel */
 .marks { padding-left: 1.2rem; }
 .marks li { margin: .4rem 0; display: flex; flex-wrap: wrap; gap: .4rem .8rem; align-items: center; }
