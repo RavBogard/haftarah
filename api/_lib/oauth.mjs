@@ -2,6 +2,9 @@
 // request, authorization code, access token and refresh token is a record signed with HAFTARAH_AUTH_SECRET
 // (HMAC-SHA256) carrying its own expiry; nothing is stored. Identity comes from Google's OIDC code flow:
 // only an address in HAFTARAH_OWNER_EMAILS gets a code. Rotating the secret signs everyone out.
+// Redirects are held to ALLOWED_REDIRECTS (Claude's callbacks) or an http loopback, because registration is
+// open and there is no consent page: anyone could otherwise register their own https redirect, send the owner
+// a link to /oauth/authorize, and collect the code after the owner signs in at Google (they hold the verifier).
 import { createHmac, createHash, timingSafeEqual, randomBytes } from "node:crypto";
 import { SCOPE, OFFLINE, MCP_PATH } from "./env.mjs";
 
@@ -42,6 +45,13 @@ export const resourceMetadata = origin => ({ resource: `${origin}${MCP_PATH}`, a
 export const challenge = origin => new Response(JSON.stringify({ error: "invalid_token" }), { status: 401, headers: { "content-type": "application/json", "cache-control": "no-store", "www-authenticate": `Bearer resource_metadata="${origin}/.well-known/oauth-protected-resource", scope="${SCOPE}"` } });
 
 const isLoopback = h => h === "localhost" || h === "127.0.0.1" || h === "[::1]" || h === "::1";
+export const ALLOWED_REDIRECTS = ["https://claude.ai/api/mcp/auth_callback", "https://claude.com/api/mcp/auth_callback"];
+/** True for exactly Claude's two callbacks, or an http: URL on a loopback host (any port, any path). */
+export function redirectPermitted(uri) {
+  if (ALLOWED_REDIRECTS.includes(uri)) return true;
+  let u; try { u = new URL(uri); } catch { return false; }
+  return u.protocol === "http:" && isLoopback(u.hostname);
+}
 function normalizeRedirect(value) {
   if (typeof value !== "string" || value.length > 2048) throw new Error("invalid_redirect_uri");
   let u; try { u = new URL(value); } catch { throw new Error("invalid_redirect_uri"); }
@@ -71,6 +81,7 @@ export async function register(body, { config, now }) {
     const grants = body.grant_types ?? ["authorization_code", "refresh_token"], responses = body.response_types ?? ["code"];
     if (!Array.isArray(grants) || !grants.includes("authorization_code") || grants.some(g => g !== "authorization_code" && g !== "refresh_token") || !Array.isArray(responses) || responses.length !== 1 || responses[0] !== "code") throw new Error("invalid_client_metadata");
     const redirect_uris = [...new Set(redirects.map(normalizeRedirect))];
+    if (!redirect_uris.every(redirectPermitted)) throw new Error("invalid_redirect_uri");
     const client_name = typeof body.client_name === "string" ? body.client_name.slice(0, 120) : "MCP client";
     const client_id = sign(config.authSecret, "hc", { redirect_uris, client_name }, TTL.client, now);
     return { status: 201, body: { client_id, client_id_issued_at: Math.floor(now() / 1000), client_name, redirect_uris, grant_types: ["authorization_code", "refresh_token"], response_types: ["code"], token_endpoint_auth_method: "none" } };
@@ -85,7 +96,7 @@ export async function authorize(url, { config, now, random = defaultRandom }) {
   try {
     const client = verify(config.authSecret, "hc", q.get("client_id") || "", now);
     const redirect = normalizeRedirect(q.get("redirect_uri"));
-    if (!client || !redirectAllowed(client.redirect_uris, redirect)) throw new Error("invalid_client");
+    if (!client || !redirectPermitted(redirect) || !redirectAllowed(client.redirect_uris, redirect)) throw new Error("invalid_client");
     verified = redirect;
     const state = q.get("state");
     if (state && state.length > 1024) throw new Error("invalid_request");
@@ -151,7 +162,7 @@ export async function token(form, { config, now, random = defaultRandom }) {
   }
   if (grant === "refresh_token") {
     const r = verify(config.authSecret, "hrt", form.get("refresh_token") || "", now);
-    if (!r || r.client !== clientHash) return err("invalid_grant");
+    if (!r || r.client !== clientHash || !config.owners.includes(r.actor)) return err("invalid_grant");
     return issue(config, now, random, r, r.family);
   }
   return err("unsupported_grant_type");
@@ -161,5 +172,5 @@ export function bearer(request, { config, now }) {
   const m = /^Bearer\s+(\S+)$/i.exec(request.headers.get("authorization") || "");
   if (!m) return null;
   const p = verify(config.authSecret, "hat", m[1], now);
-  return p && p.scope && p.scope.split(" ").includes(SCOPE) ? p : null;
+  return p && p.scope && p.scope.split(" ").includes(SCOPE) && config.owners.includes(p.actor) ? p : null;
 }

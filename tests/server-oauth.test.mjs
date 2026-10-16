@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { configFrom } from "../api/_lib/env.mjs";
-import { sign, verify, metadata, resourceMetadata, register, authorize, googleCallback, token, bearer, challenge, pkceChallenge } from "../api/_lib/oauth.mjs";
+import { sign, verify, metadata, resourceMetadata, register, authorize, googleCallback, token, bearer, challenge, pkceChallenge, redirectPermitted, ALLOWED_REDIRECTS } from "../api/_lib/oauth.mjs";
 
 const ENV = { PUBLIC_BASE_URL: "https://haftarah.vercel.app", HAFTARAH_AUTH_SECRET: "s".repeat(48), GOOGLE_OAUTH_CLIENT_ID: "cid.apps.googleusercontent.com", GOOGLE_OAUTH_CLIENT_SECRET: "gsecret", HAFTARAH_OWNER_EMAILS: "daniel@centralreform.org" };
 const config = configFrom(ENV);
@@ -57,11 +57,34 @@ test("metadata and resource metadata are the origin's, as Claude reads them", ()
 test("register: Claude's metadata is accepted; a non-https non-loopback redirect, a secret auth method or a stray grant is refused", async () => {
   const id = await registerClaude();
   assert.ok(id.startsWith("hc."));
-  for (const bad of [{ redirect_uris: ["http://evil.example/cb"] }, { redirect_uris: [CLAUDE_CB], token_endpoint_auth_method: "client_secret_post" }, { redirect_uris: [CLAUDE_CB], grant_types: ["implicit"] }, { redirect_uris: [] }, "nope"]) {
+  for (const bad of [{ redirect_uris: ["http://evil.example/cb"] }, { redirect_uris: ["https://evil.example/cb"] }, { redirect_uris: [CLAUDE_CB, "https://evil.example/cb"] }, { redirect_uris: [CLAUDE_CB], token_endpoint_auth_method: "client_secret_post" }, { redirect_uris: [CLAUDE_CB], grant_types: ["implicit"] }, { redirect_uris: [] }, "nope"]) {
     const r = await register(bad, ctx());
     assert.equal(r.status, 400, JSON.stringify(bad));
     assert.ok(["invalid_redirect_uri", "invalid_client_metadata"].includes(r.body.error));
   }
+  for (const evil of [["https://evil.example/cb"], [CLAUDE_CB, "https://evil.example/cb"]]) {
+    assert.equal((await register({ redirect_uris: evil }, ctx())).body.error, "invalid_redirect_uri", "an https redirect off the allow-list is refused");
+  }
+  assert.ok((await register({ redirect_uris: ["https://claude.com/api/mcp/auth_callback", "http://127.0.0.1:9/x"] }, ctx())).status === 201);
+});
+
+test("redirectPermitted: Claude's two callbacks exactly, or any http loopback; nothing else", () => {
+  assert.deepEqual(ALLOWED_REDIRECTS, ["https://claude.ai/api/mcp/auth_callback", "https://claude.com/api/mcp/auth_callback"]);
+  assert.equal(redirectPermitted("http://127.0.0.1:51234/callback"), true);
+  assert.equal(redirectPermitted("http://localhost/anything"), true);
+  assert.equal(redirectPermitted("http://[::1]:8080/callback"), true);
+  assert.equal(redirectPermitted(CLAUDE_CB), true);
+  assert.equal(redirectPermitted("https://claude.ai/other"), false);
+  assert.equal(redirectPermitted("https://claude.ai/api/mcp/auth_callback?x=1"), false);
+  assert.equal(redirectPermitted("https://localhost/callback"), false, "loopback is http only");
+  assert.equal(redirectPermitted("http://evil.example/callback"), false);
+  assert.equal(redirectPermitted("not a url"), false);
+});
+
+test("authorize refuses a client record whose redirect is no longer permitted, even with a valid signature", async () => {
+  const stale = sign(config.authSecret, "hc", { redirect_uris: ["https://evil.example/cb"], client_name: "old" }, 3600_000, now);
+  const r = await authorize(authorizeUrl(stale, { redirect_uri: "https://evil.example/cb" }), ctx());
+  assert.equal(r.status, 400); assert.equal(r.body.error, "invalid_client"); assert.equal(r.redirect, undefined);
 });
 
 test("authorize sends the owner to Google with PKCE state bound to the request; bad inputs go back to the client or are refused", async () => {
@@ -144,6 +167,19 @@ test("the callback for an address outside HAFTARAH_OWNER_EMAILS issues no code a
   assert.ok(down.redirect.includes("error=temporarily_unavailable"));
   const stale = await googleCallback(new URL(`${ORIGIN}/api/auth/google/callback?code=g&state=hr.bad`), { ...ctx(), fetchImpl: googleOk() });
   assert.equal(stale.status, 400, "no verified client redirect: a plain error, no redirect");
+});
+
+test("an owner removed from HAFTARAH_OWNER_EMAILS loses access at once: bearer is null and the refresh grant is invalid_grant", async () => {
+  const id = await registerClaude();
+  const g = new URL((await authorize(authorizeUrl(id), ctx())).redirect);
+  const code = new URL((await googleCallback(new URL(`${ORIGIN}/api/auth/google/callback?code=g&state=${encodeURIComponent(g.searchParams.get("state"))}`), { ...ctx(), fetchImpl: googleOk() })).redirect).searchParams.get("code");
+  const tk = await token(new URLSearchParams({ grant_type: "authorization_code", code, client_id: id, redirect_uri: CLAUDE_CB, code_verifier: VERIFIER }), ctx());
+  assert.equal(tk.status, 200);
+  const req = () => new Request(`${ORIGIN}/api/mcp`, { headers: { authorization: `Bearer ${tk.body.access_token}` } });
+  assert.ok(bearer(req(), ctx()), "still an owner: admitted");
+  const removed = { ...ctx(), config: configFrom({ ...ENV, HAFTARAH_OWNER_EMAILS: "someone-else@centralreform.org" }) };
+  assert.equal(bearer(req(), removed), null);
+  assert.equal((await token(new URLSearchParams({ grant_type: "refresh_token", refresh_token: tk.body.refresh_token, client_id: id }), removed)).body.error, "invalid_grant");
 });
 
 test("pkceChallenge is S256 base64url", () => {
