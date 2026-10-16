@@ -26,7 +26,7 @@ async function ctxWith(store = new MemoryStore(), extra = {}) {
   return { ctx: toolCtx({ store, config, fetchImpl: net(), now: () => new Date("2026-10-15T12:00:00Z"), log: () => {}, workDir, ...extra }), workDir, store };
 }
 
-test("every tool has a name under 64 characters, a description, an object schema and annotations; the destructive one is deliver_week alone", { todo: "Tasks 4 and 5 add the rest" }, () => {
+test("every tool has a name under 64 characters, a description, an object schema and annotations; the destructive one is deliver_week alone", () => {
   assert.deepEqual(TOOLS.map(t => t.name), ["get_calendar", "find_past_sheets", "start_week", "fetch_texts", "get_texts", "get_sheet", "save_briefing", "save_entries", "update_sheet", "set_status", "build_sheet", "get_page_image", "deliver_week", "add_bibliography_work"]);
   for (const t of TOOLS) { assert.ok(t.name.length < 64); assert.ok(t.description.length > 20, t.name); assert.equal(t.inputSchema.type, "object"); assert.ok(t.annotations); }
   assert.deepEqual(TOOLS.filter(t => t.annotations.destructiveHint).map(t => t.name), ["deliver_week"]);

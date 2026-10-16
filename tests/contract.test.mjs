@@ -57,6 +57,20 @@ test("vercel.json routes exactly parashot.js's allow-list to library.html, after
   assert.ok(week >= 0 && first > week);
 });
 
+test("vercel.json: the server's rewrites come before the week route, the four functions are configured, the cron is Wednesday night, and the install touches only api/", () => {
+  const v = JSON.parse(readFileSync(join(ROOT, "vercel.json"), "utf8"));
+  const week = v.rewrites.findIndex(r => r.destination === "/sheet.html");
+  for (const d of ["/api/oauth?action=metadata", "/api/oauth?action=resource", "/api/oauth?action=:action", "/api/oauth?action=callback", "/api/draft?slug=:slug&file=:file"]) assert.ok(v.rewrites.findIndex(r => r.destination === d) < week, d);
+  assert.deepEqual(Object.keys(v.functions).sort(), ["api/draft.mjs", "api/mcp.mjs", "api/oauth.mjs", "api/prefetch.mjs"]);
+  assert.equal(v.functions["api/mcp.mjs"].maxDuration, 300); assert.ok(v.functions["api/mcp.mjs"].includeFiles.includes("template/**") && v.functions["api/mcp.mjs"].includeFiles.includes("@sparticuz/chromium/bin/**"));
+  assert.deepEqual(v.crons.map(c => c.path), ["/api/prefetch", "/api/prefetch"]); assert.ok(v.crons.every(c => /\* \* 4$/.test(c.schedule)));
+  assert.equal(v.installCommand, "npm --prefix api ci --no-audit --no-fund");
+  const api = JSON.parse(readFileSync(join(ROOT, "api", "package.json"), "utf8"));
+  assert.deepEqual(Object.keys(api.dependencies), ["@sparticuz/chromium", "playwright-core"]);
+  assert.deepEqual(Object.values(api.dependencies).map(x => /^\d/.test(x)), [true, true], "pinned, no ranges");
+  assert.equal(JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")).dependencies, undefined, "the root stays dependency-free");
+});
+
 import { SIDE_FILES } from "../site/app/contract.js";
 test("SIDE_FILES names the three side files", () => {
   assert.deepEqual(SIDE_FILES, { words: "words.json", translations: "translations.json", links: "links.json" });

@@ -47,7 +47,9 @@ const exists = p => access(p).then(() => true, () => false);
 export async function pullWeek(store, slug, dir, files = null) {
   weekPrefix(slug);
   await mkdir(dir, { recursive: true });
-  const names = files || (await store.list(weekPrefix(slug))).map(b => b.pathname.slice(weekPrefix(slug).length));
+  const names = [...(files || (await store.list(weekPrefix(slug))).map(b => b.pathname.slice(weekPrefix(slug).length)))];
+  // sheet.json first: deliver refuses a PDF older than sheet.json, so it must never land after the PDFs.
+  names.sort((a, b) => (a === "sheet.json" ? -1 : b === "sheet.json" ? 1 : 0));
   for (const name of names) safeName(name, dir);   // every name checked before anything is written
   const pulled = [];
   for (const name of names) {

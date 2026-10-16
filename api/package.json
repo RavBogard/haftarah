@@ -1,0 +1,10 @@
+{
+  "name": "haftarah-api",
+  "private": true,
+  "description": "The MCP server's only dependencies: the serverless Chromium pack and the driver for page images. Nothing else in this repo depends on anything.",
+  "engines": { "node": ">=22" },
+  "dependencies": {
+    "@sparticuz/chromium": "153.0.0",
+    "playwright-core": "1.63.0"
+  }
+}

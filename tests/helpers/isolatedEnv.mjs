@@ -10,7 +10,7 @@ import { join } from "node:path";
 // Kept from the parent, matched case-insensitively: what Node and Chrome need to start, and the browser pin.
 const PASS = new Set(["PATH", "SYSTEMROOT", "WINDIR", "TEMP", "TMP", "LOCALAPPDATA", "PROGRAMFILES", "PROGRAMFILES(X86)", "HAFTARAH_BROWSER"]);
 // Never passed on, whatever the parent has.
-export const CLEARED = ["HAFTARAH_BLOB_TOKEN", "HAFTARAH_DROPBOX_URL", "HAFTARAH_DROPBOX_TOKEN", "BLOB_READ_WRITE_TOKEN"];
+export const CLEARED = ["HAFTARAH_BLOB_TOKEN", "HAFTARAH_DROPBOX_URL", "HAFTARAH_DROPBOX_TOKEN", "BLOB_READ_WRITE_TOKEN", "HAFTARAH_WORKING_READ_WRITE_TOKEN", "HAFTARAH_AUTH_SECRET", "CRON_SECRET", "GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_SECRET"];
 
 export async function isolatedEnv(extra = {}) {
   const home = await mkdtemp(join(tmpdir(), "haftarah-home-"));

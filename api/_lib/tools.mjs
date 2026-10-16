@@ -5,10 +5,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readFile, readdir, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { getJSON, leyningUrl, nextWeekFor, weekSlug, nextShabbat, fetchWeek, fetchTextsFor, withEntryIds } from "../../scripts/fetch.mjs";
 import { writeDigest } from "../../scripts/digest.mjs";
-import { weekBibliography } from "../../scripts/build.mjs";
+import { weekBibliography, buildWeek, BuildRefused } from "../../scripts/build.mjs";
+import { checkWeek } from "../../scripts/check.mjs";
+import { deliver } from "../../scripts/deliver.mjs";
+import { publish } from "../../scripts/publish.mjs";
+import { draftUrl } from "./http.mjs";
+import { imageResult } from "./mcp.mjs";
 import { upsertEntries, validateEntries, verifyRefs, applyPatch, setStatuses } from "./entries.mjs";
 import { leyningOf, aliyotLines, parseRange } from "../../scripts/leyning.mjs";
 import { defaultHaftarahFor } from "../../scripts/rites.mjs";
@@ -17,7 +22,7 @@ import { loadCustoms } from "../../scripts/customs.mjs";
 import { parashahKeysOf } from "../../site/app/parashot.js";
 import { pullWeek, pushWeek, readJson, writeJson, readStatus, writeStatus } from "./store.mjs";
 import { sliceTexts } from "./texts.mjs";
-import { SLUG, SLUG_SOURCE } from "../../site/app/contract.js";
+import { SLUG, SLUG_SOURCE, PDF_FILES } from "../../site/app/contract.js";
 const L = createRequire(import.meta.url)("../../template/lib.js");
 export const ROOT = fileURLToPath(new URL("../../", import.meta.url));
 
@@ -52,9 +57,12 @@ function checkValue(p, v, where) {
   return [];
 }
 
-/** What every handler receives. `root` is the repo (template, bibliography, customs, data); `workDir` where weeks are materialised. */
-export function toolCtx({ store, config, fetchImpl = globalThis.fetch, now = () => new Date(), log = () => {}, root = ROOT, workDir = null, browser = null, launcher = null }) {
-  return { store, config, fetchImpl, now, log, root, workDir: workDir || join(tmpdir(), "haftarah-weeks"), browser, launcher };
+/** The scripts the building and delivering tools run; tests pass fakes. */
+export const SCRIPTS = { buildWeek, checkWeek, deliver, publish };
+/** What every handler receives. `root` is the repo (template, bibliography, customs, data); `workDir` where weeks are
+ * materialised; `launcher` an async () => { browser, pages() } (api/_lib/browser.mjs), null for none. */
+export function toolCtx({ store, config, fetchImpl = globalThis.fetch, now = () => new Date(), log = () => {}, root = ROOT, workDir = null, browser = null, launcher = null, scripts = SCRIPTS }) {
+  return { store, config, fetchImpl, now, log, root: root || ROOT, workDir: workDir || join(tmpdir(), "haftarah-weeks"), browser, launcher, scripts: { ...SCRIPTS, ...(scripts || {}) } };
 }
 export const defineTool = def => ({ annotations: {}, ...def, inputSchema: { additionalProperties: false, ...def.inputSchema } });
 
@@ -329,4 +337,106 @@ export const addBibliographyWork = defineTool({
   },
 });
 
-export const TOOLS = [getCalendar, findPastSheets, startWeek, fetchTexts, getTexts, getSheet, saveBriefing, saveEntries, updateSheet, setStatus, /* build_sheet, get_page_image, deliver_week: Task 5 */ addBibliographyWork];
+// ---- building and delivering ----
+const stamp = ctx => { const v = ctx.now(); return new Date(typeof v === "number" ? v : v.getTime()).toISOString().replace(/\.\d{3}Z$/, "Z"); };
+const errText = err => (err && err.message) || String(err);
+const notChecked = why => ({ ok: false, problems: [`not checked: ${why}`], diagnostics: [], table: [] });
+const checkView = c => ({ ok: !c.problems.length, problems: c.problems, diagnostics: c.diagnostics, table: c.page });
+/** The base64 an image result may carry: the transport's size guard counts text only, and a Vercel response is at most 4.5 MB. */
+export const MAX_IMAGE_BASE64 = 1_500_000;
+
+export const buildSheet = defineTool({
+  name: "build_sheet",
+  description: "Build the week's printed sheets: the citation gate and lint, then every reading's HTML and PDF with the pinned browser, the layout check (two renders, the gap and divine-name invariants), and page images. Returns the report, a 24-hour link to each PDF for Daniel to open and print, and the page image names for get_page_image. Status becomes built when every reading's sheet built and passed its check in this call (a build of one reading of a two-reading week leaves it drafting). Daniel approves by printing; show him in full everything Claude wrote before this.",
+  inputSchema: { type: "object", properties: { slug: slugProp, reading: readingProp, trope: { type: "boolean", description: "Also the haftarah's chanter's copy (sheet-trope.pdf)" } }, required: ["slug"] },
+  annotations: {},
+  async handler({ slug, reading = null, trope = false }, ctx) {
+    const sheet = await requireSheet(ctx, slug);
+    const dir = await weekDir(ctx, slug);
+    const { overlay } = await biblioFor(ctx, sheet);
+    // A browser that cannot start is reported, not thrown: the gate, the lint and the HTML still run.
+    let launcher = null, browserFailure = null;
+    try { launcher = ctx.launcher ? await ctx.launcher() : null; if (!launcher) browserFailure = "no browser launcher on this server"; }
+    catch (err) { browserFailure = errText(err); }
+    const browser = browserFailure ? { ok: false, error: browserFailure } : { ok: true };
+    const log = m => ctx.log(m);
+    let built;
+    try { built = await ctx.scripts.buildWeek(dir, { pdf: !!launcher, png: false, trope, reading, customs: ctx.config.customs, browser: launcher ? launcher.browser : null, root: ctx.root, biblioOverlay: overlay, log, warn: log }); }
+    catch (err) {
+      if (!(err instanceof BuildRefused)) throw err;
+      const st = await readStatus(ctx.store, slug);
+      return { slug, version: st?.version || 0, status: st?.status || "drafting", gate: err.problems, lint: { errors: [], warnings: [] }, browser, readings: [] };
+    }
+    const builds = built.builds.filter(b => !reading || b.kind === reading);
+    // The study sheets are checked as such; the chanter's copy (checkWeek's trope target) separately.
+    const runCheck = async opts => { try { return { result: await ctx.scripts.checkWeek(dir, { ...opts, browser: launcher.browser, log }) }; } catch (err) { return { failure: errText(err) }; } };
+    const check = launcher && builds.some(b => b.pdf) ? await runCheck({ only: reading }) : null;
+    const push = ["sheet.html", "sheet-torah.html", "sheet-trope.html", PDF_FILES.haftarah, PDF_FILES.torah, "sheet-trope.pdf"];
+    const readings = [], pages = {};
+    for (const b of builds) {
+      const c = check?.result?.readings.find(x => x.id === b.id) || null;
+      let images = [], imageError = null;
+      if (launcher && b.pdf && b.pages) {
+        try { images = await launcher.pages(pathToFileURL(b.html).href, join(dir, "pages"), b.pages, b.kind); push.push(...images.map(n => `pages/${n}`)); }
+        catch (err) { imageError = errText(err); }
+      }
+      pages[b.kind] = images;   // a rebuilt reading's earlier images no longer show this sheet
+      const view = L.readingView(sheet, b.id);
+      readings.push({ id: b.id, kind: b.kind, ref: view.haftarah.ref, pages: b.pages, bytes: b.bytes, pdfUrl: b.pdf ? draftUrl(ctx.config.site, ctx.config.authSecret, slug, PDF_FILES[b.kind], ctx.now) : null, check: c ? checkView(c) : notChecked(!launcher ? "no browser" : check?.failure || "no PDF"), images, ...(imageError ? { imageError } : {}), entries: entryCounts(L.readings(sheet).find(r => r.id === b.id) || {}) });
+    }
+    let tropeOut = null;
+    if (built.trope) {
+      const tc = built.trope.pdf ? await runCheck({ trope: true }) : null;
+      const c = tc?.result?.readings[0] || null;
+      tropeOut = { pages: built.trope.pages, bytes: built.trope.bytes, pdfUrl: built.trope.pdf ? draftUrl(ctx.config.site, ctx.config.authSecret, slug, "sheet-trope.pdf", ctx.now) : null, check: c ? checkView(c) : notChecked(!launcher ? "no browser" : tc?.failure || "no PDF") };
+    }
+    await pushWeek(ctx.store, slug, dir, push);
+    const every = L.readings(sheet).filter(r => (r.verses || []).length).every(r => readings.some(x => x.id === r.id));
+    const allGood = !!launcher && every && readings.length > 0 && readings.every(r => r.pdfUrl && r.check.ok) && (!tropeOut || (tropeOut.pdfUrl && tropeOut.check.ok));
+    // The page list rides in status.json, so get_page_image never serves a page left from a longer earlier build.
+    const prev = (await readStatus(ctx.store, slug))?.pages || {};
+    const st = await writeStatus(ctx.store, slug, { ...(allGood ? { status: "built", built: stamp(ctx) } : { status: "drafting" }), pages: { ...prev, ...pages } }, ctx.now);
+    return { slug, version: st.version, status: st.status, gate: [], lint: { errors: [], warnings: built.warnings.map(w => `${w.where}: ${w.msg}`) }, browser, readings, ...(tropeOut ? { trope: tropeOut } : {}) };
+  },
+});
+
+export const getPageImage = defineTool({
+  name: "get_page_image",
+  description: "One page of a built sheet as an image (816×1056, JPEG), to look at the layout the way Daniel will see it printed. Pages are numbered from 1; build_sheet lists them.",
+  inputSchema: { type: "object", properties: { slug: slugProp, reading: readingProp, page: { type: "integer" } }, required: ["slug", "reading", "page"] },
+  annotations: { readOnlyHint: true },
+  async handler({ slug, reading, page }, ctx) {
+    const st = await readStatus(ctx.store, slug);
+    const list = st?.pages?.[reading] || (await ctx.store.list(`weeks/${slug}/pages/${reading}-`)).map(b => b.pathname.split("/").pop()).sort();
+    const name = list.find(n => n.startsWith(`${reading}-${String(page).padStart(2, "0")}.`));
+    const bytes = name ? await ctx.store.get(`weeks/${slug}/pages/${name}`) : null;
+    if (!bytes) throw new Error(`no page ${page} of the ${reading} for ${slug} (${list.length} built); run build_sheet first`);
+    const data = bytes.toString("base64");
+    if (data.length > MAX_IMAGE_BASE64) throw new Error(`${slug} ${reading} page ${page} is ${Math.round(bytes.length / 1024)} KB, too large to send (at most ${Math.floor(MAX_IMAGE_BASE64 * 3 / 4 / 1024)} KB); open the PDF from build_sheet's link instead`);
+    return imageResult(data, name.endsWith(".png") ? "image/png" : "image/jpeg", `${slug} ${reading} page ${page} of ${list.length}`);
+  },
+});
+
+export const deliverWeek = defineTool({
+  name: "deliver_week",
+  description: "DELIVER THE WEEK. Only on Daniel's explicit go-ahead (\"ship it\", \"deliver\", \"send it\") after he has printed the sheet; never on your own judgment. Sends the PDFs and the working files to Drive through the drop box, then publishes the week to the public site (sheet.json, PDFs, the side files, the index). dryRun lists what would go where and changes nothing. Refuses a week that is not built.",
+  inputSchema: { type: "object", properties: { slug: slugProp, dryRun: { type: "boolean" }, only: { type: "string", enum: ["public", "working"] }, web: { type: "boolean", description: "Also publish to the site (default true)" } }, required: ["slug"] },
+  annotations: { destructiveHint: true },
+  async handler({ slug, dryRun = false, only = undefined, web = true }, ctx) {
+    await requireSheet(ctx, slug);
+    const st = await readStatus(ctx.store, slug);
+    if (!dryRun && st?.status !== "built") throw new Error(`${slug} is ${st?.status || "unstarted"}; build_sheet first (a sheet edited after its build must be built again)`);
+    if (!ctx.config.dropbox) throw new Error("the drop box is not configured on the server (HAFTARAH_DROPBOX_URL and HAFTARAH_DROPBOX_TOKEN); deliver from Claude Code with scripts/deliver.mjs");
+    if (web && !ctx.config.publicToken) throw new Error("the public store token is not configured on the server (BLOB_READ_WRITE_TOKEN)");
+    const dir = await weekDir(ctx, slug);
+    const lines = [], log = m => lines.push(String(m));
+    const customs = await customsOf(ctx);
+    const webConfig = web ? { token: ctx.config.publicToken } : null;
+    await ctx.scripts.deliver(dir, { only, dryRun, config: ctx.config.dropbox, log, fetchImpl: ctx.fetchImpl, webConfig, publishImpl: ctx.scripts.publish, side: true, cache: ctx.config.cacheDir, customs });
+    if (dryRun) { if (web) await ctx.scripts.publish(dir, { dryRun: true, log, side: true, customs }); return { slug, dryRun: true, status: st?.status || "drafting", lines }; }
+    const done = await writeStatus(ctx.store, slug, { status: "delivered", delivered: stamp(ctx) }, ctx.now);
+    return { slug, status: done.status, version: done.version, lines, page: web ? `${ctx.config.site}/${slug}` : null };
+  },
+});
+
+export const TOOLS = [getCalendar, findPastSheets, startWeek, fetchTexts, getTexts, getSheet, saveBriefing, saveEntries, updateSheet, setStatus, buildSheet, getPageImage, deliverWeek, addBibliographyWork];

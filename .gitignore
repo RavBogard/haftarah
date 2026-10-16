@@ -9,6 +9,8 @@ tests/fixtures/*/preview*/
 weeks/
 tests/fixtures/*/*.pdf
 package-lock.json
+!api/package-lock.json
+api/node_modules/
 site/dist/
 .playwright-mcp/
 .claude/worktrees/

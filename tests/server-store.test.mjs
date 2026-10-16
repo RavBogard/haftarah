@@ -51,12 +51,13 @@ test("pullWeek and pushWeek move a week's files between the store and a folder; 
     await writeFile(join(dir, "sheet.json"), "{\"a\":1}");
     await writeFile(join(dir, "digest.md"), "# d");
     await writeFile(join(dir, "sheet.pdf"), Buffer.from([0x25, 0x50]));
-    const pushed = await pushWeek(s, "2026-10-17-noach", dir, ["sheet.json", "digest.md", "sheet.pdf", "missing.json"]);
-    assert.deepEqual(pushed, ["sheet.json", "digest.md", "sheet.pdf"], "a file the folder lacks is skipped, not an error");
+    const pushed = await pushWeek(s, "2026-10-17-noach", dir, ["sheet.pdf", "sheet.json", "digest.md", "missing.json"]);
+    assert.deepEqual(pushed, ["sheet.pdf", "sheet.json", "digest.md"], "a file the folder lacks is skipped, not an error");
     assert.equal((await s.list("weeks/2026-10-17-noach/")).find(b => b.pathname.endsWith("sheet.pdf")).contentType, "application/pdf");
     const out = await mkdtemp(join(tmpdir(), "haftarah-store-"));
     try {
       const pulled = await pullWeek(s, "2026-10-17-noach", out);
+      assert.equal(pulled[0], "sheet.json", "sheet.json lands first so the PDFs are never older than it");
       assert.deepEqual(pulled.sort(), ["digest.md", "sheet.json", "sheet.pdf"]);
       assert.equal(await readFile(join(out, "sheet.json"), "utf8"), "{\"a\":1}");
       const some = await mkdtemp(join(tmpdir(), "haftarah-store-"));
