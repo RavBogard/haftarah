@@ -95,7 +95,7 @@ Draft each and show it with the rest.
 node scripts/lint.mjs weeks/<slug> --fix    # optional: lint runs inside build; --fix rewrites near-miss Hebrew lemmas
 node scripts/build.mjs weeks/<slug> --png   # lint, then sheet.pdf (haftarah) and sheet-torah.pdf (Torah, when the week has one) with page images (preview/, preview-torah/)
 node scripts/build.mjs weeks/<slug> --trope # optional; also sheet-trope.pdf, the chanter's copy: trope phrases highlighted by family
-node scripts/check.mjs weeks/<slug>         # layout invariants for every built reading; a week with figures also prints figures: front or figures: page2
+node scripts/check.mjs weeks/<slug>         # layout invariants for every built reading; the figures line reads figures: front, figures: page2 or figures: none
 ```
 
 Clear lint warnings that matter (God-language, voices, stacked note letters, word counts). If check fails on a gap, it names the entry to trim and by how many words. Look at both PDFs' page images before calling anything done. The chanter's copy is the haftarah's only. Then show Daniel the Claude-written texts in full (standing rules) together with the PDF. If he asks for changes, edit `sheet.json` and build again; the sheet he prints is the last one built. Build the chanter's copy only when Daniel asks for it that week (to look first, open `sheet.html` in a browser and use the review bar's "Trope colors" button, or add `?trope=1`), check it with `check.mjs weeks/<slug> --trope`, and hand him the PDF; step 7 does not deliver it.
