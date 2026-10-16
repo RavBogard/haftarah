@@ -577,6 +577,9 @@
   function mapSvg(places, region, basemap, { id = "map", title, desc } = {}) {
     const esc = escapeHtml;
     const frame = fitBox(mapRegion(places, region).box), proj = projector(frame);
+    const shown = ["scene", "context", "empire"].map(role => (places || []).filter(p => p.role === role && hasCoord(p) && inBoxLL(p, frame))).reduce((a, b) => a.concat(b), [])
+      .map(p => { const [x, y] = proj([p.lon, p.lat]); return { p, x, y }; });
+    if (!shown.length) return "";
     if (title == null || desc == null) {
       const t = figureText(places, [], null, region).map || { title: "", desc: "" };
       if (title == null) title = t.title;
@@ -592,8 +595,6 @@
     if (lakes) out.push(`<path class="map-lake" d="${lakes}"/>`);
     const rivers = pathOf([].concat(...(bm.rivers || []).map(r => clipLine(r.line, frame))), proj, false);
     if (rivers) out.push(`<path class="map-river" d="${rivers}"/>`);
-    const shown = ["scene", "context", "empire"].map(role => (places || []).filter(p => p.role === role && hasCoord(p) && inBoxLL(p, frame))).reduce((a, b) => a.concat(b), [])
-      .map(p => { const [x, y] = proj([p.lon, p.lat]); return { p, x, y }; });
     const taken = shown.filter(s => s.p.role !== "empire").map(s => [s.x - 10, s.y - 10, s.x + 10, s.y + 10]);
     for (const { p, x, y } of shown) {
       const name = String(p.name == null ? "" : p.name), chars = [...name].length;
@@ -641,19 +642,26 @@
     const n = Math.abs(approx ? Math.round(y / 5) * 5 : y);
     return (approx ? "c. " : "") + n + (y > 0 ? " CE" : "");
   }
-  function datesOf(it) {
-    return yearLabel(it.start, it.approx) + (it.end !== it.start ? "–" + yearLabel(it.end, it.approx).replace(/^c\. /, "") : "");
+  // An item's dates; `eras` (the set crosses year 0) gives every BCE year its era, and a span across 0 always dates its start.
+  function datesOf(it, eras) {
+    const bce = y => y < 0 ? " BCE" : "";
+    const first = yearLabel(it.start, it.approx) + (eras || (it.start < 0) !== (it.end < 0) ? bce(it.start) : "");
+    return first + (it.end !== it.start ? "–" + yearLabel(it.end, it.approx).replace(/^c\. /, "") + (eras ? bce(it.end) : "") : "");
   }
+  function labelDates(it, eras) { return (it.label ? it.label + ", " : "") + datesOf(it, eras); }
+  function crossesZero(list) { return list.some(i => i.start < 0) && list.some(i => i.end > 0); }
+  // The items with dates; a kind that is not a string draws as "other".
   function drawnItems(items, chronology) {
-    return timelineItems(items, chronology).filter(it => Number.isFinite(it.start) && Number.isFinite(it.end));
+    return timelineItems(items, chronology).filter(it => Number.isFinite(it.start) && Number.isFinite(it.end))
+      .map(it => typeof it.kind === "string" && it.kind ? it : Object.assign({}, it, { kind: "other" }));
   }
 
-  // A label cut to `room` units with an ellipsis, or null when not even one letter fits.
+  // A label cut to `room` units with an ellipsis, or null when fewer than two characters would survive.
   function fitLabel(text, room, size) {
     const chars = [...text], per = 0.56 * size;
     if (chars.length * per <= room) return text;
-    const n = Math.floor(room / per) - 1;
-    return n >= 1 ? chars.slice(0, n).join("").replace(/[\s,]+$/, "") + "…" : null;
+    const kept = [...chars.slice(0, Math.max(0, Math.floor(room / per) - 1)).join("").replace(/[\s,]+$/, "")];
+    return kept.length >= 2 ? kept.join("") + "…" : null;
   }
 
   function timelineSvg(items, chronology, { id = "timeline", title, desc } = {}) {
@@ -673,9 +681,10 @@
     if (hi <= lo) hi = lo + step;
     const X = y => PAD + (y - lo) / (hi - lo) * (W - 2 * PAD);
     const wide = (text, room) => PER * [...text].length + 12 <= room;
+    const eras = crossesZero(list);
     // Each item's shape and, for an event, its label (which occupies its row).
     const shaped = list.map(it => {
-      const x0 = X(it.start), x1 = X(it.end), dated = it.label + ", " + datesOf(it);
+      const x0 = X(it.start), x1 = X(it.end), dated = labelDates(it, eras);
       if (it.kind === "event") {
         const left = x0 > W - 150, room = left ? x0 - 13 : W - (x0 + 13);
         const text = fitLabel(dated, room, FONT) || "";
@@ -708,7 +717,7 @@
         const beside = text => { const w = PER * [...text].length; return left ? { text, x: s.x0 - 6, anchor: "end", inside: false, b: [s.x0 - 6 - w, s.x0 - 6] } : { text, x: s.x1 + 6, anchor: "start", inside: false, b: [s.x1 + 6, s.x1 + 6 + w] }; };
         const inside = text => ({ text, x: s.x0 + 6, anchor: "start", inside: true, b: null });
         let lab = null;
-        for (const text of [s.dated, s.it.label]) {
+        for (const text of [s.dated, s.it.label].filter(Boolean)) {
           if (wide(text, width)) { lab = inside(text); break; }
           const c = beside(text);
           if (free(c.b)) { lab = c; break; }
@@ -772,14 +781,14 @@
     }
     const list = drawnItems(items, chronology);
     if (list.length) {
-      const lo = Math.min(...list.map(i => i.start)), hi = Math.max(...list.map(i => i.end)), ap = list.some(i => i.approx);
+      const lo = Math.min(...list.map(i => i.start)), hi = Math.max(...list.map(i => i.end)), ap = list.some(i => i.approx), eras = crossesZero(list);
       const span = hi < 0 ? `${yearLabel(lo, ap)} to ${yearLabel(hi, ap)} BCE` : lo < 0 ? `${yearLabel(lo, ap)} BCE to ${yearLabel(hi, ap)}` : `${yearLabel(lo, ap)} to ${yearLabel(hi, ap)}`;
       const order = k => { const i = FIG_KINDS.indexOf(k); return i < 0 ? FIG_KINDS.length : i; };
       const sorted = list.map((it, i) => ({ it, i })).sort((a, b) => a.it.start - b.it.start || order(a.it.kind) - order(b.it.kind) || a.i - b.i).map(x => x.it);
       const words = { king: "king", prophet: "prophet", empire: "empire" };
       timeline = {
         title: "When this happened",
-        desc: `Timeline, ${span}: ${sorted.map(it => [it.label, words[it.kind], datesOf(it)].filter(Boolean).join(", ")).join("; ")}.`,
+        desc: `Timeline, ${span}: ${sorted.map(it => [it.label, words[it.kind], datesOf(it, eras)].filter(Boolean).join(", ")).join("; ")}.`,
         caption: (hi < 0 ? "Dates BCE" : lo < 0 ? "Dates BCE and CE" : "Dates CE") + (ap ? " · c. marks a rounded date" : ""),
       };
     }

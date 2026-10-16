@@ -171,3 +171,48 @@ test("timelineSvg on the real table: every king draws, ticks every hundred years
   assert.ok(ticks.length >= 3 && ticks.every((t, i) => !i || ticks[i - 1] - t === 100), ticks.join(","));
   assert.ok(!/style=/.test(svg));
 });
+
+test("figureText: a timeline that crosses year 0 gives every year its era, and a span across 0 dates its start", () => {
+  const t = L.figureText([], [{ id: "f", label: "Fall", kind: "event", start: -586, works: ["x"] }, { id: "s", label: "Span", kind: "composition", start: -50, end: 70, works: ["x"] },
+    { id: "t", label: "Temple", kind: "event", start: 70, works: ["x"] }], chron, null);
+  assert.equal(t.timeline.desc, "Timeline, 586 BCE to 70 CE: Fall, 586 BCE; Span, 50 BCE–70 CE; Temple, 70 CE.");
+});
+
+test("timelineSvg on the real table: no label is cut to a single letter", () => {
+  const kings = Object.entries(realChron.entries).filter(([, e]) => e.kind === "king").map(([k]) => ({ id: k, chronology: k }));
+  const texts = [...L.timelineSvg(kings, realChron).matchAll(/<text[^>]*>([^<]*)<\/text>/g)].map(m => m[1]);
+  assert.ok(texts.length > 0);
+  for (const s of texts) assert.ok(!/^.…$/u.test(s), s);
+});
+
+test("mapSvg draws nothing when no place is located inside the box, as figureText has no map", () => {
+  assert.equal(L.mapSvg([], null, basemap), "");
+  assert.equal(L.mapSvg([{ id: "x", name: "X", role: "scene" }], null, basemap), "");
+  assert.equal(L.mapSvg([{ id: "n", name: "Nineveh", role: "context", lat: 36.359, lon: 43.153 }], "land", basemap), "");
+  assert.equal(L.figureText([], [], chron, null).map, null);
+});
+
+test("timelineSvg: an item with no string kind is drawn as other; an empty label prints only its dates", () => {
+  const svg = L.timelineSvg([{ id: "a", label: "A", start: -900, end: -800 }, { id: "b", label: "B", kind: 7, start: -950, end: -940 }, { id: "c", label: "", kind: "event", start: -1010, approx: true }], chron);
+  assert.equal((svg.match(/class="tl-bar other"/g) || []).length, 2);
+  assert.ok(!/undefined|tl-bar 7/.test(svg));
+  assert.ok(!/>, c\. 1010</.test(svg));
+  assert.match(svg, />c\. 1010<\/text>/);
+  assert.ok(!/^, /.test(L.figureText([], [{ id: "c", label: "", kind: "event", start: -1010, approx: true }], chron, null).timeline.desc.split(": ")[1]));
+});
+
+test("mapSvg and timelineSvg are deterministic", () => {
+  assert.equal(L.mapSvg(places, null, realBasemap), L.mapSvg(places, null, realBasemap));
+  assert.equal(L.timelineSvg(items, chron), L.timelineSvg(items, chron));
+});
+
+test("names and titles are escaped: no markup, no handlers, no styles get through", () => {
+  const bad = [{ id: "x", name: '<img onerror=x>&"Q"', role: "scene", lat: 31.8, lon: 35.2 }];
+  const svgs = [L.mapSvg(bad, null, basemap, { title: 'T"<' }), L.timelineSvg([{ id: "x", label: '<img onerror=x>&"Q"', kind: "event", start: -900 }], chron, { title: 'T"<' })];
+  for (const svg of svgs) {
+    // the escaped name still reads "onerror=" as text; no tag may carry it
+    assert.ok(!/<img/.test(svg) && !/<[^>]*onerror=/.test(svg) && !/style=/.test(svg), svg);
+    assert.match(svg, /T&quot;&lt;<\/title>/);
+    assert.match(svg, /&lt;img onerror=x&gt;&amp;&quot;Q&quot;/);
+  }
+});
