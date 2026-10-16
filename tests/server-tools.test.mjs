@@ -1,9 +1,9 @@
-// tests/server-tools.test.mjs (Task 3 part; Task 4 appends)
+// tests/server-tools.test.mjs (Task 3's reading tools; Task 4's writing tools)
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { TOOLS, toolCtx, validateInput } from "../api/_lib/tools.mjs";
-import { MemoryStore, writeJson, writeStatus } from "../api/_lib/store.mjs";
+import { MemoryStore, writeJson, writeStatus, readJson, readStatus } from "../api/_lib/store.mjs";
 import { configFrom } from "../api/_lib/env.mjs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -132,5 +132,107 @@ test("save_briefing writes briefing.md with the issues and picks appended and bu
     assert.equal(r.version, 2);
     const md = (await store.get("weeks/2026-10-17-noach/briefing.md")).toString();
     assert.ok(md.startsWith("# Briefing")); assert.ok(md.includes("## Issues\n\n1. The barren woman\n2. Noah's waters")); assert.ok(md.includes("## Picks\n\n- 1\n- range A"));
+  } finally { await rm(workDir, { recursive: true, force: true }); }
+});
+
+test("start_week makes the week in the store from Hebcal and Sefaria, status drafting version 1; a kept week is refused without force or a Torah pick; a pick adds the Torah reading", async () => {
+  const passage = (book, ch, from, to) => ({ book, sections: [ch, from], toSections: [ch, to], versions: [{ languageFamilyName: "hebrew", text: Array.from({ length: to - from + 1 }, (_, i) => `עברית ${i}`) }, { languageFamilyName: "english", text: Array.from({ length: to - from + 1 }, (_, i) => `English ${i}`) }] });
+  const sefaria = { "https://www.sefaria.org/api/v3/texts/Isaiah": () => passage("Isaiah", 54, 1, 3), "https://www.sefaria.org/api/v3/texts/Genesis": () => passage("Genesis", 6, 9, 11), "https://www.sefaria.org/api/links/": () => [] };
+  const { ctx, store, workDir } = await ctxWith(new MemoryStore(), { fetchImpl: net(sefaria) });
+  try {
+    const r = await call("start_week", { date: "2026-10-17" }, ctx);
+    assert.equal(r.slug, "2026-10-17-noach"); assert.equal(r.version, 1); assert.equal(r.status, "drafting");
+    assert.deepEqual(r.readings.map(x => [x.kind, x.verses]), [["haftarah", 3]]);
+    assert.ok((await store.list("weeks/2026-10-17-noach/")).map(b => b.pathname.split("/").pop()).sort().join() === "candidates.json,prior.json,sheet.json,status.json");
+    await assert.rejects(call("start_week", { date: "2026-10-17" }, ctx), /already in the store/);
+    const t = await call("start_week", { date: "2026-10-17", torahPick: "aliyah:1" }, ctx);
+    assert.deepEqual(t.readings.map(x => x.kind), ["torah", "haftarah"]); assert.equal(t.version, 2);
+    const f = await call("start_week", { date: "2026-10-17", force: true }, ctx);
+    assert.equal(f.version, 3); assert.deepEqual(f.readings.map(x => x.kind), ["haftarah"], "force starts over");
+  } finally { await rm(workDir, { recursive: true, force: true }); }
+});
+
+test("fetch_texts writes the reading's texts file and digest.md, returns the digest and counts, and keeps an existing file unless force", async () => {
+  // week-min is I Samuel 20:18-20; Sefaria answers "Rashi on I Samuel 20" as the chapter, one list of comments per verse.
+  const links = [{ ref: "Rashi on I Samuel 20:18:1", anchorRef: "I Samuel 20:18", category: "Commentary", collectiveTitle: { en: "Rashi" }, index_title: "Rashi on I Samuel" }];
+  const sefaria = { "https://www.sefaria.org/api/links/": () => links, "https://www.sefaria.org/api/v3/texts/Rashi": () => ({ indexTitle: "Rashi on I Samuel", sections: [20], toSections: [20], versions: [{ languageFamilyName: "hebrew", versionTitle: "On Your Way", text: Array.from({ length: 20 }, (_, i) => (i >= 17 ? ["רש״י"] : [])) }] }) };
+  const { ctx, store, workDir } = await ctxWith(new MemoryStore(), { fetchImpl: net(sefaria) });
+  try {
+    await writeJson(store, "weeks/2026-10-17-noach/sheet.json", min);
+    await writeJson(store, "weeks/2026-10-17-noach/candidates.json", { ref: min.haftarah.ref, sources: [] });
+    await writeStatus(store, "2026-10-17-noach", { status: "drafting" });
+    const r = await call("fetch_texts", { slug: "2026-10-17-noach", reading: "haftarah" }, ctx);
+    assert.equal(r.kept, false); assert.ok(r.counts.commentaries >= 1); assert.ok(r.digest.startsWith("# "));
+    assert.ok(await store.get("weeks/2026-10-17-noach/texts.json")); assert.ok(await store.get("weeks/2026-10-17-noach/digest.md"));
+    const again = await call("fetch_texts", { slug: "2026-10-17-noach", reading: "haftarah" }, { ...ctx, fetchImpl: async () => { throw new Error("offline"); } });
+    assert.equal(again.kept, true); assert.ok(again.digest.startsWith("# "));
+    await assert.rejects(call("fetch_texts", { slug: "2026-10-17-noach", reading: "torah" }, ctx), /no torah reading/);
+  } finally { await rm(workDir, { recursive: true, force: true }); }
+});
+
+test("save_entries: saves the valid, refuses the invalid and names why, runs lint, bumps the version; a stale expectedVersion writes nothing", async () => {
+  const v = torahWeek.readings.find(r => r.id === "haftarah").verses[0];
+  const okRef = `Rashi on ${v.book} ${v.chapter}:${v.verse}:1`, badRef = `Rashi on ${v.book} ${v.chapter}:99:1`;
+  const sefaria = { "https://www.sefaria.org/api/v3/texts/": url => decodeURIComponent(url).includes(badRef) ? new Response(JSON.stringify({ error: "no" }), { status: 200 }) : new Response(JSON.stringify({ versions: [{}] }), { status: 200 }) };
+  const { ctx, store, workDir } = await ctxWith(new MemoryStore(), { fetchImpl: net(sefaria) });
+  try {
+    await writeJson(store, "weeks/2026-10-17-noach/sheet.json", torahWeek);
+    await writeStatus(store, "2026-10-17-noach", { status: "built", built: "x" });
+    const text = "<p>A comment of some length that says something true about the verse and its words.</p>";
+    const r = await call("save_entries", { slug: "2026-10-17-noach", expectedVersion: 1, reading: "haftarah", entries: [
+      { verse: v.verse, chapter: v.chapter, register: "traditional", source: "Rashi", lemma: "x", text, sourceRef: okRef },
+      { verse: v.verse, chapter: v.chapter, register: "traditional", source: "Radak", lemma: "x", text, sourceRef: badRef },
+      { verse: v.verse, chapter: v.chapter, register: "modern", source: "Malbim", lemma: "x", text },
+    ] }, ctx);
+    assert.equal(r.version, 2); assert.equal(r.status, "drafting", "an edit after a build goes back to drafting");
+    assert.deepEqual(r.results.map(x => x.saved), [true, false, false]);
+    assert.match(r.results[1].errors[0], /does not resolve on Sefaria/); assert.match(r.results[2].errors[0], /no Sefaria ref/);
+    assert.ok(Array.isArray(r.lint.warnings));
+    const saved = await readJson(store, "weeks/2026-10-17-noach/sheet.json");
+    assert.equal(saved.readings.find(x => x.id === "haftarah").commentary.length, torahWeek.readings.find(x => x.id === "haftarah").commentary.length + 1);
+    const stale = await call("save_entries", { slug: "2026-10-17-noach", expectedVersion: 1, reading: "haftarah", entries: [] }, ctx);
+    assert.deepEqual(stale, { error: "version_conflict", version: 2, message: "the week changed since you read it (version 2); read it again and retry with expectedVersion 2" });
+    assert.equal((await readStatus(store, "2026-10-17-noach")).version, 2);
+  } finally { await rm(workDir, { recursive: true, force: true }); }
+});
+
+test("save_entries during a Sefaria outage saves with refUnverified", async () => {
+  const v = torahWeek.readings.find(r => r.id === "haftarah").verses[0];
+  const { ctx, store, workDir } = await ctxWith(new MemoryStore(), { fetchImpl: net({ "https://www.sefaria.org/api/v3/texts/": () => new Response("", { status: 503 }) }) });
+  try {
+    await writeJson(store, "weeks/2026-10-17-noach/sheet.json", torahWeek);
+    await writeStatus(store, "2026-10-17-noach", { status: "drafting" });
+    const r = await call("save_entries", { slug: "2026-10-17-noach", expectedVersion: 1, reading: "haftarah", entries: [{ verse: v.verse, chapter: v.chapter, register: "traditional", source: "Rashi", lemma: "x", text: "<p>A comment of some length that says something true about the verse and its words.</p>", sourceRef: `Rashi on ${v.book} ${v.chapter}:${v.verse}:1` }] }, ctx);
+    assert.equal(r.results[0].saved, true); assert.match(r.results[0].warnings[0], /refUnverified/);
+  } finally { await rm(workDir, { recursive: true, force: true }); }
+});
+
+test("update_sheet and set_status write through applyPatch and setStatuses with the version check", async () => {
+  const { ctx, store, workDir } = await ctxWith();
+  try {
+    await writeJson(store, "weeks/2026-10-17-noach/sheet.json", torahWeek);
+    await writeStatus(store, "2026-10-17-noach", { status: "drafting" });
+    const u = await call("update_sheet", { slug: "2026-10-17-noach", expectedVersion: 1, patch: { nextWeek: null } }, ctx);
+    assert.equal(u.version, 2); assert.deepEqual(u.changed, ["nextWeek"]);
+    assert.equal((await readJson(store, "weeks/2026-10-17-noach/sheet.json")).nextWeek, null);
+    const id = torahWeek.readings.find(r => r.id === "haftarah").commentary[0].id;
+    const s = await call("set_status", { slug: "2026-10-17-noach", expectedVersion: 2, ids: [id], status: "rejected" }, ctx);
+    assert.equal(s.version, 3); assert.equal(s.changed, 1);
+    assert.equal(s.counts.find(c => c.reading === "haftarah").rejected, 1);
+    const bad = await call("set_status", { slug: "2026-10-17-noach", expectedVersion: 1, ids: [id], status: null }, ctx);
+    assert.equal(bad.error, "version_conflict");
+  } finally { await rm(workDir, { recursive: true, force: true }); }
+});
+
+test("add_bibliography_work appends a parseable line to the store's overlay for the book and reports the merged count", async () => {
+  const { ctx, store, workDir } = await ctxWith();
+  try {
+    const r = await call("add_bibliography_work", { book: "Isaiah", key: "Paul 2012", citation: "Shalom M. Paul, *Isaiah 40–66: Translation and Commentary*, Eerdmans Critical Commentary (Grand Rapids: Eerdmans, 2012)", verifiedBy: "https://www.eerdmans.com/9780802826039/isaiah-40-66/" }, ctx);
+    assert.equal(r.line, "- key: Paul 2012 | Shalom M. Paul, *Isaiah 40–66: Translation and Commentary*, Eerdmans Critical Commentary (Grand Rapids: Eerdmans, 2012) | verified: https://www.eerdmans.com/9780802826039/isaiah-40-66/");
+    assert.ok(r.merged > 10, "the repo's Isaiah entries plus the overlay");
+    const again = await call("add_bibliography_work", { book: "Isaiah", key: "Paul 2012", citation: "x", verifiedBy: "https://example.org" }, ctx);
+    assert.equal(again.replaced, true);
+    assert.equal((await store.get("bibliography/isaiah.md")).toString().split("\n").filter(l => l.startsWith("- key: Paul 2012")).length, 1);
+    await assert.rejects(call("add_bibliography_work", { book: "Isaiah", key: "Bad|Key", citation: "x", verifiedBy: "https://example.org" }, ctx), /key cannot contain/);
   } finally { await rm(workDir, { recursive: true, force: true }); }
 });
