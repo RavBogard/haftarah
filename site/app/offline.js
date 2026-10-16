@@ -115,7 +115,7 @@ async function cacheFirst(name, req, env, waitUntil) {
 async function staleWhileRevalidate(req, env, waitUntil) {
   const cache = await env.caches.open(DATA_CACHE);
   const hit = await cache.match(req.url);
-  const refresh = () => env.fetchImpl(req).then(live => good(live) ? putTrimmed(cache, req.url, live.clone(), DATA_LIMIT).then(() => live) : live);
+  const refresh = () => env.fetchImpl(req).then(live => good(live) ? putTrimmed(cache, req.url, live.clone(), DATA_LIMIT).then(() => live, () => live) : live);
   if (hit) { waitUntil(refresh().catch(() => {})); return hit; }
   try { return await refresh(); } catch { return Response.error(); }
 }
@@ -124,12 +124,13 @@ async function staleWhileRevalidate(req, env, waitUntil) {
  * The index and Sefaria: the network first. With a copy cached, the timeout only hastens it: a slow
  * network gets the cached copy while the live request finishes behind it (through waitUntil) and fills
  * the cache when it is good. With nothing cached, the network is waited for however long it takes, and
- * only a failed fetch is an error response.
+ * only a failed fetch is an error response. A cache write that fails (quota, a closed store) never
+ * costs the reader the answer in hand: the put's rejection is swallowed and the live response returned.
  */
 async function networkFirst(name, req, env, ms, waitUntil, limit) {
   const cache = await env.caches.open(name);
   const hit = await cache.match(req.url);
-  const live = Promise.resolve(env.fetchImpl(req)).then(r => good(r) ? putTrimmed(cache, req.url, r.clone(), limit).then(() => r) : r);
+  const live = Promise.resolve(env.fetchImpl(req)).then(r => good(r) ? putTrimmed(cache, req.url, r.clone(), limit).then(() => r, () => r) : r);
   if (!hit) { try { return await live; } catch { return Response.error(); } }
   waitUntil(live.catch(() => {}));
   try { const r = await withTimeout(live, ms); if (good(r)) return r; } catch {}

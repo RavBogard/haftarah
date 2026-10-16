@@ -160,6 +160,19 @@ test("handle: an uncached Sefaria answer waits for a slow network", async () => 
   assert.equal(e.type, "error", "only a failed fetch is an error");
 });
 
+test("handle: a cache write that fails never costs the reader the live answer", async () => {
+  class FullCaches extends FakeCaches {
+    async open(name) { const c = await super.open(name); c.put = async () => { throw new DOMException("quota", "QuotaExceededError"); }; return c; }
+  }
+  const pending = [];
+  const u = `${SEFARIA_ORIGIN}/api/texts/Isaiah.54.3`;
+  const r = await handle({ url: u, method: "GET", mode: "cors" }, env(new FullCaches(), () => Promise.resolve(ok("live answer"))), p => pending.push(p));
+  assert.equal(await r.text(), "live answer", "an uncached network-first answer survives a failed put");
+  const w = await handle(get("/data/weeks/2026-10-17-noach/sheet.json"), env(new FullCaches(), () => Promise.resolve(ok("the week"))), p => pending.push(p));
+  assert.equal(await w.text(), "the week", "an uncached week file survives a failed put");
+  await Promise.allSettled(pending);
+});
+
 test("handle: a slow refresh of a cached index still lands in the cache afterwards", async () => {
   const caches = new FakeCaches();
   const pending = [];
