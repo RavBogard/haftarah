@@ -36,7 +36,7 @@ A Mikraot Gedolot for a Reform study table: Sefaria's sources, pulled live each 
 - Hebrew is set with vowels and cantillation (Tikkun-grade), so the Hebrew face must carry the full te'amim range with correct mark placement.
 - No page target; the build reports the count. Commentary volume is the variable the rabbi controls.
 - Every commentary entry is keyed to a verse or verse range and labeled by register (traditional, modern, historical-critical) and by source.
-- Each sheet opens with a front page: calendar reason, historical setting, legend, voices. Discussion questions are never printed. A glossary of names and places and a next-week line close the sheet.
+- Each sheet opens with a front page: calendar reason, historical setting, the keys line, voices. Discussion questions are never printed. A glossary of names and places and a next-week line close the sheet.
 - An optional chanter's copy (`sheet-trope.pdf`) highlights the trope phrases in the Hebrew by family, for the few who chant. It is built only when a chanter asks and is not delivered to Drive.
 - Every delivered sheet is also a native web page (landing page with an index, one page per week, Sefaria panels for sources and words, trope colors, dark mode, text size); the printed sheet stays the primary object and never changes for the web's sake.
 

@@ -76,7 +76,7 @@ export function parsePick(text) {
   return { kind: "aliyah", from, to };
 }
 
-/** The pick a congregation's customs make without asking. A weekly selection (CRC) waits for Daniel: null. */
+/** The pick a congregation's customs make without asking. A selection (CRC, on request) waits for Daniel: null. */
 export function defaultPick(customs) {
   const mode = customs && customs.torah && customs.torah.mode;
   return mode === "triennial" ? { kind: "triennial" } : mode === "full" ? { kind: "full" } : null;
