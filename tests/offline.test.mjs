@@ -95,21 +95,84 @@ test("handle: the shell is answered from the cache, and fetched into it on a mis
   assert.ok(await shell.match(new URL("/web.css", ORIGIN).href), "the miss was put back");
 });
 
-test("handle: a navigation goes to the network first and falls back to the cached shell for the path", async () => {
+test("handle: a navigation to a known page is answered from the cached shell for the path", async () => {
   const caches = new FakeCaches();
   await precacheAll({ caches, build: "abc123def456", precache: PRE });
-  const online = env(caches, () => Promise.resolve(new Response("<html>live</html>", { status: 200 })));
-  assert.equal(await (await handle(get("/2026-10-17-noach", "navigate"), online, () => {})).text(), "<html>live</html>");
   const down = env(caches, offline);
   assert.equal(await (await handle(get("/2026-10-17-noach", "navigate"), down, () => {})).text(), "body of /sheet.html");
   assert.equal(await (await handle(get("/noach", "navigate"), down, () => {})).text(), "body of /library.html");
   assert.equal(await (await handle(get("/", "navigate"), down, () => {})).text(), "body of /");
   assert.equal(await (await handle(get("/nope", "navigate"), down, () => {})).text(), "body of /404.html");
   const slow = env(caches, () => new Promise(() => {}), { timeoutMs: 10 });
-  assert.equal(await (await handle(get("/2026-10-17-noach", "navigate"), slow, () => {})).text(), "body of /sheet.html", "a hung network falls back after the timeout");
+  assert.equal(await (await handle(get("/2026-10-17-noach", "navigate"), slow, () => {})).text(), "body of /sheet.html", "a hung network never delays a cached page");
+  assert.equal(await (await handle(get("/nope", "navigate"), slow, () => {})).text(), "body of /404.html", "an unknown path falls back after the timeout");
   const empty = env(new FakeCaches(), offline);
   const r = await handle(get("/2026-10-17-noach", "navigate"), empty, () => {});
   assert.equal(r.type, "error", "no shell cached and no network: an error response, never a hang");
+});
+
+test("handle: a page load with the network up still gets the cached shell for this build", async () => {
+  const caches = new FakeCaches();
+  await precacheAll({ caches, build: "abc123def456", precache: PRE });
+  let fetched = 0;
+  const online = env(caches, () => { fetched++; return Promise.resolve(new Response("<html>new build</html>", { status: 200 })); });
+  assert.equal(await (await handle(get("/2026-10-17-noach", "navigate"), online, () => {})).text(), "body of /sheet.html");
+  assert.equal(await (await handle(get("/", "navigate"), online, () => {})).text(), "body of /");
+  assert.equal(await (await handle(get("/5787/noach", "navigate"), online, () => {})).text(), "body of /library.html");
+  assert.equal(fetched, 0, "the network is not asked while this build's shell is cached");
+  const shell = await caches.open(shellCache("abc123def456"));
+  await shell.delete(new URL("/sheet.html", ORIGIN).href);
+  assert.equal(await (await handle(get("/2026-10-17-noach", "navigate"), online, () => {})).text(), "<html>new build</html>", "a cache miss goes to the network");
+  assert.equal(fetched, 1);
+  assert.equal(await shell.match(new URL("/sheet.html", ORIGIN).href), undefined, "the live page is not cached");
+  assert.equal(await shell.match(new URL("/2026-10-17-noach", ORIGIN).href), undefined);
+});
+
+test("handle: a page load for an unknown path goes to the network and falls back to the cached 404 page", async () => {
+  const caches = new FakeCaches();
+  await precacheAll({ caches, build: "abc123def456", precache: PRE });
+  let fetched = 0;
+  const online = env(caches, () => { fetched++; return Promise.resolve(new Response("<html>server 404</html>", { status: 404 })); });
+  const live = await handle(get("/nothing-here", "navigate"), online, () => {});
+  assert.equal(await live.text(), "<html>server 404</html>");
+  assert.equal(fetched, 1);
+  const down = env(caches, offline);
+  assert.equal(await (await handle(get("/nothing-here", "navigate"), down, () => {})).text(), "body of /404.html");
+});
+
+test("handle: a navigation under /data/ is left to the browser", async () => {
+  const caches = new FakeCaches();
+  await precacheAll({ caches, build: "abc123def456", precache: PRE });
+  const down = env(caches, offline);
+  assert.equal(handle(get("/data/weeks/2026-10-17-noach/sheet.pdf", "navigate"), down, () => {}), null);
+  assert.equal(handle(get("/data/weeks/2026-10-17-noach/sheet-torah.pdf", "navigate"), down, () => {}), null);
+});
+
+test("handle: an uncached Sefaria answer waits for a slow network", async () => {
+  const caches = new FakeCaches();
+  const pending = [];
+  const u = `${SEFARIA_ORIGIN}/api/texts/Isaiah.54.3`;
+  const slow = env(caches, () => new Promise(res => setTimeout(() => res(ok("late answer")), 40)), { timeoutMs: 5 });
+  const r = await handle({ url: u, method: "GET", mode: "cors" }, slow, p => pending.push(p));
+  assert.equal(await r.text(), "late answer", "no timeout when nothing is cached");
+  assert.ok(await (await caches.open(SEFARIA_CACHE)).match(u), "and it is cached");
+  const e = await handle({ url: `${SEFARIA_ORIGIN}/api/texts/Never.1.1`, method: "GET", mode: "cors" }, env(caches, offline), () => {});
+  assert.equal(e.type, "error", "only a failed fetch is an error");
+});
+
+test("handle: a slow refresh of a cached index still lands in the cache afterwards", async () => {
+  const caches = new FakeCaches();
+  const pending = [];
+  const wait = p => pending.push(p);
+  await handle(get("/data/index.json"), env(caches, () => Promise.resolve(ok('{"weeks":[1]}'))), wait);
+  await Promise.all(pending);
+  pending.length = 0;
+  const slow = env(caches, () => new Promise(res => setTimeout(() => res(ok('{"weeks":[1,2]}')), 40)), { timeoutMs: 5 });
+  assert.equal(await (await handle(get("/data/index.json"), slow, wait)).text(), '{"weeks":[1]}', "the cached copy, hastened by the timeout");
+  assert.equal(pending.length, 1, "the live request is kept alive through waitUntil");
+  await Promise.all(pending);
+  const cached = await (await caches.open(DATA_CACHE)).match(new URL("/data/index.json", ORIGIN).href);
+  assert.equal(await cached.text(), '{"weeks":[1,2]}', "the slow answer filled the cache");
 });
 
 test("handle: a week file is answered from the cache and refreshed behind it; the next request gets the new body", async () => {

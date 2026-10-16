@@ -31,8 +31,8 @@ test("buildSite --out: only site/dist or a folder outside the repo; ., site, tem
   assert.doesNotThrow(() => checkOut(join(tmpdir(), "site-out")));
 });
 
-test("precacheList: every shipped file but the worker and the licence texts, index.html as /", () => {
-  assert.deepEqual(precacheList(["sw.js", "index.html", "app/a.js", "fonts/OFL-literata.txt", "web.css"]), ["/", "/app/a.js", "/web.css"]);
+test("precacheList: every shipped file but the worker, the licence texts and the unused Ezra SIL SR, index.html as /", () => {
+  assert.deepEqual(precacheList(["sw.js", "index.html", "app/a.js", "fonts/OFL-literata.txt", "web.css", "fonts/EzraSIL-SR.ttf", "fonts/EzraSIL.ttf"]), ["/", "/app/a.js", "/fonts/EzraSIL.ttf", "/web.css"]);
 });
 
 test("buildHash: 12 hex characters, independent of order, changed by one byte", () => {
@@ -63,6 +63,7 @@ test("buildSite writes the worker with its build hash and precache list; the has
     assert.ok(sw.includes(`const PRECACHE = ${JSON.stringify(r.precache)}`), "the precache list is written");
     for (const p of ["/", "/sheet.html", "/library.html", "/404.html", "/web.css", "/lib.js", "/app/sheet.js", "/fonts/EzraSIL.ttf", "/geo/basemap.json", "/mural.png", "/manifest.webmanifest", "/icons/icon-192.png", "/icons/maskable-512.png"]) assert.ok(r.precache.includes(p), p);
     assert.ok(!r.precache.includes("/sw.js"));
+    assert.ok(!r.precache.includes("/fonts/EzraSIL-SR.ttf") && r.files.includes("fonts/EzraSIL-SR.ttf"), "Ezra SIL SR is shipped, not precached");
     assert.ok(!r.precache.some(p => p.endsWith(".txt")), "no licence text");
     assert.equal((await buildSite({ out: two })).build, r.build, "the same sources give the same build");
     let bytes = 0;

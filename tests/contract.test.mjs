@@ -86,6 +86,8 @@ test("formatMarks and parseMarks: a reader's marks in a share link; a bare chapt
   assert.deepEqual(parseMarks("#m=haftarah-54-3,54-9", "haftarah"), ["haftarah-54-3", "haftarah-54-9"]);
   assert.deepEqual(parseMarks("#m=torah-6-9,haftarah-54-3,junk,,haftarah-54-3", "haftarah"), ["torah-6-9", "haftarah-54-3"]);
   assert.deepEqual(parseMarks("#m=", "haftarah"), []);
+  assert.deepEqual(parseMarks("#m=haftarah-54-3%2Chaftarah-54-9", "haftarah"), ["haftarah-54-3", "haftarah-54-9"], "percent-encoded commas");
+  assert.deepEqual(parseMarks("#m=haftarah-54-3,%E0%A4%A", "haftarah"), ["haftarah-54-3"], "a malformed escape is read raw, and dropped");
   assert.equal(parseMarks("#haftarah-54-3", "haftarah"), null);
   assert.equal(parseMarks("", "haftarah"), null);
   const list = ["torah-6-9", "haftarah-54-3", "haftarah-54-10"];

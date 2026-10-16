@@ -230,7 +230,7 @@ sup.fn button::after { content: ""; position: absolute; inset: -.7em -.35em; }
 .status { margin: 2rem 0; color: var(--ink-2); font-style: italic; } .status a { color: var(--rubric); }
 /* the strips under the masthead: the update note (offline-client.js), a new build waiting for the next
    launch; and marks shared in the address (sheet.js). Never on the shared screen. */
-.strip { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0 1rem; margin: 1rem 0 0; padding: .6rem .9rem; border: .5px solid var(--rule); font-size: .95rem; }
+.strip { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0 1rem; margin: 1rem 0 0; padding: .6rem .9rem; border: .5px solid var(--rule); background: var(--paper); font-size: .95rem; }
 .strip .strip-acts { display: flex; flex-wrap: wrap; gap: 0 1rem; }
 .strip .act { min-height: max(2.75rem, 44px); color: var(--rubric); font-weight: 500; }
 html[data-present] .strip { display: none; }

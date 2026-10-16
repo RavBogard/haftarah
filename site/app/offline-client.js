@@ -1,8 +1,10 @@
 // The page's side of the offline app (spec 5.10): register the worker, say when a new build is
-// waiting (it is used on the next launch; the page is never reloaded), and warm this week's sheet
-// into the cache from the landing. Nothing here runs in the presenter: the note is hidden by CSS
+// waiting (it is used on the next launch; the page is never reloaded), and warm a week's sheet
+// into the cache (this week's from the landing; the open week's on a first visit, once the worker takes
+// control). Nothing here runs in the presenter: the note is hidden by CSS
 // while html[data-present] is set.
 import { SW_URL, dataUrl } from "./contract.js";
+import { hideKeepingFocus } from "./a11y.js";
 
 export const UPDATE_TEXT = "This site has been updated. The new version opens the next time you launch it.";
 export const OFFLINE_LOAD_TEXT = "You’re offline, and this sheet isn’t saved on this device yet.";
@@ -27,7 +29,7 @@ export function showUpdate(host, { text = UPDATE_TEXT } = {}) {
   host.textContent = "";
   const span = document.createElement("span"); span.textContent = text;
   const b = document.createElement("button"); b.type = "button"; b.className = "act"; b.textContent = "Dismiss";
-  b.addEventListener("click", () => { host.hidden = true; });
+  b.addEventListener("click", () => { hideKeepingFocus(host); });   // focus, if it was on Dismiss, goes to the Aa button
   host.append(span, b);
   host.hidden = false;
 }
@@ -105,4 +107,18 @@ export async function settleOffline(offlineReady, { nav = navigator, ...opts } =
 export async function warmWeek(slug, { nav = navigator, fetchImpl = fetch } = {}) {
   if (!slug || !nav || !nav.serviceWorker || !nav.serviceWorker.controller) return "skipped";
   try { await fetchImpl(dataUrl(slug, "sheet.json")); return slug; } catch { return "skipped"; }
+}
+
+/**
+ * A first visit: the page fetched its week before any worker controlled it, so the week was not
+ * cached. When the worker takes control (it claims clients on activating), ask for the week once more,
+ * through it. A page controlled from the start skips this: its own fetch went through the worker.
+ * `skip()` is asked at that moment (the presenter never warms). Resolves to warmWeek's answer.
+ */
+export function warmOnControl(slug, { nav = navigator, fetchImpl = fetch, skip = () => false } = {}) {
+  const sw = nav && nav.serviceWorker;
+  if (!slug || !sw || sw.controller || typeof sw.addEventListener !== "function") return Promise.resolve("skipped");
+  return new Promise(resolve => {
+    sw.addEventListener("controllerchange", () => resolve(skip() ? "skipped" : warmWeek(slug, { nav, fetchImpl })), { once: true });
+  });
 }

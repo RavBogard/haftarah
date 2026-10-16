@@ -7,12 +7,12 @@ import { load, key } from "./storage.js";
 import { MARKS_KEY, readMarks, writeMarks, toggleMark, orderMarks, marksLink, marksText, sharedText, MARK, UNMARK, MY_MARKS, MARKS_EMPTY, MARKS_UNSAVED, COPY_LINK, COPY_TEXT, REMOVE, ADD_SHARED, DISMISS } from "./marks.js";
 
 export { slugFromPath, dataUrl };
-import { initRoving, focusables } from "./a11y.js";
+import { initRoving, focusables, hideKeepingFocus } from "./a11y.js";
 import { createAnalytics } from "./analytics.js";
 import { initPresent, isPresent } from "./present.js";
 import { hasFigures, renderFigures } from "./figures.js";
 import { installCard } from "./install.js";
-import { registerOffline, showUpdate, loadFailure, settleOffline, held } from "./offline-client.js";
+import { registerOffline, showUpdate, loadFailure, settleOffline, held, warmOnControl } from "./offline-client.js";
 
 const DRIVE = "https://drive.google.com/drive/folders/1TbSmoeBaCSLciL_-_HSCuKWkJMSZvGwd";
 const errorsSeen = [];   // filled in check mode (?check=1) by the error listeners in run()
@@ -523,23 +523,26 @@ export async function run() {
   // Marks shared in the address (#m=…): those on this page are outlined, and a strip offers to keep them.
   const sharedHost = $("shared");
   let shared = orderMarks(parseMarks(location.hash, reading.id) || [], rowIds());
-  function clearShared() {
+  // The strip closing with focus on its button: focus goes to `focusTo()`, else the Aa button.
+  function clearShared({ focusTo = null } = {}) {
     shared = [];
     rows.forEach(r => r.row.classList.remove("shared"));
-    sharedHost.hidden = true; sharedHost.textContent = "";
-    history.replaceState(null, "", location.pathname + location.search);
+    hideKeepingFocus(sharedHost, { target: focusTo }); sharedHost.textContent = "";
+    // Only a #m= fragment is removed: a verse link the reader has followed since stays.
+    if (location.hash.startsWith("#m=")) history.replaceState(null, "", location.pathname + location.search);
   }
   function acceptShared() {
     const ids = rowIds(), union = [...new Set([...marks, ...shared])];
+    const first = rowById(shared.find(m => !marks.includes(m)) || shared[0]);   // the first verse this adds
     saveMarks([...orderMarks(union, ids), ...union.filter(m => !ids.includes(m))]);
-    clearShared();
+    clearShared({ focusTo: () => first && gutButton(first) });
   }
   if (shared.length) {
     rows.forEach(r => r.row.classList.toggle("shared", shared.includes(r.row.id)));
     const span = el("span"); span.textContent = sharedText(shared.length);
     const acts = el("span", "strip-acts");
     const add = el("button", "act"); add.type = "button"; add.textContent = ADD_SHARED; add.addEventListener("click", acceptShared);
-    const no = el("button", "act"); no.type = "button"; no.textContent = DISMISS; no.addEventListener("click", clearShared);
+    const no = el("button", "act"); no.type = "button"; no.textContent = DISMISS; no.addEventListener("click", () => clearShared());
     acts.append(add, no);
     sharedHost.append(span, acts);
     sharedHost.hidden = false;
@@ -554,12 +557,15 @@ export async function run() {
     text: () => marksText(api.marks.list().map(id => { const r = rowById(id); return { ref: L.enDash(r.v.ref), en: verseEn(r) }; }),
       { translation: translationLabel(model.front.provenance.en), link: api.marks.link() }),
     reload: () => { marks = readMarks(slug); renderMarks(); },
-    acceptShared, dismissShared: clearShared,
+    acceptShared, dismissShared: () => clearShared(),
   };
   settings.setMarksCount(api.marks.list().length);
   // Marks changed in another tab of this site: follow them.
   addEventListener("storage", e => { if (e.key === key(MARKS_KEY(slug))) api.marks.reload(); });
   // The offline app: register the worker; a new build waiting says so under the masthead (never reloads).
+  // On a first visit the week was fetched before the worker controlled the page: once it takes
+  // control, the week is asked for again through it, so it opens offline next time (never in the presenter).
+  api.warmed = warmOnControl(slug, { skip: () => !!html.dataset.present });
   const offlineReady = registerOffline({ onUpdate: () => showUpdate($("update")) });
   api.offlineReady = offlineReady;
 
@@ -669,8 +675,11 @@ async function runCheck(api, L) {
     const keysOf = async name => { const c = await held(caches.open(name), { fetchImpl, fallback: null }); return c ? held(c.keys(), { fetchImpl, fallback: [] }) : []; };
     const names = (await held(caches.keys(), { fetchImpl, fallback: [] })).filter(n => n.startsWith(CACHE_PREFIX + "shell-"));
     h.dataset.checkSwShell = names.length === 1 ? String((await keysOf(names[0])).length) : `caches:${names.length}`;
-    await fetch(dataUrl(api.slug, "sheet.json")).catch(() => {});   // through the worker now
+    // A reader's path first: on this first visit the page itself asks for its week again once the worker takes control.
     const week = location.origin + dataUrl(api.slug, "sheet.json");
+    h.dataset.checkSwWarm = String(await held(api.warmed, { fetchImpl, fallback: "timeout" }));
+    h.dataset.checkSwWarmCached = String((await keysOf(DATA_CACHE)).some(r => r.url === week));
+    await fetch(dataUrl(api.slug, "sheet.json")).catch(() => {});   // through the worker now
     h.dataset.checkSwWeek = String((await keysOf(DATA_CACHE)).some(r => r.url === week));
   }
   h.dataset.checkSwRounds = String(rounds);   // how long the worker took, in requests (web-check prints it)
@@ -680,8 +689,10 @@ async function runCheck(api, L) {
   showUpdate(note);
   const dismiss = note.querySelector("button");
   h.dataset.checkUpdateMin = String(Math.floor(dismiss.getBoundingClientRect().height));
+  dismiss.focus();   // as a keyboard or a tap leaves it: focus goes to the Aa button when the note goes
   dismiss.click();
   h.dataset.checkUpdateDismiss = String(note.hidden);
+  h.dataset.checkUpdateFocus = document.activeElement ? document.activeElement.id || document.activeElement.tagName : "";
   const wide = matchMedia("(min-width: 1100px)").matches;
   h.dataset.checkVerses = String(rows.length);
   h.dataset.checkKeys = api.model.sequence.join(",");
@@ -761,7 +772,12 @@ async function runCheck(api, L) {
   if (location.hash.startsWith("#m=")) {
     h.dataset.checkShared = String(document.querySelectorAll("#text .row.shared").length);
     h.dataset.checkSharedStrip = document.getElementById("shared").hidden ? "hidden" : "shown";
+    const firstShared = document.querySelector("#text .row.shared");
+    const addBtn = document.querySelector("#shared button");
+    if (addBtn) addBtn.focus();   // Add to my marks, as a reader presses it: focus lands on the first added verse's number
     api.marks.acceptShared();
+    const fsb = firstShared && firstShared.querySelector(".gut button");
+    h.dataset.checkSharedFocus = String(!!fsb && document.activeElement === fsb);
     h.dataset.checkSharedAdded = String(api.marks.list().length);
     h.dataset.checkSharedHash = location.hash;
   }

@@ -26,9 +26,12 @@ export function checkOut(out) {
   return out;
 }
 
-/** The shell paths the worker holds: every output file but the worker itself and the licence texts; index.html is "/". */
+/** Copied but used by neither stylesheet: shipped, never precached. */
+const NOT_PRECACHED = new Set(["fonts/EzraSIL-SR.ttf"]);
+
+/** The shell paths the worker holds: every output file but the worker itself, the licence texts and NOT_PRECACHED; index.html is "/". */
 export function precacheList(files) {
-  return files.filter(f => f !== "sw.js" && !f.endsWith(".txt")).map(f => f === "index.html" ? "/" : `/${f}`).sort();
+  return files.filter(f => f !== "sw.js" && !f.endsWith(".txt") && !NOT_PRECACHED.has(f)).map(f => f === "index.html" ? "/" : `/${f}`).sort();
 }
 
 /** sha256 over [path, bytes] pairs in path order, the first 12 hex characters. */

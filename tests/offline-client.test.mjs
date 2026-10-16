@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { registerOffline, loadFailure, warmWeek, holdUntil, held, waitForControl, settleOffline, UPDATE_TEXT, OFFLINE_LOAD_TEXT } from "../site/app/offline-client.js";
+import { registerOffline, loadFailure, warmWeek, warmOnControl, holdUntil, held, waitForControl, settleOffline, UPDATE_TEXT, OFFLINE_LOAD_TEXT } from "../site/app/offline-client.js";
 import { SW_URL, dataUrl } from "../site/app/contract.js";
 
 // A navigator whose register resolves to `reg`; the listeners the page adds are kept so a test can fire them.
@@ -98,6 +98,40 @@ test("warmWeek: fetches the week's sheet.json once a worker controls the page", 
   const fetchImpl = async u => { urls.push(u); return { ok: true }; };
   assert.equal(await warmWeek("2026-10-17-noach", { nav: { serviceWorker: { controller: {} } }, fetchImpl }), "2026-10-17-noach");
   assert.deepEqual(urls, [dataUrl("2026-10-17-noach", "sheet.json")]);
+});
+
+// A navigator.serviceWorker whose controllerchange the test fires.
+function swNav(controller = null) {
+  const sw = { controller, listeners: [], addEventListener(t, fn, o) { if (t === "controllerchange") this.listeners.push({ fn, once: !!(o && o.once) }); },
+    take(c = {}) { this.controller = c; const ls = this.listeners; this.listeners = ls.filter(l => !l.once); for (const l of ls) l.fn(); } };
+  return { serviceWorker: sw };
+}
+
+test("warmOnControl: a first visit asks for its week once, through the worker, when the worker takes control", async () => {
+  const urls = [];
+  const fetchImpl = async u => { urls.push(u); return { ok: true }; };
+  const nav = swNav(null);
+  const p = warmOnControl("2026-10-17-noach", { nav, fetchImpl });
+  await Promise.resolve();
+  assert.deepEqual(urls, [], "nothing before control");
+  nav.serviceWorker.take();
+  assert.equal(await p, "2026-10-17-noach");
+  nav.serviceWorker.take();
+  await Promise.resolve();
+  assert.deepEqual(urls, [dataUrl("2026-10-17-noach", "sheet.json")], "once only");
+});
+
+test("warmOnControl: a page controlled from the start, no slug, no worker support or the presenter warms nothing", async () => {
+  const urls = [];
+  const fetchImpl = async u => { urls.push(u); return { ok: true }; };
+  assert.equal(await warmOnControl("2026-10-17-noach", { nav: swNav({}), fetchImpl }), "skipped");
+  assert.equal(await warmOnControl(null, { nav: swNav(null), fetchImpl }), "skipped");
+  assert.equal(await warmOnControl("2026-10-17-noach", { nav: {}, fetchImpl }), "skipped");
+  const nav = swNav(null);
+  const p = warmOnControl("2026-10-17-noach", { nav, fetchImpl, skip: () => true });
+  nav.serviceWorker.take();
+  assert.equal(await p, "skipped");
+  assert.deepEqual(urls, []);
 });
 
 test("warmWeek: no controller, no slug or a failed fetch is skipped", async () => {

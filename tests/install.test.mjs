@@ -81,9 +81,22 @@ test("installCard shows the title, the two steps and the note, and Not now store
   assert.equal(installCard({ host: again, nav: IPAD, matchMedia: noMedia, storage, doc }), "hidden");
 });
 
+test("Not now with focus on it moves focus to the Aa button", () => {
+  const doc = fakeDoc(), host = doc.make("section"), storage = memory();
+  const aa = { id: "aaBtn", focus() { doc.activeElement = aa; } };
+  doc.getElementById = id => (id === "aaBtn" ? aa : null);
+  host.contains = n => host.children.includes(n);
+  installCard({ host, nav: IPHONE, matchMedia: noMedia, storage, doc });
+  const b = host.children.at(-1);
+  doc.activeElement = b;
+  b.click();
+  assert.equal(host.hidden, true);
+  assert.equal(doc.activeElement, aa);
+});
+
 test("the strings are the approved ones", () => {
   assert.equal(INSTALL_TITLE("iPhone"), "Keep these sheets on this iPhone");
   assert.deepEqual(INSTALL_STEPS, ["Tap Share (the square with an arrow).", "Tap Add to Home Screen."]);
-  assert.equal(INSTALL_NOTE, "Sheets you have opened stay readable without a connection, and your marks are kept.");
+  assert.equal(INSTALL_NOTE, "Sheets you open from the Home Screen stay readable without a connection, and marks made there are kept.");
   assert.equal(NOT_NOW, "Not now");
 });

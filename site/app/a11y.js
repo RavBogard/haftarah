@@ -51,3 +51,19 @@ export function trapFocus(host, isOpen) {
     if (j != null) { e.preventDefault(); list[j].focus(); }
   });
 }
+
+/**
+ * Hide `host`, a strip or card that puts itself away. If focus was inside it, focus moves to
+ * `target()` when that gives an element, else to the Aa button (on every page), so it is not dropped
+ * to the start of the page; with neither on the page nothing moves. Returns the element focused, or null.
+ */
+export function hideKeepingFocus(host, { target = null, doc = globalThis.document } = {}) {
+  const active = doc ? doc.activeElement : null;
+  const had = !!active && typeof host.contains === "function" && host.contains(active);
+  host.hidden = true;
+  if (!had) return null;
+  const to = (target && target()) || (typeof doc.getElementById === "function" ? doc.getElementById("aaBtn") : null);
+  if (!to || typeof to.focus !== "function") return null;
+  to.focus({ preventScroll: true });
+  return to;
+}

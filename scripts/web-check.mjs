@@ -152,10 +152,12 @@ async function main() {
       expect("the worker registers and controls the page", a.sw === "active", a.sw);
       console.log(`      (the page held Chrome's virtual clock for ${a["sw-rounds"] ?? "?"} requests while the worker settled)`);
       expect("the shell is precached in full", Number(a["sw-shell"]) === precache.length, `${a["sw-shell"]} (precache: ${precache.length})`);
+      expect("a first visit caches its own week once the worker takes control", a["sw-warm"] === slug && a["sw-warm-cached"] === "true", `${a["sw-warm"]} ${a["sw-warm-cached"]}`);
       expect("the week file is cached once the worker serves it", a["sw-week"] === "true", a["sw-week"]);
       expect("no update note on a first install", a.update === "hidden", a.update);
       expect("no install card in a desktop browser", a.install === "hidden", a.install);
       expect("the update note's Dismiss is a 44px target and puts the note away", Number(a["update-min"]) >= 44 && a["update-dismiss"] === "true", `${a["update-min"]} ${a["update-dismiss"]}`);
+      expect("focus goes to the Aa button when Dismiss puts the note away", a["update-focus"] === "aaBtn", a["update-focus"]);
       expect("rows carry the reading in their id",a.anchor === `${flat[0].reading}-${flat[0].chapter}-${flat[0].verse}`, a.anchor);
       if (extra.highlights) {
         expect("a teacher highlight marks one verse", a.highlights === "1", a.highlights);
@@ -256,6 +258,7 @@ async function main() {
     expect("shared marks: page finished without errors", sm.done === "1" && sm.errors === "0", `${sm.done} ${sm.errors}`);
     expect("shared marks outline the verses on the page", sm.shared === "2" && sm["shared-strip"] === "shown", `${sm.shared} ${sm["shared-strip"]}`);
     expect("Add to my marks keeps them", sm["shared-added"] === "2", sm["shared-added"]);
+    expect("focus lands on the first added verse's number", sm["shared-focus"] === "true", sm["shared-focus"]);
     expect("the address loses the marks once added", sm["shared-hash"] === "", sm["shared-hash"]);
     const sn = attrs(await dumpDom(browser, `${base}/${slug}?check=1#m=99-99`, { size: "1440,900" }));
     expect("a shared mark on no verse shows no strip", sn.done === "1" && sn.errors === "0" && sn.shared === "0" && sn["shared-strip"] === "hidden", `${sn.done} ${sn.errors} ${sn.shared} ${sn["shared-strip"]}`);

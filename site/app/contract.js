@@ -59,8 +59,10 @@ export const formatMarks = anchors => `m=${anchors.join(",")}`;
 export function parseMarks(hash, primaryReading) {
   const h = String(hash == null ? "" : hash).replace(/^#/, "");
   if (!h.startsWith("m=")) return null;
+  let list = h.slice(2);
+  try { list = decodeURIComponent(list); } catch {}   // a mail client may write the commas as %2C; a malformed escape stays raw
   const out = [];
-  for (const item of h.slice(2).split(",")) {
+  for (const item of list.split(",")) {
     const a = parseVerseAnchor(item.startsWith("v") ? item : /^\d/.test(item) ? `v${item}` : item);
     if (!a) continue;
     const anchor = verseAnchor(a.reading == null ? primaryReading : a.reading, a.chapter, a.verse);

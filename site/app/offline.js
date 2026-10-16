@@ -1,12 +1,12 @@
 // The offline app's logic (spec 5.10), pure: what the worker precaches, which cache answers which
-// request, how a navigation falls back to a cached shell when the network is away, and how the week
+// request, how a navigation is answered from this build's cached shell, and how the week
 // files and Sefaria's answers are kept and bounded. sw.js is three listeners over these; the tests
 // drive them with a fake cache storage. Requests arrive as plain records ({ url, method, mode }): a
 // Request cannot be built with mode "navigate" outside a browser.
 import { slugFromPath, shellCache, CACHE_PREFIX, DATA_CACHE, SEFARIA_CACHE, SEFARIA_ORIGIN } from "./contract.js";
 import { isAliasPath } from "./parashot.js";
 
-export const DATA_LIMIT = 60;          // week files and the index: about a year of weeks with their side files
+export const DATA_LIMIT = 60;          // week files and the index: about fifteen weeks at up to four files a week, plus the index
 export const SEFARIA_LIMIT = 100;      // answers kept from Sefaria
 export const NETWORK_TIMEOUT_MS = 3000;
 
@@ -46,9 +46,12 @@ export async function dropOldCaches({ caches, build }) {
   }
 }
 
-/** Put a response and drop the oldest entries past `limit` (the Cache API lists keys in insertion order). */
+/**
+ * Put a response and drop the oldest entries past `limit` (the Cache API lists keys in insertion order,
+ * and a put replaces a matching entry by removing it and appending the new one, so a refresh moves to
+ * the end). No delete first: that would leave a moment with no cached copy for a reader to miss.
+ */
 export async function putTrimmed(cache, url, response, limit) {
-  await cache.delete(url);   // re-putting moves it to the end
   await cache.put(url, response);
   const keys = await cache.keys();
   for (const k of keys.slice(0, Math.max(0, keys.length - limit))) await cache.delete(k);
@@ -70,7 +73,7 @@ export function handle(req, env, waitUntil) {
   if (req.method !== "GET") return null;
   const url = new URL(req.url);
   const timeoutMs = env.timeoutMs ?? NETWORK_TIMEOUT_MS;
-  if (req.mode === "navigate") return navigate(url, req, env, timeoutMs);
+  if (req.mode === "navigate") return url.pathname.startsWith("/data/") ? null : navigate(url, req, env, timeoutMs);
   const kind = classify(url, env);
   if (kind === "shell") return cacheFirst(shellCache(env.build), req, env, waitUntil);
   if (kind === "week") return staleWhileRevalidate(req, env, waitUntil);
@@ -79,11 +82,25 @@ export function handle(req, env, waitUntil) {
   return null;
 }
 
-/** A navigation: the network first (bounded by the timeout), else the cached shell for the path, else an error response. */
+/**
+ * A navigation (one under /data/, a PDF download, is left to the browser before this). A page this
+ * build knows (the landing, a week, a library alias) is answered from this build's shell cache, so an
+ * open tab that reloads after a deploy keeps the old build whole, its HTML with its own scripts and
+ * styles, until the next launch; the network is asked only when that cache misses, and its answer is
+ * not cached. An unknown path goes to the network first (bounded by the timeout), then the cached
+ * 404 page.
+ */
 async function navigate(url, req, env, ms) {
-  try { const live = await withTimeout(env.fetchImpl(req), ms); if (good(live)) return live; } catch {}
-  const shell = await (await env.caches.open(shellCache(env.build))).match(new URL(shellFor(url.pathname), env.origin).href);
-  return shell || Response.error();
+  const shellPath = shellFor(url.pathname);
+  const cache = await env.caches.open(shellCache(env.build));
+  const cached = () => cache.match(new URL(shellPath, env.origin).href);
+  if (shellPath !== "/404.html") {
+    const hit = await cached();
+    if (hit) return hit;
+    try { return await env.fetchImpl(req); } catch { return Response.error(); }
+  }
+  try { const live = await withTimeout(env.fetchImpl(req), ms); if (live) return live; } catch {}
+  return (await cached()) || Response.error();
 }
 
 async function cacheFirst(name, req, env, waitUntil) {
@@ -103,11 +120,18 @@ async function staleWhileRevalidate(req, env, waitUntil) {
   try { return await refresh(); } catch { return Response.error(); }
 }
 
+/**
+ * The index and Sefaria: the network first. With a copy cached, the timeout only hastens it: a slow
+ * network gets the cached copy while the live request finishes behind it (through waitUntil) and fills
+ * the cache when it is good. With nothing cached, the network is waited for however long it takes, and
+ * only a failed fetch is an error response.
+ */
 async function networkFirst(name, req, env, ms, waitUntil, limit) {
   const cache = await env.caches.open(name);
-  try {
-    const live = await withTimeout(env.fetchImpl(req), ms);
-    if (good(live)) { waitUntil(putTrimmed(cache, req.url, live.clone(), limit)); return live; }
-  } catch {}
-  return (await cache.match(req.url)) || Response.error();
+  const hit = await cache.match(req.url);
+  const live = Promise.resolve(env.fetchImpl(req)).then(r => good(r) ? putTrimmed(cache, req.url, r.clone(), limit).then(() => r) : r);
+  if (!hit) { try { return await live; } catch { return Response.error(); } }
+  waitUntil(live.catch(() => {}));
+  try { const r = await withTimeout(live, ms); if (good(r)) return r; } catch {}
+  return hit;
 }

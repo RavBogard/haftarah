@@ -104,6 +104,41 @@ test("trapTarget wraps Tab at the last control and Shift+Tab at the first, and l
   assert.equal(trapTarget(0, 0, false), null);
 });
 
+import { hideKeepingFocus } from "../site/app/a11y.js";
+
+test("hideKeepingFocus: focus inside the host goes to the target, else the Aa button; focus elsewhere stays; no target, nothing moves", () => {
+  const focusEl = (id, doc) => ({ id, focus(o) { doc.activeElement = this; this.opts = o; } });
+  const page = () => {
+    const doc = { activeElement: null, els: {}, getElementById(id) { return this.els[id] || null; } };
+    doc.els.aaBtn = focusEl("aaBtn", doc);
+    const btn = focusEl("dismiss", doc);
+    const host = { hidden: false, contains: n => n === btn };
+    return { doc, btn, host };
+  };
+  let { doc, btn, host } = page();
+  doc.activeElement = btn;
+  assert.equal(hideKeepingFocus(host, { doc }).id, "aaBtn");
+  assert.equal(host.hidden, true);
+  assert.equal(doc.activeElement.id, "aaBtn");
+  assert.deepEqual(doc.activeElement.opts, { preventScroll: true });
+  ({ doc, btn, host } = page());
+  doc.activeElement = btn;
+  const verse = focusEl("verse", doc);
+  assert.equal(hideKeepingFocus(host, { doc, target: () => verse }), verse);
+  assert.equal(doc.activeElement, verse);
+  ({ doc, btn, host } = page());
+  doc.activeElement = btn;
+  assert.equal(hideKeepingFocus(host, { doc, target: () => null }).id, "aaBtn", "a target that is gone falls back to Aa");
+  ({ doc, btn, host } = page());
+  const other = focusEl("other", doc); doc.activeElement = other;
+  assert.equal(hideKeepingFocus(host, { doc }), null);
+  assert.equal(doc.activeElement, other, "focus elsewhere is left alone");
+  ({ doc, btn, host } = page());
+  doc.activeElement = btn; delete doc.els.aaBtn;
+  assert.equal(hideKeepingFocus(host, { doc }), null, "a page without the Aa button does nothing");
+  assert.equal(host.hidden, true);
+});
+
 import { PREFIX, key, load, store, migrateKeys } from "../site/app/storage.js";
 
 // A Storage that keeps its items in a Map.
