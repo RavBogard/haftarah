@@ -8,9 +8,9 @@
   "installCommand": "npm --prefix api ci --no-audit --no-fund",
   "functions": {
     "api/mcp.mjs": { "maxDuration": 300, "memory": 3009, "includeFiles": "{template/**,assets/logo.png,bibliography/**,customs/**,data/**,api/node_modules/@sparticuz/chromium/bin/**}" },
-    "api/prefetch.mjs": { "maxDuration": 300, "includeFiles": "{customs/**,bibliography/**,data/**}" },
+    "api/prefetch.mjs": { "maxDuration": 300, "includeFiles": "{template/lib.js,customs/**,bibliography/**,data/**}" },
     "api/oauth.mjs": { "maxDuration": 15 },
-    "api/draft.mjs": { "maxDuration": 60 }
+    "api/draft.mjs": { "maxDuration": 60, "includeFiles": "template/lib.js" }
   },
   "crons": [
     { "path": "/api/prefetch", "schedule": "0 3 * * 4" },

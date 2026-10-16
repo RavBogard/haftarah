@@ -3,7 +3,7 @@
 // a request that arrives on the original path is routed by the path instead.
 import { configFrom } from "./_lib/env.mjs";
 import { metadata, resourceMetadata, register, authorize, googleCallback, token } from "./_lib/oauth.mjs";
-import { canonicalOrigin, json, text, readLimitedBody } from "./_lib/http.mjs";
+import { canonicalOrigin, json, text, readLimitedBody, logFailure } from "./_lib/http.mjs";
 
 const MAX_OAUTH_BODY = 16_384;
 const ACTION_BY_PATH = { "/.well-known/oauth-authorization-server": "metadata", "/.well-known/oauth-protected-resource": "resource", "/oauth/authorize": "authorize", "/oauth/token": "token", "/oauth/register": "register", "/oauth/revoke": "revoke", "/api/auth/google/callback": "callback" };
@@ -47,4 +47,4 @@ export function createOauthApp(env, { fetchImpl = globalThis.fetch, now = () => 
   };
 }
 
-export default { async fetch(request) { try { return await createOauthApp(process.env)(request); } catch { return json({ error: "server_error" }, 500); } } };
+export default { async fetch(request) { try { return await createOauthApp(process.env)(request); } catch (err) { logFailure("oauth", err, process.env); return json({ error: "server_error" }, 500); } } };

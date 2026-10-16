@@ -4,12 +4,11 @@ import { handleMcp } from "./_lib/mcp.mjs";
 import { TOOLS, toolCtx } from "./_lib/tools.mjs";
 import { BlobStore } from "./_lib/store.mjs";
 import { bearer, challenge } from "./_lib/oauth.mjs";
-import { canonicalOrigin, json } from "./_lib/http.mjs";
+import { canonicalOrigin, json, logFailure } from "./_lib/http.mjs";
 import { vercelLauncher } from "./_lib/browser.mjs";
+import { INSTRUCTIONS } from "./_lib/instructions.mjs";
 
 export const SERVER_INFO = { name: "haftarah", version: "2.0.0" };
-// A placeholder until the server's instructions are written (api/_lib/instructions.mjs replaces it).
-export const INSTRUCTIONS = "Haftarah sheet pipeline. Never call deliver_week without Daniel's explicit go-ahead. Never invent a citation.";
 
 export function createMcpApp(env, { fetchImpl = globalThis.fetch, launcher = vercelLauncher, store = null, now = () => new Date(), scripts = undefined } = {}) {
   return async request => {
@@ -27,5 +26,5 @@ export function createMcpApp(env, { fetchImpl = globalThis.fetch, launcher = ver
   };
 }
 
-// Vercel's web handler: an object with fetch(request). A failure outside the transport is a bare 500, no stack.
-export default { async fetch(request) { try { return await createMcpApp(process.env)(request); } catch { return json({ error: "server_error" }, 500); } } };
+// Vercel's web handler: an object with fetch(request). A failure outside the transport is a bare 500, logged without its stack.
+export default { async fetch(request) { try { return await createMcpApp(process.env)(request); } catch (err) { logFailure("mcp", err, process.env); return json({ error: "server_error" }, 500); } } };

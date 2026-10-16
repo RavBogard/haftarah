@@ -1,12 +1,13 @@
 // api/draft.mjs — one private PDF for a signed, expiring link (build_sheet makes the links).
 import { configFrom } from "./_lib/env.mjs";
-import { verifyDraft, json } from "./_lib/http.mjs";
+import { verifyDraft, json, logFailure } from "./_lib/http.mjs";
 import { BlobStore } from "./_lib/store.mjs";
 import { isSlug } from "../site/app/contract.js";
 
 const FILES = new Set(["sheet.pdf", "sheet-torah.pdf", "sheet-trope.pdf"]);
 export function createDraftApp(env, { fetchImpl = globalThis.fetch, store = null, now = () => new Date() } = {}) {
   return async (request, over = {}) => {
+    if (request.method !== "GET" && request.method !== "HEAD") return json({ error: "method_not_allowed" }, 405, { allow: "GET, HEAD" });
     const config = configFrom(env);
     const url = new URL(request.url), q = url.searchParams;
     // The rewrite carries slug and file in the query; the original path /api/draft/<slug>/<file> works too.
@@ -17,8 +18,8 @@ export function createDraftApp(env, { fetchImpl = globalThis.fetch, store = null
     let s = store; try { s = s || new BlobStore({ token: config.workingToken, fetchImpl }); } catch { return json({ error: "server_not_configured", missing: ["HAFTARAH_WORKING_READ_WRITE_TOKEN"] }, 503); }
     const bytes = await s.get(`weeks/${slug}/${file}`);
     if (!bytes) return json({ error: "not_found" }, 404);
-    return new Response(bytes, { status: 200, headers: { "content-type": "application/pdf", "content-disposition": `inline; filename="${slug} ${file}"`, "cache-control": "no-store", "referrer-policy": "no-referrer", "x-content-type-options": "nosniff" } });
+    return new Response(request.method === "HEAD" ? null : bytes, { status: 200, headers: { "content-type": "application/pdf", "content-length": String(bytes.length), "content-disposition": `inline; filename="${slug} ${file}"`, "cache-control": "no-store", "referrer-policy": "no-referrer", "x-content-type-options": "nosniff" } });
   };
 }
 
-export default { async fetch(request) { try { return await createDraftApp(process.env)(request); } catch { return json({ error: "server_error" }, 500); } } };
+export default { async fetch(request) { try { return await createDraftApp(process.env)(request); } catch (err) { logFailure("draft", err, process.env); return json({ error: "server_error" }, 500); } } };

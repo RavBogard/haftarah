@@ -15,7 +15,9 @@ export async function vercelLauncher() {
   const pack = (await import("@sparticuz/chromium")).default;
   const path = await pack.executablePath();
   // chromeFlags already sets headless, the profile and (through the page) the size; the pack's own would fight them.
-  const extraArgs = [...pack.args.filter(a => !a.startsWith("--headless") && !a.startsWith("--user-data-dir") && !a.startsWith("--window-size")), "--no-sandbox"];
+  // A Vercel function has no /dev/shm, and the pack's args do not say so: without --disable-dev-shm-usage the PDF
+  // spawn exits at once ("Creating shared memory in /dev/shm/... failed"). Playwright adds it itself for the images.
+  const extraArgs = [...pack.args.filter(a => !a.startsWith("--headless") && !a.startsWith("--user-data-dir") && !a.startsWith("--window-size")), "--no-sandbox", "--disable-dev-shm-usage"];
   return {
     browser: browserRecord(path, extraArgs),
     async pages(url, outDir, count, prefix) {

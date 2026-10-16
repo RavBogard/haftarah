@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFile, writeFile, mkdtemp, rm, mkdir } from "node:fs/promises";
+import { readFile, writeFile, mkdtemp, rm, mkdir, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { TOOLS, toolCtx, validateInput } from "../api/_lib/tools.mjs";
@@ -98,13 +98,100 @@ test("deliver_week refuses a week whose status is not built; dryRun lists the pl
   } finally { await rm(workDir, { recursive: true, force: true }); }
 });
 
+test("deliver_week whose deliver fails part-way keeps the lines already done, names the error, and leaves the week built", async () => {
+  const { ctx, store, workDir } = await ctxWith();
+  try {
+    await call("build_sheet", { slug: "2026-10-17-noach" }, ctx);
+    ctx.scripts.deliver = async (dir, opts) => { opts.log("public   2026-10-17 Noach Haftarah — Isaiah 54.1-55.5.pdf  420 KB  sha256 ok  https://drive.example/f"); throw new Error("web: the side files did not build"); };
+    const r = await call("deliver_week", { slug: "2026-10-17-noach" }, ctx);
+    assert.equal(r.isError, true);
+    const body = JSON.parse(r.content[0].text);
+    assert.equal(body.delivered, false); assert.equal(body.status, "built"); assert.match(body.error, /side files did not build/);
+    assert.deepEqual(body.lines.map(l => l.split(" ")[0]), ["public"]);
+    assert.equal((await readStatus(store, "2026-10-17-noach")).status, "built");
+    assert.ok(!r.content[0].text.includes("dsecret"));
+  } finally { await rm(workDir, { recursive: true, force: true }); }
+});
+
+test("build_sheet: a sheet saved during the build keeps the status the save left, and the result says build again", async () => {
+  const { ctx, store, workDir } = await ctxWith();
+  try {
+    ctx.scripts.buildWeek = async (dir, opts) => { await writeStatus(store, "2026-10-17-noach", { status: "drafting" }); return fakeBuild(dir, opts); };
+    const r = await call("build_sheet", { slug: "2026-10-17-noach" }, ctx);
+    assert.equal(r.status, "drafting"); assert.equal(r.version, 2); assert.match(r.note, /changed during the build.*build again/);
+    const st = await readStatus(store, "2026-10-17-noach");
+    assert.equal(st.status, "drafting"); assert.equal(st.version, 2); assert.equal(st.built, null);
+  } finally { await rm(workDir, { recursive: true, force: true }); }
+});
+
+test("build_sheet of one reading of a two-reading week leaves it drafting even when that reading passes", async () => {
+  const { ctx, workDir } = await ctxWith();
+  try {
+    const r = await call("build_sheet", { slug: "2026-10-17-noach", reading: "haftarah" }, ctx);
+    assert.deepEqual(r.readings.map(x => [x.kind, x.check.ok]), [["haftarah", true]]);
+    assert.equal(r.status, "drafting");
+  } finally { await rm(workDir, { recursive: true, force: true }); }
+});
+
+test("build_sheet with trope: the chanter's copy is checked on its own and gates built", async () => {
+  const withTrope = async (dir, opts) => { const b = await fakeBuild(dir, opts); const html = join(dir, "sheet-trope.html"), pdf = join(dir, "sheet-trope.pdf"); await writeFile(html, "<html></html>"); await writeFile(pdf, PDF); return { ...b, trope: { html, pdf, pages: 3, bytes: PDF.length } }; };
+  const tropeCheck = ok => async (dir, opts) => opts.trope ? { ok, readings: [{ id: "haftarah", kind: "haftarah", summary: { pages: 3 }, problems: ok ? [] : ["page 3 gap over the ceiling"], diagnostics: [], page: [] }] } : fakeCheck();
+  const failing = await ctxWith({ scripts: { buildWeek: withTrope, checkWeek: tropeCheck(false) } });
+  try {
+    const r = await call("build_sheet", { slug: "2026-10-17-noach", trope: true }, failing.ctx);
+    assert.ok(r.readings.every(x => x.check.ok), "the study sheets are checked without trope");
+    assert.equal(r.trope.check.ok, false); assert.equal(r.trope.pages, 3); assert.ok(r.trope.pdfUrl.includes("/sheet-trope.pdf?"));
+    assert.equal(r.status, "drafting");
+    assert.ok(await failing.store.get("weeks/2026-10-17-noach/sheet-trope.pdf"));
+  } finally { await rm(failing.workDir, { recursive: true, force: true }); }
+  const passing = await ctxWith({ scripts: { buildWeek: withTrope, checkWeek: tropeCheck(true) } });
+  try {
+    const r = await call("build_sheet", { slug: "2026-10-17-noach", trope: true }, passing.ctx);
+    assert.equal(r.trope.check.ok, true); assert.equal(r.status, "built");
+  } finally { await rm(passing.workDir, { recursive: true, force: true }); }
+});
+
+test("get_page_image follows the page list of the latest build, not a longer listing left by an earlier one", async () => {
+  const { ctx, store, workDir } = await ctxWith();
+  try {
+    await store.put("weeks/2026-10-17-noach/pages/haftarah-03.jpg", Buffer.from([0xff, 0xd8, 0xff, 0x03]), "image/jpeg");
+    await call("build_sheet", { slug: "2026-10-17-noach" }, ctx);
+    await assert.rejects(call("get_page_image", { slug: "2026-10-17-noach", reading: "haftarah", page: 3 }, ctx), /no page 3 of the haftarah .*\(2 built\)/);
+    assert.match((await call("get_page_image", { slug: "2026-10-17-noach", reading: "haftarah", page: 2 }, ctx)).content[0].text, /page 2 of 2/);
+  } finally { await rm(workDir, { recursive: true, force: true }); }
+});
+
+test("build_sheet: page images that fail are reported per reading and the PDFs are still stored; a check that throws is \"not checked\"", async () => {
+  const noImages = await ctxWith({ launcher: async () => ({ ...(await fakeLauncher()), pages: async () => { throw new Error("page.goto: Timeout 30000ms"); } }) });
+  try {
+    const r = await call("build_sheet", { slug: "2026-10-17-noach" }, noImages.ctx);
+    assert.ok(r.readings.every(x => /Timeout 30000ms/.test(x.imageError) && x.images.length === 0));
+    for (const f of ["sheet.pdf", "sheet-torah.pdf"]) assert.ok(await noImages.store.get(`weeks/2026-10-17-noach/${f}`), f);
+  } finally { await rm(noImages.workDir, { recursive: true, force: true }); }
+  const noCheck = await ctxWith({ scripts: { buildWeek: fakeBuild, checkWeek: async () => { throw new Error("dump-dom exited 1"); } } });
+  try {
+    const r = await call("build_sheet", { slug: "2026-10-17-noach" }, noCheck.ctx);
+    assert.ok(r.readings.every(x => x.check.ok === false && x.check.problems[0] === "not checked: dump-dom exited 1"));
+    assert.equal(r.status, "drafting");
+  } finally { await rm(noCheck.workDir, { recursive: true, force: true }); }
+});
+
+test("the tools leave no week folder behind in the work folder", async () => {
+  const { ctx, workDir } = await ctxWith();
+  try {
+    await call("build_sheet", { slug: "2026-10-17-noach" }, ctx);
+    await call("deliver_week", { slug: "2026-10-17-noach", dryRun: true }, ctx);
+    assert.deepEqual(await readdir(workDir), []);
+  } finally { await rm(workDir, { recursive: true, force: true }); }
+});
+
 test("build_sheet with the real scripts and this machine's Chrome builds the fixture week and checks it", { skip: findBrowser() ? false : "no Chrome or Edge on this machine", timeout: 240_000 }, async () => {
   const { localLauncher } = await import("../api/_lib/browser.mjs");
   const store = new MemoryStore(), workDir = await mkdtemp(join(tmpdir(), "haftarah-work-"));
   try {
     await writeJson(store, "weeks/2026-10-17-noach/sheet.json", torahWeek);
     await writeStatus(store, "2026-10-17-noach", { status: "drafting" });
-    const ctx = toolCtx({ store, config, now: () => new Date(), log: () => {}, workDir, launcher: localLauncher });
+    const ctx = toolCtx({ store, config, fetchImpl: async () => { throw new Error("no network in tests"); }, now: () => new Date(), log: () => {}, workDir, launcher: localLauncher });
     const r = await call("build_sheet", { slug: "2026-10-17-noach" }, ctx);
     assert.equal(r.status, "built", JSON.stringify(r.readings.map(x => x.check)));
     assert.ok(r.readings.every(x => x.pages >= 1 && x.images.length === x.pages));

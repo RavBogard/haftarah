@@ -2,7 +2,7 @@
 // digest is waiting on Thursday. Idempotent: a week already in the store is left alone (the two schedules
 // cover daylight time and standard time). Vercel sends Authorization: Bearer <CRON_SECRET>; anything else is 401.
 import { configFrom } from "./_lib/env.mjs";
-import { json } from "./_lib/http.mjs";
+import { json, sameSecret, logFailure } from "./_lib/http.mjs";
 import { BlobStore, readStatus } from "./_lib/store.mjs";
 import { TOOLS, toolCtx } from "./_lib/tools.mjs";
 import { nextShabbat, weekSlug, getJSON, leyningUrl } from "../scripts/fetch.mjs";
@@ -12,7 +12,7 @@ const tool = n => TOOLS.find(t => t.name === n);
 export function createPrefetchApp(env, { fetchImpl = globalThis.fetch, store = null, now = () => new Date() } = {}) {
   return async request => {
     const config = configFrom(env);
-    if (!config.cronSecret || request.headers.get("authorization") !== `Bearer ${config.cronSecret}`) return json({ error: "unauthorized" }, 401);
+    if (!config.cronSecret || !sameSecret(request.headers.get("authorization") || "", `Bearer ${config.cronSecret}`)) return json({ error: "unauthorized" }, 401);
     let s = store; try { s = s || new BlobStore({ token: config.workingToken, fetchImpl }); } catch (err) { return json({ error: "server_not_configured", missing: ["HAFTARAH_WORKING_READ_WRITE_TOKEN"], detail: err.message }, 503); }
     const customs = await loadCustoms(config.customs);
     const date = nextShabbat(now());
@@ -28,4 +28,4 @@ export function createPrefetchApp(env, { fetchImpl = globalThis.fetch, store = n
   };
 }
 
-export default { async fetch(request) { try { return await createPrefetchApp(process.env)(request); } catch { return json({ error: "server_error" }, 500); } } };
+export default { async fetch(request) { try { return await createPrefetchApp(process.env)(request); } catch (err) { logFailure("prefetch", err, process.env); return json({ error: "server_error" }, 500); } } };

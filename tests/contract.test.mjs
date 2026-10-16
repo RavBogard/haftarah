@@ -63,6 +63,8 @@ test("vercel.json: the server's rewrites come before the week route, the four fu
   for (const d of ["/api/oauth?action=metadata", "/api/oauth?action=resource", "/api/oauth?action=:action", "/api/oauth?action=callback", "/api/draft?slug=:slug&file=:file"]) assert.ok(v.rewrites.findIndex(r => r.destination === d) < week, d);
   assert.deepEqual(Object.keys(v.functions).sort(), ["api/draft.mjs", "api/mcp.mjs", "api/oauth.mjs", "api/prefetch.mjs"]);
   assert.equal(v.functions["api/mcp.mjs"].maxDuration, 300); assert.ok(v.functions["api/mcp.mjs"].includeFiles.includes("template/**") && v.functions["api/mcp.mjs"].includeFiles.includes("@sparticuz/chromium/bin/**"));
+  // template/lib.js is loaded through createRequire with a literal path, which Vercel's tracer does not follow.
+  for (const f of ["api/mcp.mjs", "api/prefetch.mjs", "api/draft.mjs"]) assert.match(v.functions[f].includeFiles || "", /template\/(\*\*|lib\.js)/, f);
   assert.deepEqual(v.crons.map(c => c.path), ["/api/prefetch", "/api/prefetch"]); assert.ok(v.crons.every(c => /\* \* 4$/.test(c.schedule)));
   assert.equal(v.installCommand, "npm --prefix api ci --no-audit --no-fund");
   const api = JSON.parse(readFileSync(join(ROOT, "api", "package.json"), "utf8"));

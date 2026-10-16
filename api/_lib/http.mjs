@@ -1,5 +1,19 @@
 // api/_lib/http.mjs — small Fetch-API helpers the four functions share.
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac, createHash, timingSafeEqual } from "node:crypto";
+import { configFrom, assertNoSecrets } from "./env.mjs";
+
+/** Equal strings in constant time; hashing both sides first hides the length too. */
+export function sameSecret(a, b) {
+  const h = s => createHash("sha256").update(String(s ?? "")).digest();
+  return timingSafeEqual(h(a), h(b));
+}
+/** One line to the function's log for a failure outside the logic: the name and the first 300 characters of the
+ * message, never the stack, and the message withheld when it holds a credential (checked before it is cut). */
+export function logFailure(fn, err, env, out = console.error) {
+  let msg = String(err?.message || "");
+  try { assertNoSecrets(msg, configFrom(env || {})); } catch { msg = "(message withheld: it held a credential)"; }
+  out(`${fn}:`, err?.name, msg.slice(0, 300));
+}
 
 export const NO_STORE = { "cache-control": "no-store", "referrer-policy": "no-referrer", "x-content-type-options": "nosniff" };
 export const json = (body, status = 200, headers = {}) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", ...NO_STORE, ...headers } });

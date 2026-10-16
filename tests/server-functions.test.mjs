@@ -9,7 +9,7 @@ import { createDraftApp } from "../api/draft.mjs";
 import { createPrefetchApp } from "../api/prefetch.mjs";
 import { MemoryStore, writeJson, writeStatus, readStatus } from "../api/_lib/store.mjs";
 import { pkceChallenge } from "../api/_lib/oauth.mjs";
-import { draftUrl } from "../api/_lib/http.mjs";
+import { draftUrl, logFailure } from "../api/_lib/http.mjs";
 
 const ORIGIN = "https://haftarah.vercel.app";
 const ENV = { PUBLIC_BASE_URL: ORIGIN, HAFTARAH_AUTH_SECRET: "s".repeat(48), GOOGLE_OAUTH_CLIENT_ID: "cid", GOOGLE_OAUTH_CLIENT_SECRET: "gsecret", HAFTARAH_OWNER_EMAILS: "daniel@centralreform.org", HAFTARAH_WORKING_READ_WRITE_TOKEN: "vercel_blob_rw_URJlaSwtVImD5fOT_w", CRON_SECRET: "cron-s", VERCEL: "1" };
@@ -87,6 +87,10 @@ test("the draft function streams a private PDF for a valid signed link and refus
   assert.equal((await draft(new Request(good))).status, 200);
   assert.equal((await draft(new Request(`${ORIGIN}/api/draft?slug=2026-10-17-noach&file=sheet.pdf&exp=${u.searchParams.get("exp")}&sig=bad`))).status, 403);
   assert.equal((await draft(new Request(`${ORIGIN}/api/draft?slug=2026-10-17-noach&file=sheet.pdf&exp=${u.searchParams.get("exp")}&sig=${u.searchParams.get("sig")}`), { now: () => new Date(t + 25 * 3600_000) })).status, 403);
+  const head = await draft(new Request(good, { method: "HEAD" }));
+  assert.equal(head.status, 200); assert.equal(head.headers.get("content-length"), "10"); assert.equal(await head.text(), "");
+  const post = await draft(new Request(good, { method: "POST", body: "x" }));
+  assert.equal(post.status, 405); assert.equal(post.headers.get("allow"), "GET, HEAD");
   const other = new URL(draftUrl(ORIGIN, ENV.HAFTARAH_AUTH_SECRET, "2026-10-17-noach", "texts.json", () => t));
   assert.equal((await draft(new Request(`${ORIGIN}/api/draft?slug=2026-10-17-noach&file=texts.json&exp=${other.searchParams.get("exp")}&sig=${other.searchParams.get("sig")}`))).status, 404);
 });
@@ -106,6 +110,16 @@ test("prefetch: 401 without the cron secret, skips a Shabbat whose week exists, 
     const again = await (await app(new Request(`${ORIGIN}/api/prefetch`, { headers: { authorization: "Bearer cron-s" } }))).json();
     assert.deepEqual(again, { slug: "2026-10-17-noach", skipped: "the week is already in the store" });
   } finally { await rm(workDir, { recursive: true, force: true }); }
+});
+
+test("logFailure writes the name and at most 300 characters of the message, never the stack, and withholds a message that holds a credential", () => {
+  const lines = [], out = (...a) => lines.push(a.join(" "));
+  logFailure("prefetch", new TypeError("x".repeat(400)), ENV, out);
+  assert.equal(lines[0], `prefetch: TypeError ${"x".repeat(300)}`);
+  const err = new Error(`${"y".repeat(299)} ${ENV.HAFTARAH_WORKING_READ_WRITE_TOKEN}`);   // the token straddles the 300-character cut
+  logFailure("mcp", err, ENV, out);
+  assert.equal(lines[1], "mcp: Error (message withheld: it held a credential)");
+  assert.ok(!lines.join("\n").includes("URJlaSwtVImD5fOT_w") && !lines.join("\n").includes("    at "));
 });
 
 test("every function's default export is the web handler Vercel calls: an object with fetch(request)", async () => {
