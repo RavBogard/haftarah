@@ -27,13 +27,18 @@ test("the skill is one page with the standing rules and the run in tool order, a
   const skill = read("plugin/skills/haftarah-sheet/SKILL.md");
   assert.match(skill, /^---\nname: haftarah-sheet\ndescription: .+\n---\n/);
   assert.ok(skill.length < 9000, `one page: ${skill.length} characters`);
-  for (const must of ["approves by printing", "Never invent a citation", "ship it", "deliver_week", "get_calendar", "start_week", "fetch_texts", "get_texts", "save_entries", "build_sheet", "Needs you", "God-language", "set_status", "Sefaria connector"]) assert.ok(skill.includes(must), must);
+  for (const must of ["approves by printing", "Never invent a citation", "ship it", "deliver_week", "get_calendar", "start_week", "fetch_texts", "get_texts", "save_entries", "build_sheet", "Needs you", "God-language", "set_status", "Sefaria connector", "Before you hand him the draft links", "expectedVersion", "version_conflict", "this skill's `draft-entries.md`"]) assert.ok(skill.includes(must), must);
   for (const never of ["git clone", "token", "~/.haftarah", "npm install", "HAFTARAH_DROPBOX"]) assert.ok(!skill.includes(never), `the skill never says ${never}`);
   const tools = new Set(TOOLS.map(t => t.name));
   for (const m of skill.matchAll(/`([a-z_]+)`/g)) if (/_/.test(m[1]) && /^(get|find|start|fetch|save|update|set|build|deliver|add)_/.test(m[1])) assert.ok(tools.has(m[1]), `${m[1]} is a tool`);
 });
 
 test("the server's instructions carry the rules that must hold without the skill, briefly", () => {
-  assert.ok(INSTRUCTIONS.length > 300 && INSTRUCTIONS.length < 1600, `${INSTRUCTIONS.length} characters`);
-  for (const must of ["deliver_week", "explicit", "Never invent a citation", "approves by printing", "Sefaria", "rejected"]) assert.ok(INSTRUCTIONS.includes(must), must);
+  assert.ok(INSTRUCTIONS.length > 300 && INSTRUCTIONS.length < 1800, `${INSTRUCTIONS.length} characters`);
+  for (const must of ["deliver_week", "explicit", "Never invent a citation", "approves by printing", "Sefaria", "rejected", "before you hand him the draft links", "expectedVersion", "version_conflict"]) assert.ok(INSTRUCTIONS.includes(must), must);
+});
+
+test("the skill carries its own drafting brief, equal to the repo file", () => {
+  assert.equal(read("plugin/skills/haftarah-sheet/draft-entries.md"), read("docs/prompts/draft-entries.md"));
+  assert.ok(!read("plugin/skills/haftarah-sheet/SKILL.md").includes("docs/prompts/draft-entries.md"));
 });
