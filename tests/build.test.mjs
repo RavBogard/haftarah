@@ -1,9 +1,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, mkdir, copyFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { isolatedEnv } from "./helpers/isolatedEnv.mjs";
 import { readingsToBuild, torahColophonData, haftarahColophonData } from "../scripts/build.mjs";
 import { makeWeekTorah } from "./helpers/makeWeekTorah.mjs";
 
+const run = promisify(execFile);
 const load = async f => JSON.parse(await readFile(new URL(`./fixtures/${f}/sheet.json`, import.meta.url), "utf8"));
 
 test("the week-torah fixture is makeWeekTorah(week-min): it carries no text of its own", async () => {
@@ -51,4 +57,23 @@ test("torahColophonData: the Torah sheet's Next week names the Torah reading, an
   assert.deepEqual(haftarahColophonData(view).nextWeek, { shabbat: "Noach", special: null, ref: "Isaiah 54:1-55:5", civilDisplay: "October 17, 2026", status: "approved" }, "no torahRef in the haftarah's page");
   const plain = { nextWeek: { shabbat: "Noach", ref: "x" } };
   assert.equal(haftarahColophonData(plain), plain);
+});
+
+// The figures' basemap and chronology ride in SHEET_OPTIONS only for a week that has figures, so a
+// week without them builds the same page it always did.
+test("build.mjs passes geo in the page options only when the week has figures", { timeout: 120_000 }, async () => {
+  const iso = await isolatedEnv();
+  try {
+    const html = {};
+    for (const name of ["week-min", "week-figures"]) {
+      const dir = join(iso.home, name);
+      await mkdir(dir);
+      await copyFile(fileURLToPath(new URL(`./fixtures/${name}/sheet.json`, import.meta.url)), join(dir, "sheet.json"));
+      await run(process.execPath, [fileURLToPath(new URL("../scripts/build.mjs", import.meta.url)), dir, "--no-pdf", "--trope"], { env: iso.env, cwd: fileURLToPath(new URL("..", import.meta.url)), maxBuffer: 1 << 24 });
+      html[name] = { sheet: await readFile(join(dir, "sheet.html"), "utf8"), trope: await readFile(join(dir, "sheet-trope.html"), "utf8") };
+    }
+    assert.ok(!/"geo":/.test(html["week-min"].sheet) && !/"geo":/.test(html["week-min"].trope));
+    assert.match(html["week-figures"].sheet, /"geo":\{"basemap"/);
+    assert.match(html["week-figures"].trope, /"geo":\{"basemap"/);
+  } finally { await iso.cleanup(); }
 });

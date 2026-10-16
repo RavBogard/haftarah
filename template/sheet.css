@@ -46,6 +46,12 @@
   --rule: #000000;
   --rule-w: 0.5pt;
 
+  /* the figures (map and timeline) */
+  --map-land: #f1efe9;
+  --map-sea: #e3eaf4;
+  --map-water-line: #1d4f9c;
+  --map-coast: #8c8c8c;
+
   /* the four sizes */
   --size-incipit: 60pt;      /* nominal; the renderer fits it to a 3.5in box between 40 and 54pt */
   --size-text: 10.5pt;       /* scripture in both languages; headings; the cover's reading line */
@@ -208,6 +214,34 @@ html, body {
 
 .provenance { margin-top: auto; padding-top: 8pt; margin-bottom: 0.12in; font-size: var(--size-gloss); line-height: 1.4; color: var(--ink-2); }
 .provenance .signature { color: var(--ink); font-style: italic; white-space: nowrap; }
+
+/* ---- Figures (map and timeline), page 1 beside the setting or the top of page 2 ---------- */
+.opening-note.with-figures { max-width: none; }
+.opening-note.with-map { display: grid; grid-template-columns: 1fr 2.6in; column-gap: 0.25in; align-items: start; }
+.opening-note.with-map p.cal { grid-column: 1 / -1; }
+.opening-note.with-map .fig-map { grid-column: 2; grid-row: 2 / span 20; }
+.opening-note.with-map p.setting { grid-column: 1; }
+.opening-note.with-map > p:last-of-type { margin-bottom: 0; }
+.fig { margin: 0; break-inside: avoid; }
+.fig-timeline { margin-top: 10pt; }
+.fig svg { display: block; width: 100%; height: auto; }
+.fig figcaption { font-size: var(--size-gloss); color: var(--ink-2); line-height: 1.3; margin-top: 3pt; }
+.figures.page2 { margin-bottom: 10pt; }
+.figures.page2 .fig-map { width: 3.2in; }
+.map-sea { fill: var(--map-sea); } .map-land { fill: var(--map-land); stroke: var(--map-coast); stroke-width: 1.5; }
+.map-lake { fill: var(--map-sea); stroke: var(--map-water-line); stroke-width: 1.2; } .map-river { fill: none; stroke: var(--map-water-line); stroke-width: 2; }
+.map-frame { fill: none; stroke: var(--frame); stroke-width: 2; }
+.place.scene { fill: var(--rubric); } .place.context { fill: var(--paper); stroke: var(--ink-2); stroke-width: 2.5; }
+.place-label { font-family: var(--serif); fill: var(--ink); }
+.place-label.scene { font-weight: 600; fill: var(--rubric); } .place-label.context { fill: var(--ink-2); } .place-label.empire { fill: var(--reg-reference); font-style: italic; }
+.map-scale line { stroke: var(--ink); stroke-width: 3; } .map-scale text { fill: var(--ink-2); font-family: var(--serif); }
+.tl-axis { stroke: var(--ink); stroke-width: 1.5; } .tl-tick { fill: var(--ink-2); font-family: var(--serif); }
+.tl-bar { stroke-width: 1.5; } .tl-bar.king { fill: var(--ink); stroke: var(--ink); } .tl-bar.prophet { fill: var(--reg-modern); stroke: var(--reg-modern); }
+.tl-bar.empire { fill: var(--reg-reference); stroke: var(--reg-reference); } .tl-bar.composition { fill: var(--reg-critical); stroke: var(--reg-critical); }
+.tl-bar.other { fill: var(--ink-2); stroke: var(--ink-2); }
+.tl-bar.approx { fill-opacity: .55; stroke-dasharray: 4 3; } .tl-event { fill: var(--rubric); } .tl-event.approx { fill: var(--paper); stroke: var(--rubric); stroke-width: 2; }
+.tl-label { fill: var(--ink); font-family: var(--serif); } .tl-label.inside { fill: var(--paper); }
+.tl-bar.approx + .tl-label.inside { fill: var(--ink); }
 
 /* Footer: folio away from the staple; micro-legend on text pages, wordmark and tagline on the front page. */
 .frame-foot .folio { color: var(--ink); }

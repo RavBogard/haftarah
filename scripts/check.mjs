@@ -40,6 +40,7 @@ export function analyse(dom) {
     keys: (attr(rootTag, "keys") || "").split(",").filter(Boolean),
     emptySections: Number(attr(rootTag, "empty-sections") || 0),
     voicesMissing: (attr(rootTag, "voices-missing") || "").split("|").filter(Boolean),
+    figures: attr(rootTag, "figures") || "",
     page: pages.map((t, i) => ({
       entries: entriesOn(bodies[i] || ""), verses: rowsOn(bodies[i] || ""),
       kind: attr(t, "kind"), rows: Number(attr(t, "rows") || 0), gap: Number(attr(t, "gap") || -1),
@@ -152,7 +153,7 @@ async function main() {
     const yyExpected = [...data.verses.map(v => v.he), data.haftarah.incipit?.he || ""].reduce((n, h) => n + (String(h).match(TETRA) || []).length, 0);
     if (yyExpected !== a.summary.yy) problems.push(`divine name: ${a.summary.yy} replaced in the render, ${yyExpected} in the data`);
     if (targets.length > 1) console.log(`\n${t.kind === "torah" ? "Torah" : "Haftarah"}: ${t.html}`);
-    console.log(`Pages: ${a.summary.pages}; divine name ${a.summary.yy}x; keys ${a.summary.keys.length}; voices without a line: ${a.summary.voicesMissing.join(", ") || "none"}`);
+    console.log(`Pages: ${a.summary.pages}; divine name ${a.summary.yy}x; keys ${a.summary.keys.length}; voices without a line: ${a.summary.voicesMissing.join(", ") || "none"}; figures: ${a.summary.figures || "none"}`);
     console.table(a.summary.page.map((p, i) => ({ page: i + 1, kind: p.kind, rows: p.rows, gap: p.gap, fill: p.fill, split: p.split, offpage: p.offpage, voices: p.voices || "" })));
     if (problems.length) {
       console.error("Check failed:\n  - " + problems.join("\n  - "));

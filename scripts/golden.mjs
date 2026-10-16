@@ -40,9 +40,9 @@ import { dumpDom, browserVersion, printSignature, sha256 } from "./chrome.mjs";
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const run = promisify(execFile);
 export const GOLDEN_FILE = join(ROOT, "tests", "golden", "print.json");
-export const FIXTURES = ["week-min", "week-notes", "week-torah"];
+export const FIXTURES = ["week-min", "week-notes", "week-torah", "week-figures"];
 /** The fixtures written in schema 2; the schema-3 checks migrate these. week-torah is schema 3 already. */
-export const SCHEMA2_FIXTURES = ["week-min", "week-notes"];
+export const SCHEMA2_FIXTURES = ["week-min", "week-notes", "week-figures"];
 export const DOM_KEYS = ["dom", "tropeDom", "torahDom"];
 const rel = p => relative(ROOT, p).split("\\").join("/");
 

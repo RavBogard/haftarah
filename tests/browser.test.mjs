@@ -24,7 +24,7 @@ test("web-check parseArgs: the week is the one argument that is neither a flag n
   assert.deepEqual(parseArgs(["weeks/x", "--serve", "--port", "9000"]), { week: "weeks/x", port: 9000, out: null, serve: true });
 });
 
-for (const name of ["week-min", "week-notes"]) {
+for (const name of ["week-min", "week-notes", "week-figures"]) {
   test(`check.mjs passes on ${name}`, { skip, timeout: 240_000 }, async () => {
     const iso = await isolatedEnv();
     try {
@@ -34,11 +34,28 @@ for (const name of ["week-min", "week-notes"]) {
       await run(process.execPath, [join(ROOT, "scripts", "build.mjs"), dir, "--no-pdf"], { env: iso.env, cwd: ROOT, maxBuffer: 1 << 24 });
       const { stdout } = await run(process.execPath, [join(ROOT, "scripts", "check.mjs"), dir], { env: iso.env, cwd: ROOT, maxBuffer: 1 << 24 });
       assert.match(stdout, /Check passed\./);
+      assert.match(stdout, name === "week-figures" ? /figures: front/ : /figures: none/);
     } finally { await iso.cleanup(); }
   });
 }
 
-test("web-check passes at desktop and phone widths", { skip, timeout: 300_000 }, async () => {
+test("a long setting sends the figures to page 2 and check passes", { skip, timeout: 240_000 }, async () => {
+  const iso = await isolatedEnv();
+  try {
+    const dir = join(iso.home, "week-figures-long");
+    await mkdir(dir);
+    const fig = JSON.parse(await readFile(join(ROOT, "tests", "fixtures", "week-figures", "sheet.json"), "utf8"));
+    const notes = JSON.parse(await readFile(join(ROOT, "tests", "fixtures", "week-notes", "sheet.json"), "utf8"));
+    fig.openingNote.setting = [...notes.openingNote.setting, notes.openingNote.setting[0]];   // three paragraphs: page 1 cannot hold them and the figures
+    await writeFile(join(dir, "sheet.json"), JSON.stringify(fig));
+    await run(process.execPath, [join(ROOT, "scripts", "build.mjs"), dir, "--no-pdf"], { env: iso.env, cwd: ROOT, maxBuffer: 1 << 24 });
+    const { stdout } = await run(process.execPath, [join(ROOT, "scripts", "check.mjs"), dir], { env: iso.env, cwd: ROOT, maxBuffer: 1 << 24 });
+    assert.match(stdout, /figures: page2/);
+    assert.match(stdout, /Check passed\./);
+  } finally { await iso.cleanup(); }
+});
+
+test("web-check passes at desktop and phone widths",{ skip, timeout: 300_000 }, async () => {
   const iso = await isolatedEnv();
   try {
     const { stdout } = await run(process.execPath, [join(ROOT, "scripts", "web-check.mjs"), "--out", join(iso.home, "dist")], { env: iso.env, cwd: ROOT, maxBuffer: 1 << 24 });

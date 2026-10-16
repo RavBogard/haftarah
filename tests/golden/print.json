@@ -10,12 +10,14 @@
       "template/fonts/NotoSerifHebrew[wdth,wght].ttf": "93caef921360788dc3b0e32136bb26f16bc57717ec482d48fc7fd43820617165",
       "template/fonts/OFL-literata.txt": "8742963604cd89dc81437811a850018fc03b2bfad686d7422c8235967c87614e",
       "template/fonts/OFL-notoserifhebrew.txt": "9b9fe028b5ba74d231659a1bbaf0ed09b11e759d1ca6a070999e16d151616b47",
-      "template/render.js": "ca8b02fe55df68ec37960e4e910403244cff6ed254695bfd68b55117906f0c82",
-      "template/sheet.css": "5979871157efc8d6f26974ca3dbf9a6d4bd8371e99f09998e7f915cc9b2c87ef",
+      "template/render.js": "57100885c68be51c36550ac2f48dcbbd1f5eac40e18ae909f62e1ac6a8125589",
+      "template/sheet.css": "7653263b73daa2e2a7ff7ab8efe34e3f1e28a295ee1a11a258bde75c8bd264a2",
       "template/sheet.html": "481dee92ba07c1c0def70ee8d2e0b0a8850f4acab764b0eca22b1b07b5797217",
       "template/trope.css": "a49ed10f4a9e392c23b473b1a7ed4766a824666409156c4fb7c836bac49632d1"
     },
     "lib": {
+      "MAP_REGIONS": "df56ba3b138858718eab98c2376a8a2c4787169fcbc7a5263e87b6b942c559a3",
+      "MAP_VIEW": "84b0c0cfe98b986420e6a1c7d6b13308af5de1ca81efb1ef0d9ab879e0786071",
       "REGISTER_NAMES": "17d18fe2b1e8184ab91020779866ae192f2e17ad799a71a2e1b4b48174272a30",
       "REGISTER_ORDER": "9c004334e29604a655fe7468616f555906ac07d282eda0112d0f23b068140241",
       "SIGLA": "3bec90ef72408037d0cf5222c2d17eb92e01c2863b8a09f94611116fba1af202",
@@ -27,6 +29,7 @@
       "enDash": "f090452316052d8a4b7cd5368a3abbf212cdd2c8c52913f61384e93bdd108601",
       "entryId": "140f8a61929f02332fc153748b867f9955fe08adf1f155be38217112b796a180",
       "escapeHtml": "a09dfc19034057ec173c01150828a1afda77250547080a4c4c50a9c2e31af2f5",
+      "figureText": "6cc2abde1ef3f3a5a584be76731b487bffbb3181fc5b3fafb23b1e362612912e",
       "findEnglish": "6e8121c2ade91b9e2a1045af15bfb7eaf1c94d31a649b157a2aa3a397e0f7837",
       "findHebrew": "c6d6dfd09f377edf82ab6c10389291e13299e70944223d4295392029b11ffa4b",
       "fitIncipitSize": "720c822d81cb6309bd6c3462db1de50a245585d0c15b1e6e4406066e20248cbb",
@@ -34,6 +37,8 @@
       "hebrewWords": "ff0da3de937e5d35edace59610a3578eedecb04c7a616fc7999e7e3c6e7669cf",
       "isDeadRef": "d2cba2e0c5102edd679dd89c21fb383590709e93ab962c1a7ab7802debd33168",
       "letterFor": "7bb4341134083bd4488275d5f28b8cded461f83c84694a1a6a538bca011b5658",
+      "mapRegion": "684cacc3ad24f153257aafd917e29a6a4a4d654eb148155258bcb90e2cadc9b0",
+      "mapSvg": "1f0aacf20041d5a6d92749d90164ac9467fb2f844d1bb8eac2f347f084505f9a",
       "normalizeRefs": "aacc9ae56fc257eabfa063c78461e60693f602dc14ab3a181867a6c38484e1a8",
       "nowrapKeys": "00fa9d64a5d7945ea446ab05f4ba8a24e8370631874ed37c2242ebd4ba1edde9",
       "parashahKey": "21a12bd30a93b243d50947fe1f0684a8119707d68be753a834480d7d1568a7c0",
@@ -47,20 +52,44 @@
       "sheetModel": "484235b47aef80ead2cb03bb9754fc0fa655c50e59b963d1a056fca0fde71185",
       "splitPoetry": "4a635a08399b0feeaa2b4198500fe087627951fdcc902657a94deeb904417edf",
       "stripMarks": "c5c9c69230edb00e4a68b0aa37a2ec89018e9fee9cf6440a6e2bf90c36ec2bce",
+      "timelineItems": "cd92751f06004b15226ac856445a34c84f597aad0825f3083b009c45234049e7",
+      "timelineSvg": "6cebd97585d1c66bee2deb9371c4bf88d3b2b71d4ec597f93f2de596980ade25",
       "tropeFamiliesUsed": "ea2136f7de5ad579ec20d1cd75aceba743458d86b8b2d041630bec00d3dcb89a",
       "tropeHtml": "c5203fdc7037f78ccb12825e9232f8fbd235235e93c0db2d124d829d3b3b6bff",
       "tropePhrases": "a3c7a300e566b3f89b5424551f5569141a5271a5b1dde275ce4fd8e24bf3fc99",
+      "verseWords": "29baf185e387755e77d66a810f1b4cf7f93eb40a57fe36ac478224f458b85990",
       "voiceKey": "7f90c35a0eb8fb19920473eb9e4b808eae7f1c5f3b30b8a0e0d243d3ea05ffc1",
-      "voicesFor": "536e2cdd1b9dd9328684d01ba0854fc494711882c485dea05c18e1d0df6a645f"
+      "voicesFor": "536e2cdd1b9dd9328684d01ba0854fc494711882c485dea05c18e1d0df6a645f",
+      "yearLabel": "d784f0e853f67861ab9e2a7bec9412bb718c7420e83fece57295635c2aa5b3c7"
     },
     "libInternal": {
       "BLOCK_ENDING": "5d62f9281699ed24adfe8ef5a4fa09b99de660e5db871e9978b823f71f2942e0",
+      "CLIP_EDGES": "7c2eb281d1b9ab295fef199efd7c59aebf746717959555812006d00a782b3ab1",
       "ENTITIES": "a572458eec8b0cbbb0a88b7573e176f8f20454b0169afb9b1df5d8f38914902e",
+      "FIG_KINDS": "ff719660fd22337414dd0757d488bb1629634f030edeec6a7583e4aea4cb1c87",
       "HE_WORD": "20ac62cdefdc3aa73dd830dabe3b3ac172a3e8e7bc0380da811501cf5aef25d2",
       "READING_OWN": "89bf55ef98952c77e7660fe743bf3c38c6cc680c719a0ee695c7b8e9456bb1b1",
+      "boxesMeet": "20f48aba6e6933cf733f0ba2bac4d2b3419e7dbe23ab01b33c7d33c670980d8f",
+      "clipCut": "34798f4b50e46e4058fc62655929b6690edfe3513eb82fcc57e2630fdf835d7d",
+      "clipLine": "360dd872e57fb1f5ca760c773c3ff7f45d16ac9dab484175d1b82bae85249a3d",
+      "clipRing": "451e4289e284d4eb7a4df79ed328372ea225d02c039b5542377044e481137dde",
       "consonantKey": "912581a70ea07032c0fe8a5fb21f0402d30384cc61d48a7a31f1598e2e2b4dc6",
+      "crossesZero": "1bd1777c1afc092808637f5d02db2174ddaad868f69ef7759280a2b0e466af81",
+      "datesOf": "66a4866f0016fd1f6e7218fb4bf4ff30a88666346d7f3f83f52e3075d5515d7c",
+      "drawnItems": "019a0cfbaffe19793e428ba690390f27d7d170d83c07a15d590996d29260eeec",
+      "fig1": "0ff325fceb4e15c2ff02e29801b3abe23a12759a8aa88cf475b8f5eee00a4aa7",
+      "fitBox": "58421d5418de7ba462b4b819b830411fb2d0506b1e4bed1d20a8b5a37aedd315",
+      "fitLabel": "29db5a18633f58525e9b9a8d3973ef01e7008ad7b1720597e33605b85e4f7140",
       "foldPhrase": "660254a7a0b851b734aa7dd5597ddf14f3b8c66dddc2d5fca06e720ecf547293",
+      "hasCoord": "c9d8c9d3c8157021e94b519484034527995fa36bcaf7ed23c7fcab7bbce8bbdb",
+      "inBoxLL": "3e99069db18e06ef9e637744622c6f6ee235eb196e1b10c494a503a461e89222",
+      "joinAnd": "aba577942a1d5d9d91f59bb1f19fbd4ef30fc5169201c48fcfc36ef56cdf302e",
+      "labelAt": "e50735643764afb1299971bc7685ea1cdfad0e5ebb8bc87375ea2e4689b65c43",
+      "labelDates": "71a40d96f564b85f9e7ea12a9d156fd4d3bcbea87c99839c3103091bd22d159c",
       "paragraphs": "621b103df1859c726592acfd124a52ea65915026517a4c9f98e9ac7c49a8cedc",
+      "pathOf": "5d7c69fa76be16414f7fc6250765abd773d4e4ffbbbd900542ff38887a716aaa",
+      "projector": "c1836368d05ab27e6d033b86ccdc79ae07f0d305dd5fc8cedf793284708c57c1",
+      "samePt": "38c0a63eab771836087e3e572b1a7d2311640ffedeec1ab08287d2d649e7c6e2",
       "tropeTokens": "c2f2950376fc1d7d5a7c5379680dd49fd009ede849864ab9b95c1d641db27567"
     }
   },
@@ -84,6 +113,12 @@
       "dom": "de28270a0290d2d77004a9b145b96d628c4a79860096538f6c15423463f0e427",
       "tropeDom": "27ceca2a39fedfacc067abcb6f24d88a044ac3a1f17a5a7612c11d75567044fd",
       "torahDom": "f6e5f2cea431f212bfb64a84595533cd970960ffc4324c973b317e849963293d"
+    },
+    "week-figures": {
+      "html": "91915b6b5c96a3ebe710cabe5d54c2be349d26f049a2b611d70bb0cf4559be16",
+      "trope": "bb3bdbc9859a3027dbe80b435e24aff33bf7c7001223ddc7de6f102438c87db1",
+      "dom": "1b28eaa05c4b1d279fbce049472e9198d4ad9ca5d2f13457a5c0510644a0a49a",
+      "tropeDom": "fb8e05d259c83dc095ccdf52c1bb6eb0b7de4754879e18c972b11c022ca50b8c"
     }
   }
 }

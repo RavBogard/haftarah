@@ -190,21 +190,23 @@ async function main() {
       RENDER: toPosix(relative(weekDir, join(ROOT, "template", "render.js"))),
       LIB: toPosix(relative(weekDir, join(ROOT, "template", "lib.js"))),
       DATA: JSON.stringify(data).replace(/<\/script/gi, "<\\/script"),
-      OPTIONS: JSON.stringify(options),
+      OPTIONS: JSON.stringify(options).replace(/<\/script/gi, "<\\/script"),
       NOTE: `${shown} commentary entr${shown === 1 ? "y" : "ies"}.`,
     });
   };
 
   const tropePath = join(weekDir, TROPE_HTML);
+  // The figures' basemap and chronology ride in the options only for a week that has figures.
+  const figOpts = geo ? { geo: { basemap: geo.basemap, chronology: geo.chronology } } : {};
   for (const b of builds) {
     const torah = b.kind === "torah";
     const title = `${b.data.shabbat?.parashah?.en || ""} ${torah ? "Torah" : "haftarah"}`;
     b.html = join(weekDir, HTML_FILES[b.kind]);
-    await writeFile(b.html, pageHtml(b.data, torah ? { logo, voices, reading: "torah" } : { logo, voices }, title), "utf8");
+    await writeFile(b.html, pageHtml(b.data, torah ? { logo, voices, reading: "torah", ...figOpts } : { logo, voices, ...figOpts }, title), "utf8");
     console.log(`Wrote ${relative(ROOT, b.html)}${logo ? ` (logo: ${logo})` : " (no logo in assets/; typographic wordmark)"}`);
     if (torah) continue;
     if (WANT_TROPE) {
-      await writeFile(tropePath, pageHtml(b.data, { logo, voices, trope: true }, `${title} (chanter’s copy)`), "utf8");
+      await writeFile(tropePath, pageHtml(b.data, { logo, voices, trope: true, ...figOpts },`${title} (chanter’s copy)`), "utf8");
       console.log(`Wrote ${relative(ROOT, tropePath)}`);
     } else if (existsSync(join(weekDir, "sheet-trope.pdf"))) {
       // A chanter's copy left from an earlier build no longer matches this sheet; say so rather than delete it.

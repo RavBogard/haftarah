@@ -163,6 +163,15 @@
     set.forEach((t, i) => note.append(el("p", i === 0 && cal.length ? "setting rule" : "setting", t)));
     p.body.append(note);
 
+    // Figures (Wave 4): the map beside the setting and the timeline under the note when page 1 holds
+    // them; otherwise at the top of the first text page. Nothing here runs for a week without them.
+    const figs = figureNodes();
+    if (figs) {
+      note.classList.add("with-figures");
+      if (figs.map) { note.classList.add("with-map"); note.append(figs.map); }
+      if (figs.timeline) note.after(figs.timeline);
+    }
+
     // Legend: always the same four, in the same order; unused ones greyed; then the keys.
     const used = new Set(usedRegisters());
     const legend = el("div", "legend");
@@ -213,11 +222,46 @@
       prov.style.marginTop = "";
       return f;
     };
+    // The figures stamp <html data-figures> only when there are some, so a week without them is unchanged.
+    if (figs) document.documentElement.dataset.figures = "front";
+    if (figs && fill() > 1.005) {
+      // Page 1 cannot hold the figures: they go to the top of page 2, and the voices stay (the old rule then applies).
+      note.classList.remove("with-figures", "with-map");
+      if (figs.map) figs.map.remove();
+      if (figs.timeline) figs.timeline.remove();
+      figuresForPage2 = el("div", "figures page2");
+      if (figs.map) figuresForPage2.append(figs.map);
+      if (figs.timeline) figuresForPage2.append(figs.timeline);
+      document.documentElement.dataset.figures = "page2";
+    }
     if (fill() > 1.005 && vb) { vb.remove(); vb.classList.add("block"); voicesForEnd = vb; p.page.dataset.voices = "end"; }
     p.page.dataset.fill = String(Math.round(100 * fill()));
     p.page.dataset.overflow = String(fill() > 1.005);
   }
   let voicesForEnd = null;
+
+  // The figures, built once from the data and the geo in the options; null when the week has none.
+  // A figure is built only when figureText has its text and the drawing is not empty (no empty <figure>).
+  let figuresForPage2 = null, figuresShown = null;
+  function figureNodes() {
+    const places = Array.isArray(data.places) ? data.places : [], items = Array.isArray(data.timeline) ? data.timeline : [];
+    if (!(places.length || items.length) || !opts.geo) return null;
+    const text = L.figureText(places, items, opts.geo.chronology, data.mapRegion || null);
+    const figure = (cls, svg, t) => {
+      const f = el("figure", `fig ${cls}`);
+      f.innerHTML = svg + `<figcaption>${esc(t.caption)}</figcaption>`;
+      return f;
+    };
+    const mapSvg = text.map ? L.mapSvg(places, data.mapRegion || null, opts.geo.basemap, { id: "map", title: text.map.title, desc: text.map.desc }) : "";
+    const tlSvg = text.timeline ? L.timelineSvg(items, opts.geo.chronology, { id: "timeline", title: text.timeline.title, desc: text.timeline.desc }) : "";
+    const out = {
+      map: mapSvg ? figure("fig-map", mapSvg, text.map) : null,
+      timeline: tlSvg ? figure("fig-timeline", tlSvg, text.timeline) : null,
+    };
+    if (!out.map && !out.timeline) return null;
+    figuresShown = { map: !!out.map, timeline: !!out.timeline };
+    return out;
+  }
 
   // ---- text pages -----------------------------------------------------------
 
@@ -409,6 +453,8 @@
     const probe = newPage("text");
     const bodyH = probe.body.getBoundingClientRect().height;
     probe.page.remove(); pageCount--;
+    // The budget of the page being filled: the body, less the figures block on the page that carries it.
+    let pageH = bodyH, figuresPlaced = false;
 
     const appHeight = list => (list.length ? measureApparatus(list) + RULE_GAP : 0);
 
@@ -431,7 +477,7 @@
       const notes = r.notes.slice(), noteH = r.noteH.slice(), dropped = [];
       while (notes.length) {
         const st = stackNotes(rowTops.concat(top), pageRows.concat(withNotes(r, notes, noteH)));
-        if (st.bottom + appH <= bodyH) break;
+        if (st.bottom + appH <= pageH) break;
         dropped.unshift({ node: notes.pop(), h: noteH.pop() });
       }
       return { r: withNotes(r, notes, noteH), dropped };
@@ -440,16 +486,23 @@
     while (i < rows.length || carry.length || pendingTail || carryNotes.length) {
       const p = newPage("text");
       lastPage = p;
+      pageH = bodyH;
+      if (figuresForPage2 && !figuresPlaced) {
+        // The figures open the first text page; renderTextPage keeps them above the verses.
+        p.figures = figuresForPage2; p.body.append(figuresForPage2); figuresPlaced = true;
+        pageH = bodyH - figuresForPage2.getBoundingClientRect().height - parseFloat(getComputedStyle(figuresForPage2).marginBottom);
+      }
       const pageRows = [], rowTops = [];
       let pageEntries = carry.slice(); carry = [];
       let textH = 0, spilling = false, deferring = false;
       let notesIn = carryNotes, noteHIn = carryNoteH; carryNotes = []; carryNoteH = [];
 
-      while (pageEntries.length > 1 && appHeight(pageEntries) > bodyH) carry.unshift(pageEntries.pop());
+      while (pageEntries.length > 1 && appHeight(pageEntries) > pageH) carry.unshift(pageEntries.pop());
       if (carry.length) spilling = true;
 
       if (pendingTail) {
-        let t = notesIn.length ? withNotes(pendingTail, notesIn, noteHIn) : pendingTail;
+        // Notes carried from the page before print first, then the tail's own (sent on with it by Rule 4).
+        let t = notesIn.length ? withNotes(pendingTail, notesIn.concat(pendingTail.notes), noteHIn.concat(pendingTail.noteH)) : pendingTail;
         notesIn = []; noteHIn = [];
         if (t.notes.length) {
           const f = fitNotes([], [], t, 0, appHeight(pageEntries));
@@ -470,24 +523,24 @@
         const tryText = textH + rowH;
         let appH = appHeight(pageEntries);
         let notes = stackNotes(rowTops.concat(top), pageRows.concat(r));
-        let fits = tryText + appH <= bodyH && notes.bottom + appH <= bodyH;
+        let fits = tryText + appH <= pageH && notes.bottom + appH <= pageH;
         // Rule 2: never leave one verse alone because its apparatus is fat. Only when the apparatus
         // is what blocks; and once entries are sent on, no later verse's entries print ahead of them.
-        if (!fits && pageRows.length === 1 && pageEntries.length && tryText <= bodyH && notes.bottom <= bodyH) {
+        if (!fits && pageRows.length === 1 && pageEntries.length && tryText <= pageH && notes.bottom <= pageH) {
           while (!fits && pageEntries.length) {
             carry.unshift(pageEntries.pop());
             appH = appHeight(pageEntries);
-            fits = tryText + appH <= bodyH && notes.bottom + appH <= bodyH;
+            fits = tryText + appH <= pageH && notes.bottom + appH <= pageH;
           }
           spilling = true;
         }
         // Rule 5: the text fits but its margin notes do not: place the verse with as many notes as
         // fit beside it and carry the rest forward.
-        if (!fits && tryText + appH <= bodyH && r.notes.length) {
+        if (!fits && tryText + appH <= pageH && r.notes.length) {
           const f = fitNotes(rowTops, pageRows, r, top, appH);
           dropped = dropped.concat(f.dropped); r = f.r;
           notes = stackNotes(rowTops.concat(top), pageRows.concat(r));
-          fits = tryText + appH <= bodyH && notes.bottom + appH <= bodyH;
+          fits = tryText + appH <= pageH && notes.bottom + appH <= pageH;
           deferring = true;
         }
         if (!fits && pageRows.length) break;
@@ -502,7 +555,7 @@
           if (spilling) { carry.push(x); continue; }
           const tryEntries = pageEntries.concat(x);
           const tryApp = appHeight(tryEntries);
-          const ok = textH + tryApp <= bodyH && notes.bottom + tryApp <= bodyH;
+          const ok = textH + tryApp <= pageH && notes.bottom + tryApp <= pageH;
           if (ok || (pageEntries.length === 0 && pageRows.length === 1)) pageEntries = tryEntries;
           else { spilling = true; carry.push(x); }
         }
@@ -534,7 +587,7 @@
         const last = pageRows[pageRows.length - 1];
         const own = last.v ? entriesFor(last.v) : [];
         if (own.length && own.every(x => carry.includes(x)) && last.h < MOVE_MAX && !last.splitTail) {
-          const slack = bodyH - (textH - last.h) - appHeight(pageEntries);
+          const slack = pageH - (textH - last.h) - appHeight(pageEntries);
           if (slack <= GAP_MAX) {
             unplace();
             carry = own.concat(carry.filter(x => !own.includes(x)));
@@ -554,6 +607,24 @@
           carry.unshift(pageEntries.pop());
         }
         placed = renderTextPage(p, pageRows, pageEntries, bodyH, versePage);
+      }
+      // A lone verse whose margin notes still run into the apparatus (a page shortened by the figures):
+      // its last notes go on to the next page's margin. Only a page that would otherwise overflow.
+      if (placed.overflow > 0 && pageRows.length === 1 && pageRows[0].notes.length) {
+        const dropped = [];
+        while (placed.overflow > 0 && pageRows[0].notes.length) {
+          const r = pageRows[0];
+          dropped.unshift({ node: r.notes[r.notes.length - 1], h: r.noteH[r.noteH.length - 1] });
+          pageRows[0] = withNotes(r, r.notes.slice(0, -1), r.noteH.slice(0, -1));
+          placed = renderTextPage(p, pageRows, pageEntries, bodyH, versePage);
+        }
+        defer(dropped); deferring = true;
+        // The room the notes gave back takes the verse's next entries, in order, while they fit.
+        while (carry.length && placed.overflow <= 0) {
+          pageEntries.push(carry.shift());
+          placed = renderTextPage(p, pageRows, pageEntries, bodyH, versePage);
+          if (placed.overflow > 0) { carry.unshift(pageEntries.pop()); placed = renderTextPage(p, pageRows, pageEntries, bodyH, versePage); break; }
+        }
       }
 
       // Rule 4: a gap over half an inch and a row waiting: split the row at a line boundary.
@@ -660,6 +731,7 @@
 
   function renderTextPage(p, pageRows, pageEntries, bodyH, versePage) {
     p.body.innerHTML = "";
+    if (p.figures) p.body.append(p.figures);   // the figures block, when this page carries it, comes first
     const grid = el("div", "text-grid");
     pageRows.forEach((r, k) => { r.node.classList.toggle("first", k === 0); if (r.node.setLocator) r.node.setLocator(k === 0); grid.append(r.node); });
     p.body.append(grid);
@@ -729,6 +801,12 @@
     const col = el("div", "block colophon");
     col.append(el("h2", null, "About this sheet"));
     col.append(el("p", null, `Hebrew text: ${esc(data.haftarah.versions.he)}; English: ${esc(data.haftarah.versions.en)}; both via Sefaria. Commentary as credited in each entry.`));
+    if (figuresShown) {
+      const credits = [];
+      if (figuresShown.map) credits.push("Map: Natural Earth (public domain); places: OpenBible.info Bible Geocoding Data (CC BY 4.0).");
+      if (figuresShown.timeline) credits.push("Dates rounded, after Galil (1996) and The Jewish Study Bible (2014).");
+      col.append(el("p", null, credits.join(" ")));
+    }
     col.append(el("p", null, `${esc(data.credits?.issuedBy || "")} · ${esc(series.name)} · ${esc(seriesLabel)}`));
     blocks.push(col);
     if (data.nextWeek && visible(data.nextWeek)) {
